@@ -33,5 +33,13 @@ export const ENDPOINTS = {
   tvUpdaterSyncUpstream: "/api/tv-updater/sync-upstream",
   tvUpdaterInstallApp: "/api/tv-updater/install-app",
   tvUpdaterLog: "/api/tv-updater/log",
-  tvUpdaterPushIncoming: "/api/tv-updater/push-incoming"
+  tvUpdaterPushIncoming: "/api/tv-updater/push-incoming",
+  configCurrent: "/api/config/current",
+  configUpdate: "/api/config/update",
+  configVerifyHardlink: "/api/config/verify-hardlink",
+  configPorts: "/api/config/ports",
+  configGenerateSecrets: "/api/config/generate-secrets",
+  configAiDiagnostics: "/api/config/ai-diagnostics",
+  configNetplanPreview: "/api/config/netplan-preview",
+  configNetplanApply: "/api/config/netplan-apply"
 };

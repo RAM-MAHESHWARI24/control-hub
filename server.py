@@ -19,6 +19,7 @@ from widgets.storage_ops import storage_ops_bp
 from widgets.cron_tasks import cron_tasks_bp
 from widgets.service_matrix import service_matrix_bp
 from widgets.tv_updater import tv_updater_bp
+from widgets.config_center import config_center_bp
 
 
 def create_app():
@@ -44,6 +45,7 @@ def create_app():
     app.register_blueprint(cron_tasks_bp)
     app.register_blueprint(service_matrix_bp)
     app.register_blueprint(tv_updater_bp)
+    app.register_blueprint(config_center_bp)
 
     return app
 
@@ -51,8 +53,18 @@ def create_app():
 app = create_app()
 
 if __name__ == "__main__":
+    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     # Launch real-time background telemetry sampler
     start_telemetry_sampler()
 
-    print(f"🚀 ServerFF Control Hub listening on http://{HOST}:{PORT}")
+    try:
+        print(f"🚀 ServerFF Control Hub listening on http://{HOST}:{PORT}")
+    except UnicodeEncodeError:
+        print(f"[+] ServerFF Control Hub listening on http://{HOST}:{PORT}")
     app.run(host=HOST, port=PORT, debug=False, threaded=True)

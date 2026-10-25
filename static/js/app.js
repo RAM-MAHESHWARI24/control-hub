@@ -17,6 +17,7 @@ import { fetchVitals } from "./widgets/systemVitals.js";
 import { fetchCronTasks, setupCronTasks } from "./widgets/cronTasks.js";
 import { fetchServices, setupServiceMatrix } from "./widgets/serviceMatrix.js";
 import { fetchTvUpdaterStatus, setupTvUpdater } from "./widgets/tvUpdater.js";
+import { setupConfigCenter } from "./widgets/configCenter.js";
 
 const btnModeHover = $("btn-mode-hover");
 const btnModeRealtime = $("btn-mode-realtime");
@@ -225,6 +226,8 @@ window.addEventListener("click", (e) => {
   const sleepScheduleModal = $("sleep-schedule-modal");
   const tvDetailModal = $("tv-updater-detail-modal");
   const tvLogModal = $("tv-updater-log-modal");
+  const configModal = $("config-center-modal");
+  const aiModal = $("ai-copilot-modal");
 
   if (e.target === backupLogModal && backupLogModal) backupLogModal.style.display = "none";
   if (e.target === dozzleModal && dozzleModal) {
@@ -236,6 +239,8 @@ window.addEventListener("click", (e) => {
   if (e.target === sleepScheduleModal && sleepScheduleModal) sleepScheduleModal.style.display = "none";
   if (e.target === tvDetailModal && tvDetailModal) tvDetailModal.style.display = "none";
   if (e.target === tvLogModal && tvLogModal) tvLogModal.style.display = "none";
+  if (e.target === configModal && configModal) configModal.style.display = "none";
+  if (e.target === aiModal && aiModal) aiModal.style.display = "none";
 });
 
 // ==========================================================================
@@ -252,6 +257,7 @@ async function init() {
   setupTvUpdater();
   setupCronTasks();
   setupServiceMatrix();
+  setupConfigCenter();
 
   // Load initial static snapshot for all cards
   await Promise.all([

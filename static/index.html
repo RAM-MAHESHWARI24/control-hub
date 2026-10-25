@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=10">
+  <link rel="stylesheet" href="/css/style.css?v=25">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300f2fe'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
 </head>
 <body>
@@ -59,6 +59,17 @@
           <div class="clock-time" id="live-clock">--:--:-- IST</div>
           <div class="uptime-tag">UPTIME: <span id="system-uptime">--</span></div>
         </div>
+        <button class="btn-hud-action btn-config-toggle" id="btn-open-config-center" title="Open Homelab Configuration & Node Management">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hud-action-icon">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Settings</span>
+        </button>
+        <button class="btn-hud-action btn-ai-toggle" id="btn-open-ai-copilot" title="Hardware-tailored diagnostics & compact AI prompt exporter">
+          <span class="ai-sparkle">🤖</span>
+          <span>AI Copilot</span>
+        </button>
         <button class="btn-kiosk-toggle" id="btn-kiosk-toggle" title="Toggle Fullscreen Kiosk Mode">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="kiosk-icon">
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
@@ -1487,10 +1498,315 @@
     </div>
   </div>
 
+  <!-- CONFIGURATION & NODE CONTROL CENTER MODAL -->
+  <div class="modal-overlay" id="config-center-modal" style="display: none;">
+    <div class="modal-glass modal-wide cfg-modal-glass">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <h3>Node Configuration & Blueprint Control Center</h3>
+          <span class="modal-sub-path">Unified Settings &bull; Storage &bull; Ports &bull; Netplan</span>
+        </div>
+        <button class="modal-close" id="config-modal-close">&times;</button>
+      </div>
+
+      <!-- Config Navigation Tabs -->
+      <div class="cfg-nav-tabs">
+        <button class="cfg-tab-btn active" data-config-tab="storage">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <span>Storage & Hardlinks</span>
+        </button>
+        <button class="cfg-tab-btn" data-config-tab="ports">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><path d="M18 20V10M12 20V4M6 20v-6"></path></svg>
+          <span>Port Matrix</span>
+        </button>
+        <button class="cfg-tab-btn" data-config-tab="secrets">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>Credentials & Permissions</span>
+        </button>
+        <button class="cfg-tab-btn" data-config-tab="network">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          <span>Network & Netplan</span>
+        </button>
+        <button class="cfg-tab-btn" data-config-tab="wizard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <span>Setup Wizard</span>
+        </button>
+      </div>
+
+      <div class="modal-body cfg-modal-body">
+        <!-- PANE 1: STORAGE & HARDLINKS -->
+        <div class="cfg-tab-pane active" id="cfg-pane-storage">
+          <div class="cfg-card-intro">
+            <h4>📁 Single-Mount Media & Torrent Architecture</h4>
+            <p>Single filesystem mount rule ensures 0-disk-I/O atomic hardlinks between completed torrent downloads and the Jellyfin library.</p>
+          </div>
+
+          <div class="cfg-grid-form">
+            <div class="cfg-field-group">
+              <label for="cfg-hdd-data">Host Media Root (HDD_DATA)</label>
+              <input type="text" id="cfg-hdd-data" value="/mnt/hdd/data" class="cyber-input" placeholder="/mnt/hdd/data">
+              <span class="input-hint">Contains /data/torrents and /data/media inside the same filesystem mount</span>
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-hdd-memories">Immich Memories Storage (HDD_MEMORIES)</label>
+              <input type="text" id="cfg-hdd-memories" value="/mnt/hdd/Memories" class="cyber-input" placeholder="/mnt/hdd/Memories">
+              <span class="input-hint">Target directory for family photos & cloud backups</span>
+            </div>
+          </div>
+
+          <!-- Live Atomic Hardlink Verification Tool -->
+          <div class="cfg-hardlink-box">
+            <div class="hl-box-header">
+              <div class="hl-title-group">
+                <span class="hl-sparkle">🧪</span>
+                <div>
+                  <h5>Live Atomic Hardlink Verification</h5>
+                  <p>Tests actual <code>os.link()</code> zero-copy file linking on the configured storage mount.</p>
+                </div>
+              </div>
+              <button class="btn-primary btn-test-hl" id="btn-test-hardlink">
+                <span class="btn-spinner" id="hl-spinner" style="display: none;"></span>
+                <span>Test Hardlinks Now</span>
+              </button>
+            </div>
+            <div class="hl-banner" id="hl-result-banner" style="display: none;">
+              <div id="hl-result-text">Click "Test Hardlinks Now" to probe storage.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANE 2: PORT MATRIX -->
+        <div class="cfg-tab-pane" id="cfg-pane-ports">
+          <div class="cfg-ports-header">
+            <div>
+              <h4>🔌 Real-Time Port Availability & Conflict Prober</h4>
+              <p>Probes IPv4 socket bindings for all 13 core homelab services. Easily open running Web UIs.</p>
+            </div>
+            <button class="btn-secondary btn-micro" id="btn-refresh-ports">
+              <span>🔄 Refresh Matrix</span>
+            </button>
+          </div>
+          <div class="ports-matrix-grid" id="ports-matrix-grid">
+            <div class="port-loading">Loading ports catalog...</div>
+          </div>
+        </div>
+
+        <!-- PANE 3: CREDENTIALS & PERMISSIONS -->
+        <div class="cfg-tab-pane" id="cfg-pane-secrets">
+          <div class="cfg-card-intro">
+            <h4>🔐 Host User Permissions & Security Tokens</h4>
+            <p>Ensure Docker containers match host user ownership (PUID/PGID) to prevent permission denied errors.</p>
+          </div>
+
+          <div class="cfg-grid-form">
+            <div class="cfg-field-group">
+              <label for="cfg-puid">PUID (Process User ID)</label>
+              <input type="number" id="cfg-puid" value="1000" class="cyber-input">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-pgid">PGID (Process Group ID)</label>
+              <input type="number" id="cfg-pgid" value="1000" class="cyber-input">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-timezone">System Timezone</label>
+              <input type="text" id="cfg-timezone" value="Asia/Kolkata" class="cyber-input">
+            </div>
+            <div class="cfg-field-group cfg-actions-group">
+              <button class="btn-secondary" id="btn-detect-user" style="margin-top: 24px;">
+                <span>👤 Auto-Detect Host UID/GID</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="cfg-secrets-divider">
+            <h5>Service API Keys & Credentials</h5>
+            <button class="btn-secondary btn-micro" id="btn-generate-secrets">
+              <span>🎲 Generate Fresh Keys</span>
+            </button>
+          </div>
+
+          <div class="cfg-grid-form">
+            <div class="cfg-field-group">
+              <label for="cfg-qbit-pass">qBittorrent Password</label>
+              <input type="text" id="cfg-qbit-pass" value="adminadmin" class="cyber-input">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-radarr-key">Radarr API Key</label>
+              <input type="text" id="cfg-radarr-key" class="cyber-input font-mono" placeholder="32-char hex token">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-sonarr-key">Sonarr API Key</label>
+              <input type="text" id="cfg-sonarr-key" class="cyber-input font-mono" placeholder="32-char hex token">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-prowlarr-key">Prowlarr API Key</label>
+              <input type="text" id="cfg-prowlarr-key" class="cyber-input font-mono" placeholder="32-char hex token">
+            </div>
+          </div>
+        </div>
+
+        <!-- PANE 4: NETWORK & SAFE NETPLAN -->
+        <div class="cfg-tab-pane" id="cfg-pane-network">
+          <div class="cfg-card-intro">
+            <h4>🌐 Safe Netplan Static IP Configuration</h4>
+            <p>Generates standard Ubuntu Netplan v2 YAML with <strong>45-second automatic rollback</strong> to guarantee SSH sessions will never be locked out.</p>
+          </div>
+
+          <div class="cfg-grid-form">
+            <div class="cfg-field-group">
+              <label for="cfg-netplan-iface">Network Interface</label>
+              <input type="text" id="cfg-netplan-iface" value="eth0" class="cyber-input">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-netplan-ip">Static IPv4 (with or without CIDR)</label>
+              <input type="text" id="cfg-netplan-ip" value="192.168.1.100" class="cyber-input">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-netplan-gw">Default Gateway</label>
+              <input type="text" id="cfg-netplan-gw" value="192.168.1.1" class="cyber-input">
+            </div>
+            <div class="cfg-field-group">
+              <label for="cfg-netplan-dns">DNS Nameservers (comma-separated)</label>
+              <input type="text" id="cfg-netplan-dns" value="1.1.1.1, 8.8.8.8" class="cyber-input">
+            </div>
+          </div>
+
+          <div class="netplan-actions-row">
+            <button class="btn-secondary" id="btn-preview-netplan">Preview Netplan YAML</button>
+            <button class="btn-primary btn-safe-netplan" id="btn-apply-netplan">Safe Apply (45s Auto-Rollback)</button>
+          </div>
+
+          <pre class="terminal-view netplan-preview-box" id="netplan-yaml-preview" style="display: none; margin-top: 16px;"></pre>
+        </div>
+
+        <!-- PANE 5: SETUP WIZARD FAST-TRACK -->
+        <div class="cfg-tab-pane" id="cfg-pane-wizard">
+          <div class="wizard-launcher-card">
+            <div class="wizard-launcher-icon">🚀</div>
+            <div class="wizard-launcher-details">
+              <h4>Homelab Setup Wizard Daemon (Port 8000)</h4>
+              <p>Re-run the step-by-step interactive onboarding wizard with Express Mode, Power User Mode, and AI Copilot guidance anytime.</p>
+              <div class="wizard-launcher-actions">
+                <button class="btn-primary" id="btn-launch-setup-wizard">Open Setup Wizard &nearr;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <span class="footer-hint">Changes will synchronize across master .env and all 5 app containers.</span>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="config-modal-cancel">Cancel</button>
+          <button class="btn-primary btn-save-config" id="btn-save-config">
+            <span class="btn-spinner" id="config-save-spinner" style="display: none;"></span>
+            <span>💾 Save & Sync All Blueprints</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI COPILOT & NODE DIAGNOSTICS MODAL -->
+  <div class="modal-overlay" id="ai-copilot-modal" style="display: none;">
+    <div class="modal-glass modal-wide ai-modal-glass">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <h3>🤖 AI Copilot & Node Intelligence</h3>
+          <span class="modal-sub-path">Token-Optimized Diagnostics &bull; Direct Play &bull; Power Guides</span>
+        </div>
+        <button class="modal-close" id="ai-modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body ai-modal-body">
+        <!-- Hardware Specs Pills Bar -->
+        <div class="ai-hardware-pills">
+          <div class="ai-hw-item">
+            <span class="ai-hw-label">CPU Architecture</span>
+            <span class="ai-hw-val" id="ai-cpu-pill">Probing CPU...</span>
+          </div>
+          <div class="ai-hw-item">
+            <span class="ai-hw-label">Memory Headroom</span>
+            <span class="ai-hw-val" id="ai-ram-pill">Probing RAM...</span>
+          </div>
+          <div class="ai-hw-item">
+            <span class="ai-hw-label">Hardware Acceleration</span>
+            <span class="ai-hw-val" id="ai-hw-pill">Checking /dev/dri...</span>
+          </div>
+          <div class="ai-hw-item">
+            <span class="ai-hw-label">Architecture Profile</span>
+            <span class="ai-hw-val" id="ai-haswell-pill">Checking Low-Power profile...</span>
+          </div>
+        </div>
+
+        <div class="ai-prompt-box-card">
+          <div class="ai-prompt-header">
+            <div>
+              <h4>Compact Diagnostic Prompt (~300 Tokens)</h4>
+              <p>Optimized for ChatGPT, Claude, and Antigravity. Guarantees zero wasted tokens and 100% hardware-aware advice.</p>
+            </div>
+            <button class="btn-primary btn-copy-prompt" id="btn-copy-ai-prompt">
+              <span>📋 Copy AI Prompt</span>
+            </button>
+          </div>
+          <pre class="terminal-view ai-terminal-view" id="ai-prompt-content">Loading hardware diagnostic context...</pre>
+        </div>
+
+        <!-- Documentation Runbooks Links -->
+        <div class="ai-runbooks-section">
+          <h5>Standard Blueprint Runbooks</h5>
+          <div class="ai-runbooks-grid">
+            <div class="runbook-card">
+              <span class="runbook-icon">📖</span>
+              <div>
+                <strong>AI Agent Instructions</strong>
+                <p>docs/AI_AGENT_INSTRUCTIONS.md</p>
+              </div>
+            </div>
+            <div class="runbook-card">
+              <span class="runbook-icon">⚡</span>
+              <div>
+                <strong>Haswell Direct Play & QSV</strong>
+                <p>docs/HARDWARE_ACCELERATION_VAAPI_QSV.md</p>
+              </div>
+            </div>
+            <div class="runbook-card">
+              <span class="runbook-icon">📁</span>
+              <div>
+                <strong>Single Mount & Hardlinks</strong>
+                <p>docs/DOCKER_PERMISSIONS_PUID_PGID.md</p>
+              </div>
+            </div>
+            <div class="runbook-card">
+              <span class="runbook-icon">🌐</span>
+              <div>
+                <strong>Netplan Safe Static IP</strong>
+                <p>docs/NETPLAN_STATIC_IP_QUIRKS.md</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <span class="footer-hint">Paste this context prompt directly into your AI assistant for instant, zero-confusion solutions.</span>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="ai-modal-dismiss">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toast-container"></div>
 
 
-  <script type="module" src="/js/app.js?v=10"></script>
+  <script type="module" src="/js/app.js?v=25"></script>
 </body>
 </html>
