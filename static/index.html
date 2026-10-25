@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control Hub | Command Center</title>
+  <meta name="description" content="Unified, high-performance real-time command center for homelab media and storage ecosystem.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css?v=10">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300f2fe'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
+</head>
+<body>
+  <!-- Background Glow Orbs -->
+  <div class="glow-orb orb-1"></div>
+  <div class="glow-orb orb-2"></div>
+  <div class="glow-orb orb-3"></div>
+
+  <div class="dashboard-container">
+    <!-- Top Global Cyber-HUD Header -->
+    <header class="hub-header" id="hub-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <div class="brand-text">
+            <h1>Control Hub <span class="badge-hub">COMMAND CENTER</span></h1>
+            <div class="hud-chips-row">
+              <span class="hud-chip"><span class="chip-dot"></span> Homelab Node</span>
+              <span class="hud-chip"><span class="chip-dot"></span> LAN Active</span>
+              <span class="hud-chip"><span class="chip-dot"></span> Mesh Connected</span>
+              <span class="hud-chip chip-zero-ram chip-stream-mode" id="hud-mode-chip"><span class="chip-dot"></span> Eco Hover Mode</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <!-- Telemetry Stream Mode Switcher (Hover Only vs Real-Time All) -->
+        <div class="stream-mode-pill" id="stream-mode-pill" role="group" aria-label="Telemetry Refresh Mode">
+          <button class="stream-pill-btn active" id="btn-mode-hover" data-mode="hover" title="Hover Only (Eco): Updates metrics only when hovering over cards (Zero CPU/RAM overhead)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="stream-pill-icon">
+              <path d="M15 15l-3 3-3-3m0-6l3-3 3 3"/>
+              <circle cx="12" cy="12" r="10"/>
+            </svg>
+            <span>Hover Only</span>
+          </button>
+          <button class="stream-pill-btn" id="btn-mode-realtime" data-mode="realtime" title="Real-Time All: Continuously stream all metrics across the entire dashboard">
+            <span class="stream-live-dot"></span>
+            <span>Real-Time All</span>
+          </button>
+        </div>
+
+        <div class="time-widget">
+          <div class="clock-time" id="live-clock">--:--:-- IST</div>
+          <div class="uptime-tag">UPTIME: <span id="system-uptime">--</span></div>
+        </div>
+        <button class="btn-kiosk-toggle" id="btn-kiosk-toggle" title="Toggle Fullscreen Kiosk Mode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="kiosk-icon">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+          </svg>
+          <span>Kiosk</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- DEDICATED SLEEP GUARD HERO COMMAND MODULE -->
+    <section class="sleep-guard-hero" id="sleep-guard-card">
+      <div class="sleep-hero-left">
+        <div class="sleep-celestial-box" id="sleep-icon-box">
+          <div class="orbital-ring"></div>
+          <span class="sleep-icon" id="sleep-icon">🌙</span>
+        </div>
+        <div class="sleep-hero-info">
+          <div class="sleep-status-row">
+            <span class="sleep-status-badge" id="sleep-status-title">Sleep Armed</span>
+            <span class="sleep-countdown-pill" id="sleep-countdown-pill">
+              <svg class="clock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span id="sleep-countdown">Calculating...</span>
+            </span>
+            <span class="sleep-override-pill" id="sleep-override-pill" style="display: none;">
+              <span id="sleep-override-text">Tonight Shifted: 01:00</span>
+              <button class="btn-clear-override" id="btn-clear-hero-override" title="Reset tonight to standard schedule">&times;</button>
+            </span>
+            <span class="sleep-mode-tag">S3 RAM Suspend</span>
+          </div>
+          <p class="sleep-subtext" id="sleep-subtext">Automatic suspend armed at 00:00 IST for 6 hours (wakes at 06:00 IST)</p>
+          
+          <!-- Visual 24h Sleep Timeline Bar -->
+          <div class="sleep-timeline-container" id="sleep-timeline-container">
+            <div class="sleep-timeline-track">
+              <div class="sleep-window-zone" id="sleep-window-zone" style="left: 0%; width: 25%;" title="Midnight Sleep Window (00:00 - 06:00 IST)"></div>
+              <div class="sleep-current-needle" id="sleep-current-needle" style="left: 47%;" title="Current Time">
+                <div class="needle-pip"></div>
+              </div>
+            </div>
+            <div class="sleep-timeline-labels">
+              <span>00:00</span>
+              <span>06:00</span>
+              <span>12:00</span>
+              <span>18:00</span>
+              <span>24:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sleep-hero-right">
+        <div class="sleep-quick-shifts">
+          <button class="btn-sleep-quick" id="btn-shift-1h" title="Shift tonight's sleep by +1 hour">+1h Tonight</button>
+          <button class="btn-sleep-quick" id="btn-shift-2h" title="Shift tonight's sleep by +2 hours">+2h Tonight</button>
+          <button class="btn-sleep-quick btn-sleep-gear" id="btn-open-sleep-modal" title="Configure granular sleep schedule & custom times">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="gear-icon">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span>Schedule</span>
+          </button>
+        </div>
+        <button class="btn-sleep-toggle" id="sleep-toggle-btn" title="Toggle overnight sleep mode">
+          <span class="btn-spinner" id="sleep-btn-spinner"></span>
+          <span class="btn-text" id="sleep-btn-text">Prevent Sleep Tonight</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Critical Alert Banner (Appears if HDD headroom < 80GB or > 90%) -->
+    <div class="alert-banner" id="hdd-alert-banner" style="display: none;">
+      <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+      <div class="alert-content">
+        <strong>HIGH STORAGE WARNING:</strong> Media HDD (/mnt/hdd) is at <span id="hdd-alert-pct">--%</span> capacity with only <span id="hdd-alert-free">-- GB</span> free headroom. Review torrent queue.
+      </div>
+    </div>
+
+    <!-- MAIN NETWORK SPEED & BANDWIDTH LIST SECTION -->
+    <section class="network-section" id="speedometers">
+      <div class="card network-speeds-card" id="speedo-internet-card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg class="card-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            <div>
+              <h3>Network &amp; Transfer Speeds</h3>
+              <span class="card-subtitle">Broadband Fiber Line &amp; Local Fast Ethernet Interface</span>
+            </div>
+          </div>
+          <div class="section-actions-right">
+            <!-- Instant Unit Switcher Toggle Pill -->
+            <div class="unit-toggle-pill" id="unit-toggle-pill">
+              <button class="unit-pill-btn active" id="btn-unit-mbs" data-unit="mbs" title="Show Transfer Rate in MegaBytes (MB/s)">MB/s</button>
+              <button class="unit-pill-btn" id="btn-unit-mbps" data-unit="mbps" title="Show Transfer Rate in Megabits (Mbps)">Mbps</button>
+            </div>
+            <div class="telemetry-live-badge interactive-telemetry-badge" id="speedo-telemetry-badge" title="Click to toggle: Hover Only ⇄ Real-Time All">
+              <span class="pulsing-dot" id="speedo-pulse-dot"></span> <span id="speedo-badge-text">Hover Card to Stream Live</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="network-speeds-list">
+          <!-- LIST ITEM 1: INTERNET SPEED (FIBER BROADBAND) -->
+          <div class="network-speed-row wan-speed-row">
+            <div class="speed-row-left">
+              <div class="speedo-badge-group">
+                <span class="speedo-pill wan-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="pill-icon">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                  </svg>
+                  INTERNET FIBER
+                </span>
+                <span class="status-indicator online" id="internet-isp-name">Excitel (3.1ms)</span>
+              </div>
+              <div class="speed-row-subtext" id="wan-total-sub">Excitel Fiber Line &bull; Verified</div>
+            </div>
+
+            <div class="speed-row-center">
+              <div class="speed-chip-box dl-chip-box">
+                <span class="chip-title">DOWNLOAD SPEED</span>
+                <div class="chip-val-group">
+                  <span class="stat-arrow dl-arrow">&darr;</span>
+                  <span class="chip-val" id="wan-dl-val">10.9 MB/s</span>
+                </div>
+              </div>
+
+              <div class="speed-chip-box up-chip-box">
+                <span class="chip-title">UPLOAD SPEED</span>
+                <div class="chip-val-group">
+                  <span class="stat-arrow up-arrow">&uarr;</span>
+                  <span class="chip-val" id="wan-up-val">11.2 MB/s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="speed-row-actions">
+              <button class="btn-action-refresh btn-wan-refresh" id="btn-run-speedtest" title="Refresh Internet Speed (Runs Ookla Benchmark & Line Test)">
+                <span class="btn-spinner" id="speedtest-spinner" style="display: none;"></span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="action-svg-icon" id="speedtest-icon">
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                <span id="speedtest-btn-label">Refresh Internet Speed</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- LIST ITEM 2: LOCAL NETWORK SPEED (LAN INTERFACE) -->
+          <div class="network-speed-row lan-speed-row" id="speedo-network-card">
+            <div class="speed-row-left">
+              <div class="speedo-badge-group">
+                <span class="speedo-pill lan-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="pill-icon">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                    <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                    <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                  </svg>
+                  LOCAL NETWORK (LAN)
+                </span>
+                <span class="nic-pill" id="lan-nic-name">eth0</span>
+                <span class="nic-spec" id="lan-nic-spec">Detecting Link Speed...</span>
+              </div>
+              <div class="speed-row-subtext" id="lan-total-sub">Ethernet Traffic &bull; Full Duplex</div>
+            </div>
+
+            <div class="speed-row-center">
+              <div class="speed-chip-box lan-total-box">
+                <span class="chip-title">ETHERNET SPEED</span>
+                <div class="chip-val-group">
+                  <span class="stat-symbol">⚡</span>
+                  <span class="chip-val lan-total-num" id="lan-total-mbps">0.01</span>
+                  <span class="chip-unit" id="lan-unit-label">MB/s</span>
+                </div>
+              </div>
+
+              <div class="speed-chip-box lan-rates-box">
+                <div class="lan-split-item">
+                  <span class="split-sublabel">RX (Inbound):</span>
+                  <span class="split-subval" id="lan-rx-val">0.01 MB/s</span>
+                </div>
+                <div class="lan-split-item">
+                  <span class="split-sublabel">TX (Outbound):</span>
+                  <span class="split-subval" id="lan-tx-val">0.00 MB/s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="speed-row-actions">
+              <button class="btn-action-refresh btn-lan-refresh" id="btn-refresh-lan" title="Refresh Ethernet / LAN Speed">
+                <span class="btn-spinner" id="lan-refresh-spinner" style="display: none;"></span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="action-svg-icon" id="lan-refresh-icon">
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                <span id="lan-refresh-btn-label">Refresh Ethernet Speed</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- UPPER ROW: CURRENT DOWNLOADS & GOOGLE DRIVE CLOUD SYNC -->
+    <section class="active-ops-section" id="active-ops-section">
+      <div class="active-ops-grid">
+        <!-- CARD 1: CURRENT DOWNLOADING PIPELINE (qBittorrent) -->
+        <div class="card active-ops-card torrents-panel" id="torrent-downloads-panel">
+          <div class="card-header">
+            <div class="card-title">
+              <svg class="card-header-icon dl-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <div>
+                <h3>Current Downloads</h3>
+                <span class="card-subtitle">qBittorrent Ingest Pipeline</span>
+              </div>
+            </div>
+            <!-- Header Actions: Collective Combined Speed & Pause/Resume All Torrents button -->
+            <div class="torrent-header-actions">
+              <div class="collective-badge-box">
+                <span class="collective-badge" id="torrent-collective-speed">
+                  <span class="stat-arrow dl-arrow">&darr;</span> <span id="torrent-total-dl">0.00</span> MB/s &bull; 
+                  <span class="stat-arrow up-arrow">&uarr;</span> <span id="torrent-total-up">0.00</span> MB/s
+                </span>
+              </div>
+              <button class="btn-micro btn-torrent-pause" id="btn-pause-torrents" title="Pause / Resume All Torrents">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="micro-icon" id="torrent-pause-icon">
+                  <rect x="6" y="4" width="4" height="16"></rect>
+                  <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+                <span id="torrent-btn-label">Pause Torrents</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Brief list of downloading torrents with speed, eta, progress -->
+          <div class="torrent-list-container" id="torrent-downloads-list">
+            <div class="ops-empty-state">Loading active downloads...</div>
+          </div>
+        </div>
+
+        <!-- CARD 2: CLOUD BACKUP & AUTOMATION RELIABILITY (Noodle Gallery to GDrive) -->
+        <section class="card backup-card" id="backup-section">
+          <div class="card-header">
+            <div class="card-title">
+              <svg class="card-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+              <div>
+                <h3>Nightly Google Drive Sync</h3>
+                <span class="card-subtitle">Noodle Gallery Cloud Backup</span>
+              </div>
+            </div>
+            <span class="badge-status-synced" id="backup-status-badge">🟢 Synced</span>
+          </div>
+
+          <div class="backup-content">
+            <div class="backup-meta-grid">
+              <div class="meta-item">
+                <span class="meta-title">SCHEDULE</span>
+                <span class="meta-value">Daily 10:00 PM IST</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-title">LAST SYNC TIME</span>
+                <span class="meta-value" id="backup-last-time">Checking...</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-title">DB DUMP SIZE</span>
+                <span class="meta-value" id="backup-db-size">Checking...</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-title">REMOTE MIRROR</span>
+                <span class="meta-value">gdrive:Memories</span>
+              </div>
+            </div>
+
+            <!-- Dynamic Media & Cloud Storage Summary Strip (Click to open details breakdown) -->
+            <div class="backup-library-strip" id="btn-open-library-details" role="button" tabindex="0" title="Click to view detailed media, facial recognition & cloud storage breakdown">
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">DISK MEDIA</span>
+                <span class="lib-strip-val" id="lib-val-disk">265 GB</span>
+              </div>
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">GDRIVE CLOUD</span>
+                <span class="lib-strip-val" id="lib-val-gdrive">272.4 GB <small class="text-dim">/ 5.0 TB</small></span>
+              </div>
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">ASSETS</span>
+                <span class="lib-strip-val" id="lib-val-assets">35,762 <small class="text-dim">(33.5k 📷)</small></span>
+              </div>
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">TAGGED FACES</span>
+                <span class="lib-strip-val" id="lib-val-faces">18,904 <small class="text-dim">(120 👤)</small></span>
+              </div>
+              <div class="lib-strip-action">
+                <span>View Details &nearr;</span>
+              </div>
+            </div>
+
+
+            <!-- Visual 4-Stage Pipeline Stepper -->
+            <div class="sync-stepper" id="sync-stepper">
+              <div class="step-item step-done" id="step-face">
+                <span class="step-circle">✓</span>
+                <span class="step-label">1. Face XMP</span>
+              </div>
+              <div class="step-connector" id="step-conn-1"></div>
+              <div class="step-item step-done" id="step-dump">
+                <span class="step-circle">✓</span>
+                <span class="step-label">2. Postgres Dump</span>
+              </div>
+              <div class="step-connector" id="step-conn-2"></div>
+              <div class="step-item step-done" id="step-rclone">
+                <span class="step-circle">✓</span>
+                <span class="step-label">3. Rclone Mirror</span>
+              </div>
+              <div class="step-connector" id="step-conn-3"></div>
+              <div class="step-item step-done" id="step-verify">
+                <span class="step-circle">✓</span>
+                <span class="step-label">4. GDrive Verified</span>
+              </div>
+            </div>
+
+            <div class="backup-footer-row">
+              <span class="backup-status-msg" id="backup-status-msg">Backup pipeline ready</span>
+              <div class="backup-actions">
+                <button class="btn-primary btn-sync-gdrive" id="btn-sync-card" title="Trigger instant sync of Noodle Gallery photos and database to Google Drive">
+                  <span class="btn-spinner" id="card-sync-spinner" style="display: none;"></span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon" id="card-sync-icon">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  <span id="card-sync-label">Sync to GDrive</span>
+                </button>
+                <button class="btn-secondary" id="btn-view-backup-log">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                  </svg>
+                  View Log
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- DEDICATED COMMAND CARD: ANDROID TV APP UPDATER (CleanYourTV ADB Cluster) -->
+    <section class="tv-updater-section" id="tv-updater-section">
+      <div class="card tv-updater-card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg class="card-header-icon tv-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+              <polyline points="17 2 12 7 7 2"></polyline>
+            </svg>
+            <div>
+              <h3>Android TV App Updater</h3>
+              <span class="card-subtitle">Zero-Overhead ADB Sideload &amp; Distribution Cluster</span>
+            </div>
+          </div>
+          <div class="tv-header-actions">
+            <span class="badge-status-synced" id="tv-status-badge">🟢 Synced</span>
+            <button class="btn-micro btn-open-tv-modal" id="btn-open-tv-details-header" title="Open Granular Device Controls &amp; Force Update Mode">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="micro-icon">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>Manage &amp; Force Update</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tv-updater-content tv-card-main-grid">
+          <!-- LEFT COLUMN: PIPELINE, SCHEDULE & ACTIONS -->
+          <div class="tv-card-col-left">
+            <div class="backup-meta-grid">
+              <div class="meta-item">
+                <span class="meta-title">SCHEDULE</span>
+                <span class="meta-value">Every 15m (06:00-23:59)</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-title">LAST UPSTREAM CHECK</span>
+                <span class="meta-value" id="tv-last-sync">Checking...</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-title">TV CLUSTER</span>
+                <span class="meta-value" id="tv-cluster-count">3 Devices (3 Online)</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-title">MANAGED APKS</span>
+                <span class="meta-value">SmartTube, CloudStream, HD Streamz</span>
+              </div>
+            </div>
+
+            <!-- Dynamic Cluster & App Summary Strip (Click to open granular details breakdown) -->
+            <div class="backup-library-strip tv-cluster-strip" id="btn-open-tv-details" role="button" tabindex="0" title="Click to view detailed TV devices, foreground states &amp; granular force updates">
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">TV CLUSTER</span>
+                <span class="lib-strip-val" id="tv-val-online">3/3 Online</span>
+              </div>
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">SMARTTUBE</span>
+                <span class="lib-strip-val" id="tv-val-st">v32.68 <small class="text-dim">Latest</small></span>
+              </div>
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">CLOUDSTREAM</span>
+                <span class="lib-strip-val" id="tv-val-cs">v4.8.0-PRE</span>
+              </div>
+              <div class="lib-strip-item">
+                <span class="lib-strip-label">HD STREAMZ</span>
+                <span class="lib-strip-val" id="tv-val-hds">v3.19-a</span>
+              </div>
+              <div class="lib-strip-action">
+                <span>Manage &amp; Force Update &nearr;</span>
+              </div>
+            </div>
+
+            <!-- Visual 4-Stage Pipeline Stepper -->
+            <div class="sync-stepper tv-stepper" id="tv-stepper">
+              <div class="step-item step-done" id="step-tv-upstream">
+                <span class="step-circle">&#10003;</span>
+                <span class="step-label">1. Upstream Sync</span>
+              </div>
+              <div class="step-connector" id="step-tv-conn-1"></div>
+              <div class="step-item step-done" id="step-tv-discovery">
+                <span class="step-circle">&#10003;</span>
+                <span class="step-label">2. Discovery</span>
+              </div>
+              <div class="step-connector" id="step-tv-conn-2"></div>
+              <div class="step-item step-done" id="step-tv-safety">
+                <span class="step-circle">&#10003;</span>
+                <span class="step-label">3. Safety Guard</span>
+              </div>
+              <div class="step-connector" id="step-tv-conn-3"></div>
+              <div class="step-item step-done" id="step-tv-push">
+                <span class="step-circle">&#10003;</span>
+                <span class="step-label">4. ADB Push</span>
+              </div>
+            </div>
+
+            <div class="backup-footer-row">
+              <span class="backup-status-msg" id="tv-status-msg">Cluster ready &amp; protected</span>
+              <div class="backup-actions">
+                <button class="btn-primary btn-deploy-tv" id="btn-deploy-card" title="Trigger instant opportunistic deployment across all online target TVs">
+                  <span class="btn-spinner" id="tv-card-deploy-spinner" style="display: none;"></span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon" id="tv-card-deploy-icon">
+                    <polyline points="16 16 12 12 8 16"></polyline>
+                    <line x1="12" y1="12" x2="12" y2="21"></line>
+                    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+                    <polyline points="16 16 12 12 8 16"></polyline>
+                  </svg>
+                  <span id="tv-card-deploy-label">Deploy Now</span>
+                </button>
+                <button class="btn-secondary" id="btn-open-tv-details-card" title="Open Granular Device Controls &amp; Force Update Mode">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                  <span>Manage TVs</span>
+                </button>
+                <button class="btn-secondary" id="btn-view-tv-log" title="Tail live execution logs">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                  </svg>
+                  <span>View Log</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: LIVE FLEET TELEMETRY PREVIEW -->
+          <div class="tv-card-col-right">
+            <div class="tv-fleet-preview-box">
+              <div class="fleet-preview-header">
+                <div class="fleet-title-wrap">
+                  <span class="fleet-dot online"></span>
+                  <strong>Live Fleet Telemetry</strong>
+                </div>
+                <span class="fleet-guard-tag" title="Safety Guard protects active users from interruptions">🛡️ Safety Active</span>
+              </div>
+              <div class="fleet-devices-list" id="tv-fleet-preview">
+                <div class="fleet-item fleet-online">
+                  <div class="fleet-item-top">
+                    <span class="fleet-device-name">Mi Box 4</span>
+                    <span class="fleet-device-ip font-mono">192.168.1.42:5555</span>
+                  </div>
+                  <div class="fleet-item-bottom">
+                    <span class="fleet-app-tag text-amber">Active: SmartTube (Playing)</span>
+                    <span class="fleet-status-pill synced">✓ Up to Date</span>
+                  </div>
+                </div>
+                <div class="fleet-item fleet-online">
+                  <div class="fleet-item-top">
+                    <span class="fleet-device-name">Mi TV 4A</span>
+                    <span class="fleet-device-ip font-mono">192.168.1.45:5555</span>
+                  </div>
+                  <div class="fleet-item-bottom">
+                    <span class="fleet-app-tag text-cyan">Active: YouTube TV</span>
+                    <span class="fleet-status-pill synced">✓ Up to Date</span>
+                  </div>
+                </div>
+                <div class="fleet-item fleet-online">
+                  <div class="fleet-item-top">
+                    <span class="fleet-device-name">Acer TV</span>
+                    <span class="fleet-device-ip font-mono">192.168.1.46:5555</span>
+                  </div>
+                  <div class="fleet-item-bottom">
+                    <span class="fleet-app-tag text-cyan">Active: YouTube TV</span>
+                    <span class="fleet-status-pill pending">Pending Installs</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOWER ROW: HARDWARE VITALS & SERVER STORAGE/MEDIA OPERATIONS -->
+    <div class="middle-grid">
+      <!-- HARDWARE & STORAGE VITALS -->
+      <section class="card vitals-card" id="vitals-section">
+        <div class="card-header">
+          <div class="card-title">
+            <svg class="card-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+              <rect x="9" y="9" width="6" height="6"></rect>
+              <line x1="9" y1="1" x2="9" y2="4"></line>
+              <line x1="15" y1="1" x2="15" y2="4"></line>
+              <line x1="9" y1="20" x2="9" y2="23"></line>
+              <line x1="15" y1="20" x2="15" y2="23"></line>
+              <line x1="20" y1="9" x2="23" y2="9"></line>
+              <line x1="20" y1="14" x2="23" y2="14"></line>
+              <line x1="1" y1="9" x2="4" y2="9"></line>
+              <line x1="1" y1="14" x2="4" y2="14"></line>
+            </svg>
+            <div>
+              <h3>Hardware Vitals & Storage Headroom</h3>
+              <span class="card-subtitle">Intel Core i3-4005U &bull; 7.2 GiB RAM</span>
+            </div>
+          </div>
+          <span class="cpu-pill" id="cpu-temp-badge">CPU: <span id="cpu-load-val">0%</span></span>
+        </div>
+
+        <div class="vitals-content">
+          <!-- CPU Bar -->
+          <div class="vital-row">
+            <div class="vital-label-row">
+              <span class="vital-name">Intel Core i3-4005U (4 Threads @ 1.70GHz)</span>
+              <span class="vital-stat" id="cpu-stat">0% Load</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill fill-cpu" id="cpu-progress" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- RAM Bar -->
+          <div class="vital-row">
+            <div class="vital-label-row">
+              <span class="vital-name">DDR3 Memory (7.2 GiB RAM + 4.0 GiB Swap)</span>
+              <span class="vital-stat" id="ram-stat">0.0 / 7.2 GiB (0%)</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill fill-ram" id="ram-progress" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- OS SSD Bar -->
+          <div class="vital-row">
+            <div class="vital-label-row">
+              <span class="vital-name">OS Root SSD (/dev/sdb3)</span>
+              <span class="vital-stat" id="ssd-stat">-- GB Free (0%)</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill fill-ssd" id="ssd-progress" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Media HDD Headroom Segmented Bar -->
+          <div class="vital-row">
+            <div class="vital-label-row">
+              <span class="vital-name"><strong>Media & Backup HDD (/mnt/hdd - ext4)</strong></span>
+              <span class="vital-stat hdd-stat-text" id="hdd-stat">-- GB Free (0% Used)</span>
+            </div>
+            <div class="segmented-storage-bg" id="hdd-segmented-bar">
+              <div class="storage-seg seg-media" id="seg-media" style="width: 68%;" title="Movies & TV (Sonarr/Radarr): ~620 GB"></div>
+              <div class="storage-seg seg-photos" id="seg-photos" style="width: 15%;" title="Family Photos (Noodle Gallery): ~140 GB"></div>
+              <div class="storage-seg seg-db" id="seg-db" style="width: 1%;" title="PostgreSQL Snapshots: ~3.5 GB"></div>
+              <div class="storage-threshold-line" title="90% Alert Threshold (80 GB free)"></div>
+            </div>
+            <div class="storage-legend-row">
+              <span class="legend-chip"><span class="chip-color color-media"></span> Movies & TV (~620 GB)</span>
+              <span class="legend-chip"><span class="chip-color color-photos"></span> Photos (~140 GB)</span>
+              <span class="legend-chip"><span class="chip-color color-db"></span> DB Snapshots</span>
+              <span class="legend-chip"><span class="chip-color color-free"></span> Free Headroom</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SERVER STORAGE & MEDIA OPERATIONS (DISK I/O, SMB, JELLYFIN) -->
+      <section class="card active-ops-card storage-panel" id="storage-ops-panel">
+        <div class="card-header">
+          <div class="card-title">
+            <svg class="card-header-icon io-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+            <div>
+              <h3>Server Read/Write Operations</h3>
+              <span class="card-subtitle">Disk Throughput & Media Streams</span>
+            </div>
+          </div>
+          <!-- Collective Combined Speed in MB/s -->
+          <div class="collective-badge-box">
+            <span class="collective-badge io-badge" id="storage-collective-speed">
+              ⚡ <span id="storage-total-mbps">0.00</span> MB/s Total I/O
+            </span>
+          </div>
+        </div>
+
+        <!-- Real-time disk read/write throughput + SMB & Jellyfin brief list -->
+        <div class="storage-ops-container" id="storage-ops-list">
+          <div class="ops-empty-state">Sampling disk and stream operations...</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- DEDICATED CRON JOBS & SYSTEM AUTOMATION SECTION -->
+    <section class="automation-section" id="automation-section">
+      <div class="card cron-card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg class="card-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <div>
+              <h3>System Automation & Scheduled Cron Tasks</h3>
+              <span class="card-subtitle">cron.d & systemd background automations &bull; 5 active tasks</span>
+            </div>
+          </div>
+          <button class="btn-micro" id="btn-refresh-cron" title="Refresh all cron task statuses">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="micro-icon">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>Refresh Tasks</span>
+          </button>
+        </div>
+
+        <div class="cron-grid" id="cron-grid">
+          <!-- Dynamically populated by app.js -->
+          <div class="ops-empty-state">Loading automated system tasks...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN SERVICE LAUNCHER MATRIX -->
+    <section class="services-section" id="services-matrix">
+      <div class="section-title-row">
+        <div class="section-heading">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <h2>Service Matrix & 1-Click Container Logs</h2>
+        </div>
+        <div class="service-actions-right">
+          <!-- Category Filter Tabs -->
+          <div class="service-filter-group" id="service-filter-group">
+            <button class="svc-filter-btn active" data-filter="all">All (11)</button>
+            <button class="svc-filter-btn" data-filter="media">Media (3)</button>
+            <button class="svc-filter-btn" data-filter="ingest">Ingest (4)</button>
+            <button class="svc-filter-btn" data-filter="system">System (4)</button>
+          </div>
+          <a href="#" id="open-dozzle-full-btn" target="_blank" class="btn-dozzle-master">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+            Open Dozzle Console (:8888)
+          </a>
+        </div>
+      </div>
+
+      <!-- 3x3 App Tiles Grid -->
+      <div class="services-grid" id="services-grid">
+        <!-- Rendered dynamically by app.js -->
+        <div class="loading-tiles">Loading active services from Docker engine...</div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="hub-footer">
+      <div class="footer-content">
+        <p><strong>ServerFF Control Hub</strong> &bull; Replaces archived Homarr v0.16.1 &bull; Direct Port 7575 &bull; Dozzle Log Streamer :8888</p>
+        <p class="footer-links">
+          <a href="javascript:void(0)" id="footer-refresh-btn">Refresh Now</a> &bull;
+          <a href="https://github.com/thephaseless/byparr" target="_blank">Byparr :8191</a> &bull;
+          <a href="https://cockpit-project.org" target="_blank">Cockpit :9090</a>
+        </p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- MODAL: BACKUP LOG VIEWER & MANUAL SYNC CONTROLLER -->
+  <div class="modal-overlay" id="backup-log-modal" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot" id="modal-sync-dot"></span>
+          <div>
+            <h3>Google Drive Cloud Backup: Noodle Gallery</h3>
+            <span class="modal-sub-path">Log: /opt/immich/backups/backup.log &bull; Target: gdrive:Memories</span>
+          </div>
+        </div>
+        <button class="modal-close" id="backup-modal-close">&times;</button>
+      </div>
+
+      <!-- Live Sync Status Banner -->
+      <div class="modal-sync-banner" id="modal-sync-banner">
+        <div class="banner-sync-info">
+          <span class="sync-status-indicator" id="sync-status-indicator"></span>
+          <span id="modal-sync-banner-text">Ready to sync Noodle Gallery (Faces, DB Dump & Photos) to Google Drive.</span>
+        </div>
+        <span class="sync-timer-badge" id="sync-live-tag" style="display: none;">LIVE RUNNING</span>
+      </div>
+
+      <div class="modal-body">
+        <pre class="terminal-view" id="backup-log-content">Loading log lines...</pre>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button class="btn-secondary" id="backup-modal-refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh Log
+          </button>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-primary btn-sync-gdrive" id="btn-modal-trigger-sync" title="Sync Noodle Gallery media and database dump to Google Drive immediately">
+            <span class="btn-spinner" id="modal-sync-spinner" style="display: none;"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="btn-icon" id="modal-sync-icon">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span id="modal-sync-btn-text">Sync Noodle Gallery to GDrive Now</span>
+          </button>
+          <button class="btn-secondary" id="backup-modal-dismiss">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: LIVE CONTAINER LOGS (DUAL-MODE: NATIVE TERMINAL & DOZZLE) -->
+  <div class="modal-overlay" id="dozzle-modal" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <div>
+            <h3 id="dozzle-modal-title">Container Log Stream</h3>
+            <span class="modal-sub-path" id="container-modal-sub-path">Docker daemon tail</span>
+          </div>
+        </div>
+        <div class="modal-header-actions" style="display: flex; gap: 8px; align-items: center;">
+          <div class="log-view-toggle-pill" id="log-view-toggle">
+            <button class="log-pill-btn active" id="btn-log-tab-native">Terminal Logs</button>
+            <button class="log-pill-btn" id="btn-log-tab-dozzle">Dozzle Stream</button>
+          </div>
+          <a href="#" id="dozzle-modal-ext-link" target="_blank" class="btn-micro" title="Open full console in external tab">Open in Tab &nearr;</a>
+          <button class="modal-close" id="dozzle-modal-close">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" id="container-native-log-view">
+        <pre class="terminal-view" id="container-modal-log-content">Loading log lines...</pre>
+      </div>
+      <div class="modal-body modal-body-iframe" id="container-dozzle-iframe-view" style="display: none;">
+        <iframe id="dozzle-iframe" src="about:blank" frameborder="0"></iframe>
+      </div>
+      <div class="modal-footer" id="container-native-footer">
+        <div class="modal-footer-left">
+          <button class="btn-secondary" id="container-modal-refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh Log
+          </button>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="container-modal-dismiss">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: UNIVERSAL CRON TASK LOG VIEWER -->
+  <div class="modal-overlay" id="cron-log-modal" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <div>
+            <h3 id="cron-modal-title">Automation Task Log</h3>
+            <span class="modal-sub-path" id="cron-modal-sub-path">Log: /var/log/...</span>
+          </div>
+        </div>
+        <button class="modal-close" id="cron-modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <pre class="terminal-view" id="cron-modal-log-content">Loading log lines...</pre>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button class="btn-secondary" id="cron-modal-refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh Log
+          </button>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="cron-modal-dismiss">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NOODLE GALLERY LIBRARY & CLOUD METRICS BREAKDOWN -->
+  <div class="modal-overlay" id="immich-library-modal" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <div>
+            <h3>Noodle Gallery: Storage & Facial Intelligence</h3>
+            <span class="modal-sub-path">Local: /mnt/hdd/Memories &bull; Remote: Cloud Storage Mirror</span>
+          </div>
+        </div>
+        <button class="modal-close" id="immich-modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body modal-library-body">
+        <!-- 3-Column Telemetry Grid -->
+        <div class="library-metrics-grid">
+          <!-- Card A: Storage Footprint -->
+          <div class="lib-metric-card">
+            <div class="lib-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lib-header-icon">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+              </svg>
+              <h4>Storage Footprint</h4>
+            </div>
+            <div class="lib-metric-rows">
+              <div class="lib-data-row">
+                <span>Local Disk (/mnt/hdd)</span>
+                <strong id="modal-lib-disk">265 GB</strong>
+              </div>
+              <div class="lib-data-row">
+                <span>Google Drive Used</span>
+                <strong id="modal-lib-gdrive-used" style="color: var(--cyan-primary);">272.4 GB</strong>
+              </div>
+              <div class="lib-data-row">
+                <span>Google Drive Free</span>
+                <strong id="modal-lib-gdrive-free" style="color: var(--emerald-primary);">4.84 TB</strong>
+              </div>
+              <div class="lib-data-row">
+                <span>Drive Allocation</span>
+                <span id="modal-lib-gdrive-pct">5.3% of 5.0 TB</span>
+              </div>
+              <div class="lib-progress-wrap">
+                <div class="lib-progress-bar" id="modal-lib-gdrive-bar" style="width: 5.3%;"></div>
+              </div>
+              <div class="lib-data-row" style="margin-top: 6px;">
+                <span>DB Dump Snapshot</span>
+                <span id="modal-lib-db-dump">341.4 MB (pg_dumpall)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card B: Asset Census -->
+          <div class="lib-metric-card">
+            <div class="lib-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lib-header-icon">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+              <h4>Media Asset Census</h4>
+            </div>
+            <div class="lib-metric-rows">
+              <div class="lib-data-row">
+                <span>Total Active Assets</span>
+                <strong id="modal-lib-total-assets">35,762</strong>
+              </div>
+              <div class="lib-data-row">
+                <span>High-Res Photos</span>
+                <span id="modal-lib-photos">33,497 (93.7%)</span>
+              </div>
+              <div class="lib-data-row">
+                <span>Video Clips</span>
+                <span id="modal-lib-videos">2,265 (6.3%)</span>
+              </div>
+              <div class="lib-data-row">
+                <span>Trash State</span>
+                <span style="color: var(--emerald-primary);">&check; Excluded (.dtrash)</span>
+              </div>
+              <div class="lib-data-row">
+                <span>Sync Policy</span>
+                <span>Bidirectional Mirror</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card C: Facial Recognition Intelligence -->
+          <div class="lib-metric-card">
+            <div class="lib-card-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lib-header-icon">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <h4>Facial Intelligence</h4>
+            </div>
+            <div class="lib-metric-rows">
+              <div class="lib-data-row">
+                <span>Named Individuals</span>
+                <strong id="modal-lib-named-people" style="color: var(--cyan-primary);">120 people</strong>
+              </div>
+              <div class="lib-data-row">
+                <span>Unhidden Face Clusters</span>
+                <span id="modal-lib-unhidden-people">1,623 recognized</span>
+              </div>
+              <div class="lib-data-row">
+                <span>Assets with Named Faces</span>
+                <strong id="modal-lib-named-assets" style="color: var(--emerald-primary);">18,904 assets</strong>
+              </div>
+              <div class="lib-data-row">
+                <span>Total Face Instances</span>
+                <span id="modal-lib-face-instances">98,813 detections</span>
+              </div>
+              <div class="lib-data-row">
+                <span>Sidecar Status</span>
+                <span style="color: var(--emerald-primary);">&check; 100% XMP Exported</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Protection Guarantees Bar Inside Modal -->
+        <div class="modal-protection-bar">
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>Face XMP Export</strong>
+              <p>Standard MWG-RS XMP sidecars for external software portability.</p>
+            </div>
+          </div>
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>Postgres pg_dumpall</strong>
+              <p>Atomic relational database dump with all albums, tags & vector embeddings.</p>
+            </div>
+          </div>
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>--track-renames</strong>
+              <p>Server-side move operations prevent re-uploading modified folder trees.</p>
+            </div>
+          </div>
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>Immich_Trash Archival</strong>
+              <p>Deleted/modified photos retained in dated cloud trash snapshots.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button class="btn-secondary" id="immich-modal-refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh Telemetry
+          </button>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="immich-modal-dismiss">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ANDROID TV APP UPDATER: CLUSTER TELEMETRY & GRANULAR CONTROLS -->
+  <div class="modal-overlay" id="tv-updater-detail-modal" style="display: none;">
+    <div class="modal-glass modal-wide modal-tv-detail">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live" id="modal-tv-dot"></span>
+          <div>
+            <h3>Android TV App Updater: Cluster Telemetry &amp; Granular Controls</h3>
+            <span class="modal-sub-path">Zero-Overhead Server Orchestrator &bull; ADB Daemon :5555 &bull; Dynamic Subnet Tracking</span>
+          </div>
+        </div>
+        <button class="modal-close" id="tv-modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body modal-library-body">
+        <!-- Live Cluster Status Banner -->
+        <div class="modal-sync-banner tv-banner" id="modal-tv-banner">
+          <div class="banner-sync-info">
+            <span class="sync-status-indicator sync-running" id="tv-status-indicator"></span>
+            <span id="modal-tv-banner-text">Cluster ready: 3 target TVs online with genuine developer builds verified.</span>
+          </div>
+          <div class="banner-quick-actions">
+            <button class="btn-micro" id="btn-modal-sync-upstream" title="Fetch latest GitHub releases for SmartTube &amp; CloudStream and official HD Streamz build">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="micro-icon">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Check Upstream Releases</span>
+            </button>
+            <button class="btn-micro" id="btn-modal-refresh-telemetry" title="Rescan subnet and probe active foreground apps across all TVs">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="micro-icon">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>Refresh Status</span>
+            </button>
+            <button class="btn-micro" id="btn-modal-push-incoming" title="Deploy manually sideloaded APKs from incoming_apks/ folder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="micro-icon">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              </svg>
+              <span>Push Dropped APKs</span>
+            </button>
+          </div>
+          <span class="sync-timer-badge" id="tv-live-tag" style="display: none;">DEPLOYING LIVE</span>
+        </div>
+
+        <!-- FORCE UPDATE CONTROLLER SWITCHER -->
+        <div class="force-update-card">
+          <div class="force-info-left">
+            <div class="force-title-row">
+              <span class="force-badge">⚡ GRANULAR OVERRIDE</span>
+              <strong>Force Update Even If User Is Actively Using The App</strong>
+            </div>
+            <p class="force-subtext">
+              By default, safety guards safely postpone installations if the user is actively streaming or using that specific app in the foreground. Enabling Force Mode immediately executes silent <code>adb install -r</code>, seamlessly updating and reloading the application.
+            </p>
+          </div>
+          <div class="force-toggle-right">
+            <label class="cyber-switch">
+              <input type="checkbox" id="chk-force-update">
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- DYNAMIC PER-TV HARDWARE & APPLICATION TABLE GRID -->
+        <div class="tv-devices-container" id="tv-devices-container">
+          <div class="ops-empty-state">Loading cluster telemetry &amp; active foreground sessions...</div>
+        </div>
+
+        <!-- Upstream Release Catalog & Sideload Drop Zone Strip -->
+        <div class="tv-catalog-strip">
+          <div class="tv-catalog-col">
+            <div class="catalog-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="micro-icon">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+              <h4>Upstream Release Sources</h4>
+            </div>
+            <div class="catalog-items-list">
+              <div class="catalog-item">
+                <span class="cat-name">SmartTube (Stable armeabi-v7a)</span>
+                <span class="cat-src text-dim">GitHub: yuliskov/SmartTube</span>
+              </div>
+              <div class="catalog-item">
+                <span class="cat-name">CloudStream Beta (Pre-release)</span>
+                <span class="cat-src text-dim">GitHub: recloudstream/cloudstream</span>
+              </div>
+              <div class="catalog-item">
+                <span class="cat-name">HD Streamz (Developer Origin)</span>
+                <span class="cat-src text-dim">Cloudflare CDN direct &bull; Keystore verified</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="tv-catalog-col">
+            <div class="catalog-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="micro-icon">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <h4>Manual Sideload Drop Folder</h4>
+            </div>
+            <div class="drop-zone-info">
+              <span class="drop-path font-mono">/opt/tv-updater/incoming_apks/</span>
+              <p class="drop-hint">Drop any custom Android TV APK here via SMB (<code>Z:\opt\tv-updater\incoming_apks\</code>). The server automatically diffs versionCodes, pushes over ADB, and archives processed files.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Architecture & Zero-Overhead Safety Guarantees Bar -->
+        <div class="modal-protection-bar">
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>Zero TV Overhead</strong>
+              <p>No resident background services run on the TVs. All release parsing executes on the server.</p>
+            </div>
+          </div>
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>100% Silent Install</strong>
+              <p>OS-level <code>adb install -r</code> updates packages with zero disruptive remote prompts.</p>
+            </div>
+          </div>
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>Subnet Auto-Discovery</strong>
+              <p>30-thread parallel probe resolves router DHCP IP shifts without colliding IP addresses.</p>
+            </div>
+          </div>
+          <div class="prot-col">
+            <span class="prot-icon">🛡️</span>
+            <div>
+              <strong>Quiescent Auto-Halt</strong>
+              <p>Exits in &lt;5ms with zero network/TV pings when all target TVs are fully up to date.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button class="btn-secondary" id="btn-tv-modal-view-log">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            View Execution Log
+          </button>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-primary" id="btn-tv-modal-force-deploy-all">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="btn-icon">
+              <polyline points="16 16 12 12 8 16"></polyline>
+              <line x1="12" y1="12" x2="12" y2="21"></line>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+              <polyline points="16 16 12 12 8 16"></polyline>
+            </svg>
+            Force Deploy All Devices Now
+          </button>
+          <button class="btn-secondary" id="tv-modal-dismiss">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ANDROID TV UPDATER LOG STREAMER -->
+  <div class="modal-overlay" id="tv-updater-log-modal" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <div>
+            <h3>Android TV App Updater: Execution Log</h3>
+            <span class="modal-sub-path">Log: /var/log/tv-updater.log &bull; Target: CleanYourTV ADB Cluster</span>
+          </div>
+        </div>
+        <button class="modal-close" id="tv-log-modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <pre class="terminal-view" id="tv-log-content">Loading log lines...</pre>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <button class="btn-secondary" id="tv-log-modal-refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh Log
+          </button>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="tv-log-modal-dismiss">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SLEEP & WAKE GRANULAR SCHEDULER (TONIGHT VS PERMANENT) -->
+  <div class="modal-overlay" id="sleep-schedule-modal" style="display: none;">
+    <div class="modal-glass modal-sleep-scheduler">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <div>
+            <h3>Automated Sleep &amp; Wake Scheduler</h3>
+            <span class="modal-sub-path">S3 RAM Suspend (1.5W Standby) &bull; Hardware RTC Wake</span>
+          </div>
+        </div>
+        <button class="modal-close" id="sleep-modal-close" title="Close Modal">&times;</button>
+      </div>
+
+      <!-- Segmented Tab Navigation -->
+      <div class="sleep-tabs-bar">
+        <button class="sleep-tab-btn active" id="tab-btn-tonight" data-tab="tab-tonight">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span>Tonight's Shift (One-Day)</span>
+        </button>
+        <button class="sleep-tab-btn" id="tab-btn-permanent" data-tab="tab-permanent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon">
+            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path>
+          </svg>
+          <span>Default Schedule (Forever)</span>
+        </button>
+      </div>
+
+      <div class="modal-body sleep-modal-body">
+        <!-- TAB 1: TONIGHT'S SHIFT (ONE-DAY OVERRIDE) -->
+        <div class="sleep-tab-pane active" id="tab-tonight">
+          <!-- Active Override Notice Banner -->
+          <div class="sleep-override-banner" id="tonight-active-banner" style="display: none;">
+            <div class="override-banner-content">
+              <span class="override-pulse-dot"></span>
+              <div>
+                <strong id="tonight-active-text">Active Override: Sleep shifted to 01:00 IST</strong>
+                <p>Scheduled via systemd-run timer. Server will automatically return to default schedule after waking.</p>
+              </div>
+            </div>
+            <button class="btn-secondary btn-sm" id="btn-revert-tonight" title="Cancel override and revert to default schedule">Revert to Default</button>
+          </div>
+
+          <div class="sleep-section-title">
+            <h4>Quick Presets (Delay Tonight's Suspend)</h4>
+            <span class="section-hint">Select a delay or customize exact sleep and wake hours below</span>
+          </div>
+
+          <div class="sleep-presets-grid">
+            <button class="preset-card" id="preset-card-1" data-delay="1">
+              <span class="preset-label">+1 Hour</span>
+              <span class="preset-calc" id="preset-calc-1">01:00 &rarr; 07:00</span>
+              <span class="preset-sub">Standard 6h duration</span>
+            </button>
+            <button class="preset-card" id="preset-card-2" data-delay="2">
+              <span class="preset-label">+2 Hours</span>
+              <span class="preset-calc" id="preset-calc-2">02:00 &rarr; 08:00</span>
+              <span class="preset-sub">Standard 6h duration</span>
+            </button>
+            <button class="preset-card" id="preset-card-3" data-delay="3">
+              <span class="preset-label">+3 Hours</span>
+              <span class="preset-calc" id="preset-calc-3">03:00 &rarr; 09:00</span>
+              <span class="preset-sub">Standard 6h duration</span>
+            </button>
+            <button class="preset-card" id="preset-card-4" data-delay="4">
+              <span class="preset-label">+4 Hours</span>
+              <span class="preset-calc" id="preset-calc-4">04:00 &rarr; 10:00</span>
+              <span class="preset-sub">Standard 6h duration</span>
+            </button>
+          </div>
+
+          <div class="sleep-custom-divider">
+            <span>Or Custom Hours For Tonight Only</span>
+          </div>
+
+          <div class="sleep-time-inputs-grid">
+            <div class="time-input-group">
+              <label for="tonight-sleep-input">Tonight's Sleep Time</label>
+              <div class="input-time-wrapper">
+                <input type="time" id="tonight-sleep-input" value="01:00" class="cyber-time-picker">
+                <span class="tz-badge">IST</span>
+              </div>
+              <span class="input-hint">Server initiates S3 RAM suspend</span>
+            </div>
+            <div class="time-input-group">
+              <label for="tonight-wake-input">Tonight's Wake Time</label>
+              <div class="input-time-wrapper">
+                <input type="time" id="tonight-wake-input" value="07:00" class="cyber-time-picker">
+                <span class="tz-badge">IST</span>
+              </div>
+              <span class="input-hint">Hardware RTC motherboard alarm</span>
+            </div>
+          </div>
+
+          <!-- Dynamic Duration Summary Box -->
+          <div class="sleep-calc-preview-card">
+            <div class="calc-icon-box">🌙</div>
+            <div class="calc-details">
+              <div class="calc-header">
+                <strong>Tonight's Window: <span id="tonight-duration-badge" class="calc-badge">6.0 hrs</span></strong>
+                <span class="calc-status" id="tonight-preview-text">Sleep at 01:00 IST &bull; Wake at 07:00 IST</span>
+              </div>
+              <p class="calc-desc">Server stays in 1.5W low-power S3 sleep. Automatically clears override upon wake.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: DEFAULT SCHEDULE (FOREVER) -->
+        <div class="sleep-tab-pane" id="tab-permanent" style="display: none;">
+          <!-- Master Enable / Disable Toggle -->
+          <div class="sleep-toggle-row">
+            <div class="toggle-info">
+              <strong>Automated Nightly Suspend</strong>
+              <p>Controls whether /etc/cron.d/server-suspend triggers automatic nightly standby.</p>
+            </div>
+            <label class="cyber-switch">
+              <input type="checkbox" id="perm-enabled-checkbox" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="sleep-time-inputs-grid">
+            <div class="time-input-group">
+              <label for="perm-sleep-input">Default Sleep Time (Nightly)</label>
+              <div class="input-time-wrapper">
+                <input type="time" id="perm-sleep-input" value="00:00" class="cyber-time-picker">
+                <span class="tz-badge">IST</span>
+              </div>
+              <span class="input-hint">Standard cron schedule (/etc/cron.d/server-suspend)</span>
+            </div>
+            <div class="time-input-group">
+              <label for="perm-wake-input">Default Wake Time (Daily)</label>
+              <div class="input-time-wrapper">
+                <input type="time" id="perm-wake-input" value="06:00" class="cyber-time-picker">
+                <span class="tz-badge">IST</span>
+              </div>
+              <span class="input-hint">Permanent rtcwake parameter in /etc/server-suspend.conf</span>
+            </div>
+          </div>
+
+          <!-- Dynamic Duration Summary Box for Permanent -->
+          <div class="sleep-calc-preview-card">
+            <div class="calc-icon-box">🔁</div>
+            <div class="calc-details">
+              <div class="calc-header">
+                <strong>Permanent Window: <span id="perm-duration-badge" class="calc-badge">6.0 hrs</span></strong>
+                <span class="calc-status" id="perm-preview-text">Every night from 00:00 IST to 06:00 IST</span>
+              </div>
+              <p class="calc-desc">Persisted to disk. Applied every night indefinitely until modified.</p>
+            </div>
+          </div>
+
+          <div class="sleep-hardware-note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="note-icon">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <div>
+              <strong>Hardware Standby Safety Guarantee</strong>
+              <p>During S3 sleep, all Docker containers are frozen in place and disk drives are safely spun down. RAM remains refreshed at ~1.5W power draw.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <span class="footer-hint" id="sleep-modal-footer-hint">Active Mode: Standard Nightly Schedule</span>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="sleep-modal-cancel">Cancel</button>
+          <button class="btn-primary" id="sleep-modal-save">
+            <span class="btn-spinner" id="sleep-modal-spinner" style="display: none;"></span>
+            <span id="sleep-modal-save-text">Apply for Tonight Only</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+
+  <script type="module" src="/js/app.js?v=10"></script>
+</body>
+</html>

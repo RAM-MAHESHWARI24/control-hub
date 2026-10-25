@@ -1,0 +1,29 @@
+# Secrets & Environment
+.env
+.env.local
+*.secret
+*.key
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# State & Cache files
+speedtest_cache.json
+*.cache.json
+state.json
+
+# Logs
+*.log
+logs/
+
+# Backups & Old Files
+*.bak
+*.swp
+
+# OS Junk
+.DS_Store
+Thumbs.db
