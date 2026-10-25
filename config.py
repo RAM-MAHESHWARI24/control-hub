@@ -16,6 +16,10 @@ if env_file.exists():
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
+# Directory Anchors
+BASE_DIR = Path(__file__).resolve().parent
+APPS_DIR = BASE_DIR.parent
+
 # Server Binding
 HOST = os.getenv("CONTROL_HUB_HOST", "0.0.0.0")
 PORT = int(os.getenv("CONTROL_HUB_PORT", 7575))
@@ -28,17 +32,19 @@ SUSPEND_CRON_FILE = os.getenv("SUSPEND_CRON_FILE", "/etc/cron.d/server-suspend")
 BACKUP_LOG_FILE = os.getenv("BACKUP_LOG_FILE", "/opt/immich/backups/backup.log")
 BACKUP_DIR = os.getenv("BACKUP_DIR", "/opt/immich/backups")
 WATCHTOWER_LOG_DIR = os.getenv("WATCHTOWER_LOG_DIR", "/var/log/watchtower")
-SPEEDTEST_CACHE_FILE = os.getenv("SPEEDTEST_CACHE_FILE", "/opt/control-hub/speedtest_cache.json")
+SPEEDTEST_CACHE_FILE = os.getenv("SPEEDTEST_CACHE_FILE", str(BASE_DIR / "speedtest_cache.json"))
 SPEEDTEST_BIN = os.getenv("SPEEDTEST_BIN", "/usr/local/bin/speedtest")
 RECYCLARR_LOG_FILE = os.getenv("RECYCLARR_LOG_FILE", "/var/log/recyclarr.log")
 IMMICH_ML_LOG_FILE = os.getenv("IMMICH_ML_LOG_FILE", "/var/log/immich-ml.log")
 SERVER_SUSPEND_LOG_FILE = os.getenv("SERVER_SUSPEND_LOG_FILE", "/var/log/server-suspend.log")
-TV_UPDATER_DIR = os.getenv("TV_UPDATER_DIR", "/opt/tv-updater")
-TV_UPDATER_PY = os.getenv("TV_UPDATER_PY", "/opt/tv-updater/tv_updater.py")
+
+# Android TV Updater Integration (Dynamically resolves to sibling apps/tv-updater)
+TV_UPDATER_DIR = os.getenv("TV_UPDATER_DIR", str(APPS_DIR / "tv-updater"))
+TV_UPDATER_PY = os.getenv("TV_UPDATER_PY", str(APPS_DIR / "tv-updater" / "tv_updater.py"))
 TV_UPDATER_LOG_FILE = os.getenv("TV_UPDATER_LOG_FILE", "/var/log/tv-updater.log")
-TV_UPDATER_LOCAL_LOG_FILE = os.getenv("TV_UPDATER_LOCAL_LOG_FILE", "/opt/tv-updater/tv_updater.log")
-TV_UPDATER_STATE_FILE = os.getenv("TV_UPDATER_STATE_FILE", "/opt/tv-updater/state.json")
-TV_UPDATER_INCOMING_DIR = os.getenv("TV_UPDATER_INCOMING_DIR", "/opt/tv-updater/incoming_apks")
+TV_UPDATER_LOCAL_LOG_FILE = os.getenv("TV_UPDATER_LOCAL_LOG_FILE", str(APPS_DIR / "tv-updater" / "tv_updater.log"))
+TV_UPDATER_STATE_FILE = os.getenv("TV_UPDATER_STATE_FILE", str(APPS_DIR / "tv-updater" / "state.json"))
+TV_UPDATER_INCOMING_DIR = os.getenv("TV_UPDATER_INCOMING_DIR", str(APPS_DIR / "tv-updater" / "incoming_apks"))
 
 # Network Interface for LAN Sampling
 ACTIVE_NIC = os.getenv("ACTIVE_NIC", "eth0")
