@@ -96,7 +96,7 @@ Accessible via the header button **⚙️ Settings** (`btn-open-config-center`),
 
 Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), this drawer empowers operators pairing with AI coding assistants (ChatGPT, Claude, Cursor, Antigravity):
 
-![AI Copilot Drawer](../../docs/assets/control-hub/hub_ai_copilot_drawer.png)
+![AI Copilot Drawer](../../docs/assets/control-hub/hub_ai_copilot_diagnostics.png)
 
 * **Hardware Intelligence Extraction:** Gathers host CPU model, core/thread count, physical memory, active IP, and `/dev/dri` GPU render node status.
 * **1-Click Prompt Exporter:** Generates a dense, token-optimized context prompt (~300 tokens) ready to copy/paste into an LLM session.
