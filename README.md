@@ -45,10 +45,11 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 
 ### 5. 📊 System Vitals & Hardware Gauges (`widgets/system_vitals.py`)
 * Real-time CPU load, memory utilization, swap headroom, and thermal temperatures.
+* **Universal Hardware Detection:** Dynamically probes host CPU model name, thread count, physical RAM, and storage mount headroom without hardcoded hardware assumptions.
 
 ### 6. 💾 Storage Operations & Inodes (`widgets/storage_ops.py`)
-* Visual gauges for primary SSD and secondary HDD storage pools.
-* Real-time read/write I/O throughput.
+* Visual gauges for primary root storage (NVMe/SSD) and secondary storage pool (HDD/SATA).
+* Real-time read/write I/O throughput with dynamic block device resolution (`/dev/nvme*`, `/dev/sd*`, `/dev/vd*`).
 
 ### 7. ⏰ Scheduled Cron Tasks (`widgets/cron_tasks.py`)
 * Visual inspection of system cron jobs (nightly ML scheduler, daily Recyclarr sync, weekly Watchtower updates).

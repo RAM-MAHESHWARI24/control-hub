@@ -76,16 +76,16 @@ export function renderStorageOps(sto = {}) {
     </div>
     <div class="storage-metric-row">
       <div class="storage-disk-info">
-        <div class="disk-badge-icon">HDD</div>
+        <div class="disk-badge-icon">DATA</div>
         <div>
           <div class="disk-label-name">
-            Media & Storage (/mnt/hdd)
+            ${escapeHtml(hdd.name || 'Media Storage (/mnt/hdd)')}
             <span class="disk-leds">
-              <span class="hw-led led-r ${hddRead > 0.05 ? 'active' : ''}" title="SDA Read: ${hddRead.toFixed(2)} MB/s"></span>
-              <span class="hw-led led-w ${hddWrite > 0.05 ? 'active' : ''}" title="SDA Write: ${hddWrite.toFixed(2)} MB/s"></span>
+              <span class="hw-led led-r ${hddRead > 0.05 ? 'active' : ''}" title="${escapeHtml(hdd.device || 'Storage')} Read: ${hddRead.toFixed(2)} MB/s"></span>
+              <span class="hw-led led-w ${hddWrite > 0.05 ? 'active' : ''}" title="${escapeHtml(hdd.device || 'Storage')} Write: ${hddWrite.toFixed(2)} MB/s"></span>
             </span>
           </div>
-          <div class="disk-label-sub">Drive: sda (1TB ext4)</div>
+          <div class="disk-label-sub">Block Device: ${escapeHtml(hdd.device || 'sda')} &bull; Active Storage</div>
         </div>
       </div>
       <div class="storage-rates-group">
@@ -96,16 +96,16 @@ export function renderStorageOps(sto = {}) {
 
     <div class="storage-metric-row">
       <div class="storage-disk-info">
-        <div class="disk-badge-icon ssd">SSD</div>
+        <div class="disk-badge-icon ssd">ROOT</div>
         <div>
           <div class="disk-label-name">
-            OS & System Engine (/)
+            ${escapeHtml(ssd.name || 'OS & System Engine (/)')}
             <span class="disk-leds">
-              <span class="hw-led led-r ${ssdRead > 0.05 ? 'active' : ''}" title="SDB Read: ${ssdRead.toFixed(2)} MB/s"></span>
-              <span class="hw-led led-w ${ssdWrite > 0.05 ? 'active' : ''}" title="SDB Write: ${ssdWrite.toFixed(2)} MB/s"></span>
+              <span class="hw-led led-r ${ssdRead > 0.05 ? 'active' : ''}" title="${escapeHtml(ssd.device || 'Root')} Read: ${ssdRead.toFixed(2)} MB/s"></span>
+              <span class="hw-led led-w ${ssdWrite > 0.05 ? 'active' : ''}" title="${escapeHtml(ssd.device || 'Root')} Write: ${ssdWrite.toFixed(2)} MB/s"></span>
             </span>
           </div>
-          <div class="disk-label-sub">Drive: sdb (256GB ext4)</div>
+          <div class="disk-label-sub">Block Device: ${escapeHtml(ssd.device || 'sdb')} &bull; OS Root</div>
         </div>
       </div>
       <div class="storage-rates-group">

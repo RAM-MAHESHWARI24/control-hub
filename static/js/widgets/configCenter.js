@@ -169,10 +169,9 @@ export async function fetchPortsMatrix() {
           </div>
           <div class="port-service-name">${item.name}</div>
           <div class="port-category-tag">${item.category}</div>
-          ${
-            !isFree && webUrl
-              ? `<a href="${webUrl}" target="_blank" class="port-link-btn" title="Open ${item.name} Web UI in new tab">Open Web UI &nearr;</a>`
-              : `<span class="port-desc-text">${isFree ? "Ready for container bind" : "System process listening"}</span>`
+          ${!isFree && webUrl
+            ? `<a href="${webUrl}" target="_blank" class="port-link-btn" title="Open ${item.name} Web UI in new tab">Open Web UI &nearr;</a>`
+            : `<span class="port-desc-text">${isFree ? "Ready for container bind" : "System process listening"}</span>`
           }
         `;
         portsGrid.appendChild(portCard);
@@ -376,10 +375,10 @@ export async function fetchAiDiagnostics() {
       aiRamPill.textContent = `${snap.ram.total_gib} GiB Total (${snap.ram.free_gib} GiB Free)`;
     }
     if (aiHwPill && snap.hwaccel) {
-      aiHwPill.textContent = snap.hwaccel.render_d128_present ? "Intel QSV / VAAPI Active" : "Direct Play Recommended";
+      aiHwPill.textContent = (snap.hwaccel.has_vaapi_dri || snap.hwaccel.render_d128_present) ? "Intel QSV / VAAPI Active" : (snap.hwaccel.has_nvidia ? "NVIDIA Acceleration Active" : "Direct Play Recommended");
     }
     if (aiHaswellPill && snap.cpu) {
-      aiHaswellPill.textContent = snap.cpu.is_low_power ? "Haswell Low-Power Profile (<1.5% CPU)" : "Standard Modern Host";
+      aiHaswellPill.textContent = snap.cpu.is_low_power ? "Low-Power Profile (Direct Play Enforced)" : "Standard / High-Performance Host";
     }
 
     if (aiPromptContent) {

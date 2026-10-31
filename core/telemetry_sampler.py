@@ -5,9 +5,12 @@ disk I/O operations (/proc/diskstats), SMB client sessions, and CPU utilization.
 """
 
 import os
+import sys
 import time
+import platform
 import threading
 import subprocess
+from pathlib import Path
 import requests
 
 from config import (
@@ -15,11 +18,154 @@ from config import (
     QBITTORRENT_URL, QBITTORRENT_USER, QBITTORRENT_PASS
 )
 
+def get_cpu_hardware_specs():
+    """Detects host CPU model and core/thread count dynamically across all architectures"""
+    model_name = ""
+    cores = os.cpu_count() or 2
+    arch = platform.machine()
+
+    proc_cpuinfo = Path("/proc/cpuinfo")
+    if proc_cpuinfo.exists():
+        try:
+            with open(proc_cpuinfo, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if line.startswith("model name"):
+                        m = line.split(":", 1)[1].strip()
+                        if m:
+                            model_name = m
+                            break
+        except Exception:
+            pass
+
+    if not model_name and sys.platform == "win32":
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+            model_name = winreg.QueryValueEx(key, "ProcessorNameString")[0].strip()
+        except Exception:
+            pass
+
+    if not model_name and sys.platform == "darwin":
+        try:
+            res = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True, timeout=2)
+            if res.returncode == 0:
+                model_name = res.stdout.strip()
+        except Exception:
+            pass
+
+    if not model_name:
+        model_name = platform.processor() or f"{arch} Host Processor"
+
+    return {
+        "model": model_name,
+        "cores": cores,
+        "threads": cores,
+        "architecture": arch,
+    }
+
+def detect_active_nic(preferred_nic=None):
+    """
+    Returns preferred_nic if valid and present in /proc/net/dev,
+    otherwise auto-detects the first physical non-virtual network interface.
+    """
+    proc_net = Path("/proc/net/dev")
+    if not proc_net.exists():
+        return preferred_nic or "eth0"
+
+    interfaces = []
+    try:
+        with open(proc_net, "r") as f:
+            lines = f.readlines()[2:]
+            for line in lines:
+                if ":" in line:
+                    iface = line.split(":")[0].strip()
+                    if iface == "lo" or iface.startswith(("docker", "veth", "br-", "tailscale", "tun")):
+                        continue
+                    interfaces.append(iface)
+    except Exception:
+        pass
+
+    if preferred_nic and preferred_nic in interfaces:
+        return preferred_nic
+
+    return interfaces[0] if interfaces else (preferred_nic or "eth0")
+
+def detect_storage_devices():
+    """
+    Detects root disk block device and media data disk block device dynamically.
+    Returns (root_dev, data_dev, target_data_mount).
+    """
+    root_dev = None
+    data_dev = None
+    hdd_mount_path = os.getenv("HDD_DATA", "/mnt/hdd/data")
+    if "/data" in hdd_mount_path and hdd_mount_path != "/data":
+        target_data_mount = hdd_mount_path.rsplit("/data", 1)[0]
+    else:
+        target_data_mount = hdd_mount_path
+
+    proc_mounts = Path("/proc/mounts")
+    if proc_mounts.exists():
+        try:
+            with open(proc_mounts, "r") as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        dev_path, mnt_point = parts[0], parts[1]
+                        if dev_path.startswith("/dev/"):
+                            raw_dev = dev_path.replace("/dev/", "")
+                            base_dev = raw_dev
+                            if "nvme" in raw_dev or "mmcblk" in raw_dev:
+                                if "p" in raw_dev:
+                                    base_dev = raw_dev.split("p")[0]
+                            else:
+                                base_dev = raw_dev.rstrip("0123456789")
+
+                            if mnt_point == "/":
+                                root_dev = base_dev
+                            elif mnt_point == target_data_mount or mnt_point == "/mnt/hdd":
+                                data_dev = base_dev
+        except Exception:
+            pass
+
+    if not root_dev or not data_dev:
+        proc_diskstats = Path("/proc/diskstats")
+        if proc_diskstats.exists():
+            try:
+                found_disks = []
+                with open(proc_diskstats, "r") as f:
+                    for line in f:
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            dev = parts[2]
+                            if dev.startswith(("loop", "ram", "dm-")):
+                                continue
+                            if ("nvme" in dev and "p" in dev) or ("mmcblk" in dev and "p" in dev):
+                                continue
+                            if any(dev.startswith(prefix) for prefix in ["sd", "vd", "hd", "xvd", "nvme", "mmcblk"]):
+                                if dev not in found_disks and not (dev[-1].isdigit() and not ("nvme" in dev or "mmcblk" in dev)):
+                                    found_disks.append(dev)
+
+                if not root_dev and found_disks:
+                    root_dev = found_disks[1] if len(found_disks) > 1 else found_disks[0]
+                if not data_dev and found_disks:
+                    data_dev = found_disks[0]
+            except Exception:
+                pass
+
+    root_dev = root_dev or "sdb"
+    data_dev = data_dev or "sda"
+
+    return root_dev, data_dev, target_data_mount
+
+CPU_SPECS = get_cpu_hardware_specs()
+DETECTED_ROOT_DEV, DETECTED_DATA_DEV, DETECTED_DATA_MOUNT = detect_storage_devices()
+DETECTED_NIC = detect_active_nic(ACTIVE_NIC)
+
 # Thread-safe global telemetry state
 telemetry_lock = threading.Lock()
 telemetry_state = {
     "network": {
-        "interface": ACTIVE_NIC,
+        "interface": DETECTED_NIC,
         "rx_bytes_sec": 0,
         "tx_bytes_sec": 0,
         "rx_mbps": 0.0,
@@ -66,15 +212,30 @@ telemetry_state = {
         "collective_mbs": 0.0,
         "total_read_mbs": 0.0,
         "total_write_mbs": 0.0,
-        "hdd": {"read_mbps": 0.0, "write_mbps": 0.0, "read_mbs": 0.0, "write_mbs": 0.0, "name": "Media HDD (/mnt/hdd - sda)"},
-        "ssd": {"read_mbps": 0.0, "write_mbps": 0.0, "read_mbs": 0.0, "write_mbs": 0.0, "name": "OS Root SSD (/ - sdb)"},
+        "hdd": {
+            "device": DETECTED_DATA_DEV,
+            "read_mbps": 0.0,
+            "write_mbps": 0.0,
+            "read_mbs": 0.0,
+            "write_mbs": 0.0,
+            "name": f"Media Storage ({DETECTED_DATA_MOUNT} - {DETECTED_DATA_DEV})"
+        },
+        "ssd": {
+            "device": DETECTED_ROOT_DEV,
+            "read_mbps": 0.0,
+            "write_mbps": 0.0,
+            "read_mbs": 0.0,
+            "write_mbs": 0.0,
+            "name": f"OS Root (/ - {DETECTED_ROOT_DEV})"
+        },
         "smb_clients": [],
         "jellyfin_streams": []
     },
     "cpu": {
         "usage_percent": 0.0,
-        "cores": 4,
-        "model": "Intel(R) Core(TM) i3-4005U CPU @ 1.70GHz",
+        "cores": CPU_SPECS["cores"],
+        "threads": CPU_SPECS["threads"],
+        "model": CPU_SPECS["model"],
         "temp_c": None
     }
 }
@@ -189,7 +350,7 @@ def get_nic_link_info(iface):
 
 def telemetry_worker():
     """Continuously samples NIC, disk stats, CPU, and qBittorrent at 1-second intervals"""
-    active_iface = ACTIVE_NIC
+    active_iface = DETECTED_NIC
     prev_rx = 0
     prev_tx = 0
     prev_time = time.time()
@@ -217,22 +378,22 @@ def telemetry_worker():
     except Exception:
         pass
 
-    # Initial diskstat counters
-    prev_sda_r = 0
-    prev_sda_w = 0
-    prev_sdb_r = 0
-    prev_sdb_w = 0
+    # Initial diskstat counters for detected storage devices
+    prev_data_r = 0
+    prev_data_w = 0
+    prev_root_r = 0
+    prev_root_w = 0
     try:
         with open("/proc/diskstats", "r") as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 10:
-                    if parts[2] == "sda":
-                        prev_sda_r = int(parts[5])
-                        prev_sda_w = int(parts[9])
-                    elif parts[2] == "sdb":
-                        prev_sdb_r = int(parts[5])
-                        prev_sdb_w = int(parts[9])
+                    if parts[2] == DETECTED_DATA_DEV:
+                        prev_data_r = int(parts[5])
+                        prev_data_w = int(parts[9])
+                    elif parts[2] == DETECTED_ROOT_DEV:
+                        prev_root_r = int(parts[5])
+                        prev_root_w = int(parts[9])
     except Exception:
         pass
 
@@ -362,48 +523,48 @@ def telemetry_worker():
             total_wan_mbs = dl_mbs + up_mbs
             wan_gauge_pct = min(100.0, (total_wan_mbps / 100.0) * 100.0)
 
-            # 4. Sample Disk I/O (/proc/diskstats)
-            sda_r_mbps = 0.0
-            sda_w_mbps = 0.0
-            sdb_r_mbps = 0.0
-            sdb_w_mbps = 0.0
-            sda_r_mbs = 0.0
-            sda_w_mbs = 0.0
-            sdb_r_mbs = 0.0
-            sdb_w_mbs = 0.0
+            # 4. Sample Disk I/O (/proc/diskstats) for dynamic block devices
+            data_r_mbps = 0.0
+            data_w_mbps = 0.0
+            root_r_mbps = 0.0
+            root_w_mbps = 0.0
+            data_r_mbs = 0.0
+            data_w_mbs = 0.0
+            root_r_mbs = 0.0
+            root_w_mbs = 0.0
             try:
                 with open("/proc/diskstats", "r") as f:
                     for line in f:
                         parts = line.split()
                         if len(parts) >= 10:
                             dev = parts[2]
-                            if dev == "sda":
+                            if dev == DETECTED_DATA_DEV:
                                 cur_r = int(parts[5])
                                 cur_w = int(parts[9])
-                                sda_r_mbps = max(0.0, round(((cur_r - prev_sda_r) * 512 * 8) / (dt * 1_000_000.0), 2))
-                                sda_w_mbps = max(0.0, round(((cur_w - prev_sda_w) * 512 * 8) / (dt * 1_000_000.0), 2))
-                                sda_r_mbs = max(0.0, round(((cur_r - prev_sda_r) * 512) / (dt * 1_048_576.0), 2))
-                                sda_w_mbs = max(0.0, round(((cur_w - prev_sda_w) * 512) / (dt * 1_048_576.0), 2))
-                                prev_sda_r = cur_r
-                                prev_sda_w = cur_w
-                            elif dev == "sdb":
+                                data_r_mbps = max(0.0, round(((cur_r - prev_data_r) * 512 * 8) / (dt * 1_000_000.0), 2))
+                                data_w_mbps = max(0.0, round(((cur_w - prev_data_w) * 512 * 8) / (dt * 1_000_000.0), 2))
+                                data_r_mbs = max(0.0, round(((cur_r - prev_data_r) * 512) / (dt * 1_048_576.0), 2))
+                                data_w_mbs = max(0.0, round(((cur_w - prev_data_w) * 512) / (dt * 1_048_576.0), 2))
+                                prev_data_r = cur_r
+                                prev_data_w = cur_w
+                            elif dev == DETECTED_ROOT_DEV:
                                 cur_r = int(parts[5])
                                 cur_w = int(parts[9])
-                                sdb_r_mbps = max(0.0, round(((cur_r - prev_sdb_r) * 512 * 8) / (dt * 1_000_000.0), 2))
-                                sdb_w_mbps = max(0.0, round(((cur_w - prev_sdb_w) * 512 * 8) / (dt * 1_000_000.0), 2))
-                                sdb_r_mbs = max(0.0, round(((cur_r - prev_sdb_r) * 512) / (dt * 1_048_576.0), 2))
-                                sdb_w_mbs = max(0.0, round(((cur_w - prev_sdb_w) * 512) / (dt * 1_048_576.0), 2))
-                                prev_sdb_r = cur_r
-                                prev_sdb_w = cur_w
+                                root_r_mbps = max(0.0, round(((cur_r - prev_root_r) * 512 * 8) / (dt * 1_000_000.0), 2))
+                                root_w_mbps = max(0.0, round(((cur_w - prev_root_w) * 512 * 8) / (dt * 1_000_000.0), 2))
+                                root_r_mbs = max(0.0, round(((cur_r - prev_root_r) * 512) / (dt * 1_048_576.0), 2))
+                                root_w_mbs = max(0.0, round(((cur_w - prev_root_w) * 512) / (dt * 1_048_576.0), 2))
+                                prev_root_r = cur_r
+                                prev_root_w = cur_w
             except Exception:
                 pass
 
-            total_disk_read_mbps = round(sda_r_mbps + sdb_r_mbps, 2)
-            total_disk_write_mbps = round(sda_w_mbps + sdb_w_mbps, 2)
+            total_disk_read_mbps = round(data_r_mbps + root_r_mbps, 2)
+            total_disk_write_mbps = round(data_w_mbps + root_w_mbps, 2)
             collective_storage_mbps = round(total_disk_read_mbps + total_disk_write_mbps, 2)
 
-            total_disk_read_mbs = round(sda_r_mbs + sdb_r_mbs, 2)
-            total_disk_write_mbs = round(sda_w_mbs + sdb_w_mbs, 2)
+            total_disk_read_mbs = round(data_r_mbs + root_r_mbs, 2)
+            total_disk_write_mbs = round(data_w_mbs + root_w_mbs, 2)
             collective_storage_mbs = round(total_disk_read_mbs + total_disk_write_mbs, 2)
 
             # Sample SMB and Jellyfin every 3 seconds
@@ -467,26 +628,29 @@ def telemetry_worker():
                     "total_read_mbs": total_disk_read_mbs,
                     "total_write_mbs": total_disk_write_mbs,
                     "hdd": {
-                        "read_mbps": sda_r_mbps,
-                        "write_mbps": sda_w_mbps,
-                        "read_mbs": sda_r_mbs,
-                        "write_mbs": sda_w_mbs,
-                        "name": "Media HDD (/mnt/hdd - sda)"
+                        "device": DETECTED_DATA_DEV,
+                        "read_mbps": data_r_mbps,
+                        "write_mbps": data_w_mbps,
+                        "read_mbs": data_r_mbs,
+                        "write_mbs": data_w_mbs,
+                        "name": f"Media Storage ({DETECTED_DATA_MOUNT} - {DETECTED_DATA_DEV})"
                     },
                     "ssd": {
-                        "read_mbps": sdb_r_mbps,
-                        "write_mbps": sdb_w_mbps,
-                        "read_mbs": sdb_r_mbs,
-                        "write_mbs": sdb_w_mbs,
-                        "name": "OS Root SSD (/ - sdb)"
+                        "device": DETECTED_ROOT_DEV,
+                        "read_mbps": root_r_mbps,
+                        "write_mbps": root_w_mbps,
+                        "read_mbs": root_r_mbs,
+                        "write_mbs": root_w_mbs,
+                        "name": f"OS Root (/ - {DETECTED_ROOT_DEV})"
                     },
                     "smb_clients": smb_clients,
                     "jellyfin_streams": jellyfin_streams
                 }
                 telemetry_state["cpu"] = {
                     "usage_percent": cpu_usage_pct,
-                    "cores": 4,
-                    "model": "Intel(R) Core(TM) i3-4005U @ 1.70GHz",
+                    "cores": CPU_SPECS["cores"],
+                    "threads": CPU_SPECS["threads"],
+                    "model": CPU_SPECS["model"],
                     "temp_c": cpu_temp
                 }
 

@@ -630,7 +630,7 @@
             </svg>
             <div>
               <h3>Hardware Vitals & Storage Headroom</h3>
-              <span class="card-subtitle">Intel Core i3-4005U &bull; 7.2 GiB RAM</span>
+              <span class="card-subtitle" id="vitals-card-subtitle">Dynamic Telemetry &bull; Memory Headroom</span>
             </div>
           </div>
           <span class="cpu-pill" id="cpu-temp-badge">CPU: <span id="cpu-load-val">0%</span></span>
@@ -640,7 +640,7 @@
           <!-- CPU Bar -->
           <div class="vital-row">
             <div class="vital-label-row">
-              <span class="vital-name">Intel Core i3-4005U (4 Threads @ 1.70GHz)</span>
+              <span class="vital-name" id="vitals-cpu-title">Host Processor</span>
               <span class="vital-stat" id="cpu-stat">0% Load</span>
             </div>
             <div class="progress-bar-bg">
@@ -651,8 +651,8 @@
           <!-- RAM Bar -->
           <div class="vital-row">
             <div class="vital-label-row">
-              <span class="vital-name">DDR3 Memory (7.2 GiB RAM + 4.0 GiB Swap)</span>
-              <span class="vital-stat" id="ram-stat">0.0 / 7.2 GiB (0%)</span>
+              <span class="vital-name" id="vitals-ram-title">System Memory</span>
+              <span class="vital-stat" id="ram-stat">0.0 / 0.0 GiB (0%)</span>
             </div>
             <div class="progress-bar-bg">
               <div class="progress-bar-fill fill-ram" id="ram-progress" style="width: 0%;"></div>
@@ -662,7 +662,7 @@
           <!-- OS SSD Bar -->
           <div class="vital-row">
             <div class="vital-label-row">
-              <span class="vital-name">OS Root SSD (/dev/sdb3)</span>
+              <span class="vital-name" id="vitals-ssd-title">OS Root Storage (/)</span>
               <span class="vital-stat" id="ssd-stat">-- GB Free (0%)</span>
             </div>
             <div class="progress-bar-bg">
@@ -673,7 +673,7 @@
           <!-- Media HDD Headroom Segmented Bar -->
           <div class="vital-row">
             <div class="vital-label-row">
-              <span class="vital-name"><strong>Media & Backup HDD (/mnt/hdd - ext4)</strong></span>
+              <span class="vital-name" id="vitals-hdd-title"><strong>Media & Data Pool (/mnt/hdd)</strong></span>
               <span class="vital-stat hdd-stat-text" id="hdd-stat">-- GB Free (0% Used)</span>
             </div>
             <div class="segmented-storage-bg" id="hdd-segmented-bar">
