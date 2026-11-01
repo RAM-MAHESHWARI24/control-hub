@@ -1,0 +1,47 @@
+name: Publish Control Hub Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to publish release for (e.g. v1.1.0)'
+        required: true
+        default: 'v1.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Official GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build Clean Source Distribution
+        run: |
+          mkdir -p dist
+          TAG="${{ github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
+            TAG="${{ inputs.tag_name }}"
+          fi
+          git archive --format=tar.gz -o "dist/control-hub-${TAG}.tar.gz" HEAD
+          git archive --format=zip -o "dist/control-hub-${TAG}.zip" HEAD
+
+      - name: Publish Release with Auto-Changelog
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name != 'main' && github.ref_name || inputs.tag_name }}
+          name: Control Hub ${{ github.ref_name != 'main' && github.ref_name || inputs.tag_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
