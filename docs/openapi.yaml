@@ -1,0 +1,296 @@
+openapi: 3.1.0
+info:
+  title: Control Hub Dashboard API
+  description: >
+    High-performance, ultra-lean management daemon and REST API engine for homelab clusters.
+    Engineered for ultra-low resource footprints (<25MB RAM, <1% idle CPU).
+  version: 1.0.1
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:7575
+    description: Localhost daemon binding
+  - url: http://{server_ip}:7575
+    description: Host LAN address
+    variables:
+      server_ip:
+        default: 192.168.1.100
+        description: LAN IP of the target homelab server
+
+paths:
+  /api/health:
+    get:
+      summary: Service Health Check
+      description: Returns overall operational health status of the Control Hub daemon.
+      tags: [Observability]
+      responses:
+        '200':
+          description: Service is healthy and operational
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ok" }
+                  service: { type: string, example: "control-hub" }
+                  version: { type: string, example: "1.0.1" }
+                  uptime_seconds: { type: number, example: 342.1 }
+
+  /api/livez:
+    get:
+      summary: Liveness Probe
+      description: Kubernetes-style liveness probe. Fast check to confirm the event loop is active.
+      tags: [Observability]
+      responses:
+        '200':
+          description: Event loop is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "live" }
+
+  /api/readyz:
+    get:
+      summary: Readiness Probe
+      description: Kubernetes-style readiness probe. Verifies downstream storage and telemetry subsystems.
+      tags: [Observability]
+      responses:
+        '200':
+          description: All critical subsystems are initialized and responsive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ready" }
+                  checks:
+                    type: object
+                    properties:
+                      telemetry: { type: string, example: "ok" }
+                      storage: { type: string, example: "ok" }
+        '503':
+          description: One or more critical subsystems are failing
+
+  /api/system/vitals:
+    get:
+      summary: System Vitals & Hardware Telemetry
+      description: Returns live CPU utilization, physical memory breakdown, core temperatures, and thermal headroom.
+      tags: [Telemetry]
+      responses:
+        '200':
+          description: System vitals payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cpu_percent: { type: number, example: 4.2 }
+                  ram_used_gib: { type: number, example: 2.1 }
+                  ram_total_gib: { type: number, example: 7.9 }
+                  ram_percent: { type: number, example: 26.5 }
+                  temp_celsius: { type: number, example: 42.0 }
+
+  /api/network/speed:
+    get:
+      summary: Real-Time Network Throughput
+      description: Returns instantaneous download and upload transfer rates sampled from the physical NIC.
+      tags: [Network]
+      responses:
+        '200':
+          description: Instantaneous network speeds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rx_mbps: { type: number, example: 12.4 }
+                  tx_mbps: { type: number, example: 1.8 }
+                  link_speed_mbps: { type: integer, example: 1000 }
+                  active_nic: { type: string, example: "eth0" }
+
+  /api/speedtest/latest:
+    get:
+      summary: Latest WAN Speedtest Results
+      description: Retrieves the most recent scheduled Ookla speedtest report.
+      tags: [Network]
+      responses:
+        '200':
+          description: Speedtest metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  download_mbps: { type: number, example: 284.5 }
+                  upload_mbps: { type: number, example: 48.2 }
+                  ping_ms: { type: number, example: 12.1 }
+                  timestamp: { type: string, example: "2026-10-31T04:00:00Z" }
+
+  /api/speedtest/run:
+    post:
+      summary: Trigger On-Demand Speedtest
+      description: Initiates an asynchronous background WAN speed measurement.
+      tags: [Network]
+      responses:
+        '202':
+          description: Speedtest initiated
+
+  /api/downloads/active:
+    get:
+      summary: Active Torrent Telemetry
+      description: Returns real-time download and upload transfer rates and active torrent counts from qBittorrent.
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: Active torrent stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connected: { type: boolean, example: true }
+                  download_rate_mbps: { type: number, example: 8.4 }
+                  upload_rate_mbps: { type: number, example: 0.5 }
+                  active_torrents: { type: integer, example: 3 }
+                  paused: { type: boolean, example: false }
+
+  /api/torrents/toggle-all:
+    post:
+      summary: Pause or Resume All Torrents
+      description: Toggles the execution state of the entire torrent download queue.
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: Toggle state updated
+
+  /api/storage/operations:
+    get:
+      summary: Storage Mount Capacities
+      description: Returns capacity, utilized space, free space, and mount paths for SSD root and HDD pools.
+      tags: [Storage]
+      responses:
+        '200':
+          description: Storage filesystem metrics
+
+  /api/services/status:
+    get:
+      summary: Docker Container Service Matrix
+      description: Returns running status, health check status, and 12-char hex container IDs for all stack services.
+      tags: [Cluster Management]
+      responses:
+        '200':
+          description: Container status matrix
+
+  /api/services/restart/{service_id}:
+    post:
+      summary: Restart Container Service
+      description: Triggers a graceful restart of the specified Docker container.
+      tags: [Cluster Management]
+      parameters:
+        - name: service_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "jellyfin"
+      responses:
+        '200':
+          description: Restart initiated
+
+  /api/services/logs/{service_id}:
+    get:
+      summary: Tail Service Logs
+      description: Returns the latest log lines for the specified service.
+      tags: [Cluster Management]
+      parameters:
+        - name: service_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "sonarr"
+      responses:
+        '200':
+          description: Log stream lines
+
+  /api/sleep/status:
+    get:
+      summary: Sleep Guard Power Automation Status
+      description: Returns current ACPI S3 sleep window, active lock reasons (plex/immich/downloads), and tonight's sleep status.
+      tags: [Power Automation]
+      responses:
+        '200':
+          description: Sleep guard state
+
+  /api/sleep/toggle:
+    post:
+      summary: Toggle Sleep Guard Automation
+      description: Enables or disables automated nightly ACPI S3 sleep.
+      tags: [Power Automation]
+      responses:
+        '200':
+          description: State toggled
+
+  /api/sleep/shift-tonight:
+    post:
+      summary: Shift Tonight's Sleep Window
+      description: Adjusts tonight's sleep start or wakeup time without altering permanent cron configuration.
+      tags: [Power Automation]
+      responses:
+        '200':
+          description: Tonight's schedule updated
+
+  /api/backup/status:
+    get:
+      summary: Google Drive Cloud Backup Status
+      description: Returns the last execution timestamp, sync state, and uploaded volume for the Rclone cloud backup job.
+      tags: [Backup]
+      responses:
+        '200':
+          description: Backup execution telemetry
+
+  /api/backup/sync:
+    post:
+      summary: Trigger On-Demand Cloud Backup
+      description: Initiates an immediate cloud synchronization sweep with trash buffering.
+      tags: [Backup]
+      responses:
+        '202':
+          description: Backup job started
+
+  /api/cron/status:
+    get:
+      summary: Cron & Automation Task Timers
+      description: Returns next execution schedules and historical statuses for all scheduled homelab tasks.
+      tags: [Automation]
+      responses:
+        '200':
+          description: Cron status overview
+
+  /api/tv-updater/status:
+    get:
+      summary: Android TV Updater Fleet Status
+      description: Returns target Android TV IP, connection state, installed app versions, and available updates.
+      tags: [Fleet Management]
+      responses:
+        '200':
+          description: TV fleet status
+
+  /api/config/current:
+    get:
+      summary: Current Configuration Settings
+      description: Returns active configuration key-value mappings (sanitizing sensitive master passwords).
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Configuration settings
+
+  /api/config/update:
+    post:
+      summary: Update Configuration Settings
+      description: Updates specified configuration settings and synchronizes all downstream .env files.
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Configuration updated

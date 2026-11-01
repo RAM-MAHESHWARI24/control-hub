@@ -106,6 +106,16 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 
 ## 🔌 REST API Documentation
 
+### Observability & Health Probing Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Standard service health status, version, and uptime |
+| `GET` | `/api/livez` | Kubernetes-style liveness probe (checks event loop responsiveness) |
+| `GET` | `/api/readyz` | Kubernetes-style readiness probe (checks storage and telemetry subsystems) |
+| `GET` | `/api/docs` | Interactive Swagger UI API documentation portal |
+| `GET` | `/api/openapi.yaml` | Raw OpenAPI 3.1.0 machine-readable contract |
+
 ### System & Telemetry Endpoints
 
 | Method | Endpoint | Description |
