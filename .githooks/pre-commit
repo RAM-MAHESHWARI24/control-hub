@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Control Hub - Tier 1 Fast Pre-Commit Hook Dispatcher
+# Cross-platform runner (Windows bash / Linux / macOS)
+# ==============================================================================
+set -e
+
+if command -v python3 &>/dev/null; then
+    exec python3 .githooks/pre_commit.py "$@"
+elif command -v python &>/dev/null; then
+    exec python .githooks/pre_commit.py "$@"
+else
+    echo "Warning: Python not found in PATH, skipping pre-commit hook."
+    exit 0
+fi

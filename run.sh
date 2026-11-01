@@ -19,6 +19,11 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
+# Configure local git hooks if running inside a git clone
+if [ -d ".git" ] && [ -d ".githooks" ]; then
+    git config core.hooksPath .githooks 2>/dev/null || true
+fi
+
 # Ensure python3-venv / venv is available
 VENV_DIR="$SCRIPT_DIR/venv"
 if [ ! -d "$VENV_DIR" ]; then

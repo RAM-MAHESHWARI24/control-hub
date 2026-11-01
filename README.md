@@ -225,5 +225,35 @@ sudo systemctl enable --now control-hub.service
 
 ---
 
+## 🛡️ Three-Tier Quality & Gatekeeping Protection
+
+Control Hub enforces an industry-standard 3-tier defense-in-depth model to prevent defects from reaching production:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Tier 1: Local Pre-Commit Hook (< 1.5s)                                  │
+│   • Python Syntax & AST Compilation (py_compile)                        │
+│   • Secret & Credential Leak Scanning (Tokens, Private Keys)            │
+│   • OpenAPI 3.0/3.1 Contract Parsing (docs/openapi.yaml)                │
+│   • Documentation Relative Link Integrity                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Tier 2: Local Pre-Push Regression Suite (~5-10s)                        │
+│   • Standalone Unit Tests (tests/test_standalone.py)                    │
+│   • Module Import Smoke Checks (server, config, core, widgets)          │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Tier 3: Remote GitHub Actions CI & Branch Protection                    │
+│   • Python Matrix Lint & Test Harness (.github/workflows/ci.yml)        │
+│   • Automated Semantic Release Tagging (.github/workflows/release.yml)  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+To activate the local hooks in your clone:
+```bash
+git config core.hooksPath .githooks
+```
+*(Running `./run.sh` will also auto-configure `.githooks` on first boot).*
+
+---
+
 ## 📄 License
 MIT License. Part of the [Homelab Blueprint](https://github.com/RAM-MAHESHWARI24/homelab-blueprint) ecosystem.
