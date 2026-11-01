@@ -8,38 +8,71 @@ import sys
 from pathlib import Path
 from flask import Blueprint, jsonify, request
 
-# Ensure repository root is on sys.path to access setup.config_core
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# Dynamically resolve root: monorepo root if running inside monorepo, or hub root if standalone
+HUB_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = HUB_ROOT.parent.parent if (HUB_ROOT.parent.parent / ".env.example").exists() else HUB_ROOT
 
-from setup.config_core.env_manager import (
-    load_env_file,
-    sync_all_blueprint_envs,
-)
-from setup.config_core.storage_manager import (
-    get_disk_partitions,
-    test_atomic_hardlink,
-)
-from setup.config_core.port_manager import (
-    get_default_ports,
-    check_ports_matrix,
-    check_port,
-)
-from setup.config_core.secrets_generator import (
-    generate_all_secrets,
-    generate_password,
-    generate_api_key,
-)
-from setup.config_core.system_prober import (
-    get_system_snapshot,
-    generate_ai_context_dump,
-)
-from setup.config_core.netplan_manager import (
-    probe_network_interfaces,
-    generate_netplan_yaml,
-    safe_apply_netplan,
-)
+# Support both standalone repo execution and monorepo execution
+try:
+    from core.config_core.env_manager import (
+        load_env_file,
+        sync_all_blueprint_envs,
+    )
+    from core.config_core.storage_manager import (
+        get_disk_partitions,
+        test_atomic_hardlink,
+    )
+    from core.config_core.port_manager import (
+        get_default_ports,
+        check_ports_matrix,
+        check_port,
+    )
+    from core.config_core.secrets_generator import (
+        generate_all_secrets,
+        generate_password,
+        generate_api_key,
+    )
+    from core.config_core.system_prober import (
+        get_system_snapshot,
+        generate_ai_context_dump,
+    )
+    from core.config_core.netplan_manager import (
+        probe_network_interfaces,
+        generate_netplan_yaml,
+        safe_apply_netplan,
+    )
+except ImportError:
+    REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
+    from setup.config_core.env_manager import (
+        load_env_file,
+        sync_all_blueprint_envs,
+    )
+    from setup.config_core.storage_manager import (
+        get_disk_partitions,
+        test_atomic_hardlink,
+    )
+    from setup.config_core.port_manager import (
+        get_default_ports,
+        check_ports_matrix,
+        check_port,
+    )
+    from setup.config_core.secrets_generator import (
+        generate_all_secrets,
+        generate_password,
+        generate_api_key,
+    )
+    from setup.config_core.system_prober import (
+        get_system_snapshot,
+        generate_ai_context_dump,
+    )
+    from setup.config_core.netplan_manager import (
+        probe_network_interfaces,
+        generate_netplan_yaml,
+        safe_apply_netplan,
+    )
 
 config_center_bp = Blueprint("config_center", __name__)
 
