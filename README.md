@@ -3,10 +3,12 @@
 > High-performance, ultra-lightweight homelab command center and active node management daemon tailored for low-power hardware.  
 > Runs on **< 25 MB RAM** and **< 0.2% CPU** with zero Node.js/npm dependencies.
 
+[![CI](https://github.com/RAM-MAHESHWARI24/control-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/RAM-MAHESHWARI24/control-hub/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/Release-v1.1.0-brightgreen.svg)](https://github.com/RAM-MAHESHWARI24/control-hub/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![RAM Footprint](https://img.shields.io/badge/RAM-%3C25MB-success.svg)](#performance)
-[![Zero-NPM](https://img.shields.io/badge/Frontend-Vanilla%20ES6%20%2B%20CSS-success.svg)](#architecture)
+[![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6BA539.svg)](docs/openapi.yaml)
 [![Port: 7575](https://img.shields.io/badge/Port-7575-orange.svg)](#quickstart)
 
 ---
@@ -158,10 +160,12 @@ Control Hub can run either as a **standalone Docker container** or as a **native
 
 ### Option A: Standalone Docker (Fastest for Existing Homelabs)
 ```bash
-# 1. Clone or navigate to control-hub
-cd apps/control-hub
+# 1. Clone standalone repository
+git clone https://github.com/RAM-MAHESHWARI24/control-hub.git
+cd control-hub
 
-# 2. Launch container
+# 2. Configure environment & launch container
+cp .env.example .env
 docker compose up -d
 ```
 Open `http://<your-server-ip>:7575` in your browser.
@@ -222,4 +226,4 @@ sudo systemctl enable --now control-hub.service
 ---
 
 ## 📄 License
-MIT License. Part of the [Homelab Blueprint](../../README.md) monorepo.
+MIT License. Part of the [Homelab Blueprint](https://github.com/RAM-MAHESHWARI24/homelab-blueprint) ecosystem.
