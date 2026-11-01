@@ -17,7 +17,7 @@ Most homelab dashboards (Homarr, Homepage, Dashy) are heavy, static bookmark man
 
 **Control Hub** is an **active server management daemon** built with Python Flask and modular Vanilla ES6. It gives you real-time hardware telemetry, active power control, live container logs, day-to-day node configuration, and an integrated AI copilot while sipping resources on low-power hardware (such as 2-core Haswell mini-PCs or Intel N100s).
 
-![Control Hub Header & Actions](../../docs/assets/control-hub/hub_header_settings_ai.png)
+![Control Hub Header & Actions](docs/assets/hub_header_settings_ai.png)
 
 ---
 
@@ -67,7 +67,7 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 
 Accessible via the header button **⚙️ Settings** (`btn-open-config-center`), this 5-tab modal allows operators to inspect and reconfigure the homelab on the fly without editing `.env` files manually:
 
-![Settings Hardlink Verification](../../docs/assets/control-hub/hub_settings_hardlink_test.png)
+![Settings Hardlink Verification](docs/assets/hub_settings_hardlink_test.png)
 
 ### Tab 1: Storage & Atomic Hardlinks
 * Real-time `os.link` hardlink inode validation probe with millisecond latency measurement.
@@ -77,7 +77,7 @@ Accessible via the header button **⚙️ Settings** (`btn-open-config-center`),
 * Live socket-level prober testing all 13 core homelab ports simultaneously.
 * Real-time badges (`ACTIVE` in green, `INACTIVE` in amber) for Jellyfin (8096), Seerr (5055), Sonarr (8989), Radarr (7878), Prowlarr (9696), Bazarr (6767), qBittorrent (8080/6881), Immich (2283), Control Hub (7575), Cockpit (9090), and Dozzle (8888).
 
-![Settings Port Matrix](../../docs/assets/control-hub/hub_settings_port_matrix.png)
+![Settings Port Matrix](docs/assets/hub_settings_port_matrix.png)
 
 ### Tab 3: Security & Secrets Generator
 * 1-Click CSPRNG generator for high-entropy alphanumeric passwords and 32-character hex API keys for all *arr services and PostgreSQL.
@@ -96,7 +96,7 @@ Accessible via the header button **⚙️ Settings** (`btn-open-config-center`),
 
 Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), this drawer empowers operators pairing with AI coding assistants (ChatGPT, Claude, Cursor, Antigravity):
 
-![AI Copilot Drawer](../../docs/assets/control-hub/hub_ai_copilot_diagnostics.png)
+![AI Copilot Drawer](docs/assets/hub_ai_copilot_diagnostics.png)
 
 * **Hardware Intelligence Extraction:** Gathers host CPU model, core/thread count, physical memory, active IP, and `/dev/dri` GPU render node status.
 * **1-Click Prompt Exporter:** Generates a dense, token-optimized context prompt (~300 tokens) ready to copy/paste into an LLM session.
@@ -142,47 +142,62 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 
 ---
 
-## 🚀 Quickstart
+## 🚀 Quickstart & Standalone Deployment
 
-### 1. Requirements
-* Python 3.10+
-* Linux host (Ubuntu 24.04 / 26.04 LTS recommended)
-* Optional: Docker (for container logs and service matrix)
+Control Hub can run either as a **standalone Docker container** or as a **native systemd service**.
 
-### 2. Manual Installation
+### Option A: Standalone Docker (Fastest for Existing Homelabs)
 ```bash
+# 1. Clone or navigate to control-hub
 cd apps/control-hub
+
+# 2. Launch container
+docker compose up -d
+```
+Open `http://<your-server-ip>:7575` in your browser.
+
+### Option B: Standalone Native Launcher
+```bash
+# Automatically creates virtualenv, installs requirements, and launches daemon
+./run.sh
+```
+
+### Option C: Manual Installation
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 3. Running
-```bash
 python3 server.py
 ```
-Open `http://<your-server-ip>:7575` in your browser.
 
 ---
 
 ## 🔧 Systemd Service Deployment
 
-To run Control Hub as an auto-starting system daemon on Ubuntu:
+To run Control Hub as a hardened, unprivileged background daemon on Ubuntu:
 
 ```ini
 # /etc/systemd/system/control-hub.service
 [Unit]
-Description=Control Hub Homelab Management Daemon
-After=network.target
+Description=Control Hub (Custom Dashboard & API Engine)
+After=network.target docker.service
+Wants=docker.service
 
 [Service]
 Type=simple
-User=server_ff
+User=homelab
+Group=homelab
+SupplementaryGroups=docker
 WorkingDirectory=/opt/homelab-blueprint/apps/control-hub
+EnvironmentFile=-/opt/homelab-blueprint/apps/control-hub/.env
 ExecStart=/opt/homelab-blueprint/apps/control-hub/venv/bin/python3 /opt/homelab-blueprint/apps/control-hub/server.py
 Restart=always
 RestartSec=5
-EnvironmentFile=-/opt/homelab-blueprint/.env
+Environment=PYTHONUNBUFFERED=1
+
+# Low-power resource bounds
+CPUQuota=20%
+MemoryMax=100M
 
 [Install]
 WantedBy=multi-user.target

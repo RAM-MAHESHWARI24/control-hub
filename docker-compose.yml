@@ -1,0 +1,35 @@
+# ==============================================================================
+# Control Hub - Standalone Docker Compose Deployment
+# ==============================================================================
+
+services:
+  control-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: control-hub:latest
+    container_name: control-hub
+    restart: unless-stopped
+    ports:
+      - "${CONTROL_HUB_PORT:-7575}:7575"
+    environment:
+      - CONTROL_HUB_HOST=0.0.0.0
+      - CONTROL_HUB_PORT=7575
+      - ACTIVE_NIC=${ACTIVE_NIC:-eth0}
+      - QBITTORRENT_URL=${QBITTORRENT_URL:-http://127.0.0.1:8080}
+      - QBITTORRENT_USER=${QBITTORRENT_USER:-admin}
+      - QBITTORRENT_PASS=${QBITTORRENT_PASS:-adminadmin}
+      - HDD_DATA=${HDD_DATA:-/mnt/hdd/data}
+    volumes:
+      # Optional: Read-only Docker socket for container status and logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Optional: Host procfs for bare-metal telemetry
+      - /proc:/host/proc:ro
+      # Optional: Persistent configuration environment
+      - ./.env:/app/.env:ro
+    # Low-power resource bounds (<25MB RAM, <20% single core)
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 100M
