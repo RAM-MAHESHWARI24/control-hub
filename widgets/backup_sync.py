@@ -29,7 +29,7 @@ def run_backup_sync_thread():
     with backup_sync_lock:
         is_syncing_backup = True
         try:
-            subprocess.run(["sudo", "/opt/immich/immich_backup_gdrive.sh"], check=False)
+            subprocess.run(["sudo", "/usr/local/sbin/immich_backup_gdrive.sh"], check=False)
         except Exception:
             pass
         finally:
