@@ -3,6 +3,7 @@ Control Hub - Standalone Smoke & Endpoint Verification Suite
 Validates that the dashboard microservice functions independently without any monorepo dependencies.
 """
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -11,7 +12,21 @@ from pathlib import Path
 HUB_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HUB_ROOT))
 
+TEST_TOKEN = "standalone-test-token-0123456789"
+os.environ["CONTROL_HUB_TOKEN"] = TEST_TOKEN
+
+from flask.testing import FlaskClient
 from server import create_app
+
+
+class AuthClient(FlaskClient):
+    """Sends the bearer token on every request."""
+
+    def open(self, *args, **kwargs):
+        headers = dict(kwargs.pop("headers", None) or {})
+        headers.setdefault("Authorization", f"Bearer {TEST_TOKEN}")
+        kwargs["headers"] = headers
+        return super().open(*args, **kwargs)
 
 
 class TestControlHubStandalone(unittest.TestCase):
@@ -19,7 +34,16 @@ class TestControlHubStandalone(unittest.TestCase):
 
     def setUp(self):
         self.app = create_app()
+        self.app.test_client_class = AuthClient
         self.client = self.app.test_client()
+
+    def test_token_required_for_api(self):
+        """Protected endpoints answer 401 without a token; health stays public"""
+        anon = FlaskClient(self.app)
+        self.assertEqual(anon.get("/api/health").status_code, 200)
+        self.assertEqual(anon.get("/api/system/vitals").status_code, 401)
+        self.assertEqual(anon.get("/api/system/vitals", headers={"Authorization": "Bearer nope"}).status_code, 401)
+        self.assertEqual(self.client.get("/api/auth/check").status_code, 200)
 
     def test_observability_endpoints(self):
         """Verify /api/health, /api/livez, and /api/readyz probes"""

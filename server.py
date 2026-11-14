@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ServerFF Control Hub - Modular Backend API Daemon
-High-Performance Dashboard Engine for serverff (Ubuntu 26.04 / Haswell i3-4005U)
+Homelab Control Hub - modular backend API daemon.
+Lightweight Flask dashboard engine for low-power home servers.
 """
 
 import time
@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import Flask, jsonify, send_file, send_from_directory
 
 from config import HOST, PORT
+from core.auth import install_auth
 from core.telemetry_sampler import start_telemetry_sampler
 
 # Import all visual widget blueprints
@@ -29,6 +30,9 @@ APP_START_TIME = time.time()
 def create_app():
     """Application factory registering all modular widget blueprints"""
     app = Flask(__name__, static_folder="static")
+
+    # 0. Bearer-token guard for every /api/* route except public probes
+    app.config["CONTROL_HUB_TOKEN"], app.config["CONTROL_HUB_TOKEN_GENERATED"] = install_auth(app)
 
     # 1. Observability & Health Probing
     @app.route("/api/health")
@@ -141,8 +145,9 @@ if __name__ == "__main__":
     # Launch real-time background telemetry sampler
     start_telemetry_sampler()
 
-    try:
-        print(f"🚀 ServerFF Control Hub listening on http://{HOST}:{PORT}")
-    except UnicodeEncodeError:
-        print(f"[+] ServerFF Control Hub listening on http://{HOST}:{PORT}")
+    print(f"[+] Control Hub listening on http://{HOST}:{PORT}")
+    if app.config.get("CONTROL_HUB_TOKEN_GENERATED"):
+        print("[!] No CONTROL_HUB_TOKEN configured; a one-time token was generated for this run:")
+        print(f"    http://<server-ip>:{PORT}/?token={app.config['CONTROL_HUB_TOKEN']}")
+        print("    Set CONTROL_HUB_TOKEN in .env (or /etc/homelab/control-hub.env) to make it permanent.")
     app.run(host=HOST, port=PORT, debug=False, threaded=True)
