@@ -4,9 +4,8 @@ Safely reads, updates, and writes .env files while preserving structure and comm
 """
 
 import json
-import os
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any
 
 
 def load_env_file(filepath: str) -> Dict[str, str]:

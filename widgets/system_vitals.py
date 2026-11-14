@@ -8,7 +8,6 @@ import os
 import sys
 import shutil
 import datetime
-from pathlib import Path
 from flask import Blueprint, jsonify
 from core.telemetry_sampler import telemetry_lock, telemetry_state
 

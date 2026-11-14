@@ -24,13 +24,9 @@ try:
     )
     from core.config_core.port_manager import (
         get_default_ports,
-        check_ports_matrix,
-        check_port,
     )
     from core.config_core.secrets_generator import (
         generate_all_secrets,
-        generate_password,
-        generate_api_key,
     )
     from core.config_core.system_prober import (
         get_system_snapshot,
@@ -56,13 +52,9 @@ except ImportError:
     )
     from setup.config_core.port_manager import (
         get_default_ports,
-        check_ports_matrix,
-        check_port,
     )
     from setup.config_core.secrets_generator import (
         generate_all_secrets,
-        generate_password,
-        generate_api_key,
     )
     from setup.config_core.system_prober import (
         get_system_snapshot,

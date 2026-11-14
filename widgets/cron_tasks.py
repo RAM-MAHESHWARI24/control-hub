@@ -14,8 +14,7 @@ from flask import Blueprint, jsonify
 from config import (
     BACKUP_LOG_FILE, WATCHTOWER_LOG_DIR,
     RECYCLARR_LOG_FILE, IMMICH_ML_LOG_FILE,
-    SERVER_SUSPEND_LOG_FILE, SUSPEND_SKIP_FILE,
-    TV_UPDATER_LOG_FILE
+    SERVER_SUSPEND_LOG_FILE, SUSPEND_SKIP_FILE
 )
 from widgets.backup_sync import is_syncing_backup, trigger_backup_sync
 from widgets.sleep_guard import toggle_sleep

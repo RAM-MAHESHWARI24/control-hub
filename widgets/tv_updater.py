@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 from config import (
     TV_UPDATER_DIR, TV_UPDATER_PY,
     TV_UPDATER_LOG_FILE, TV_UPDATER_LOCAL_LOG_FILE,
-    TV_UPDATER_STATE_FILE, TV_UPDATER_INCOMING_DIR
+    TV_UPDATER_STATE_FILE
 )
 
 # Ensure tv-updater directory is in sys.path for direct python imports

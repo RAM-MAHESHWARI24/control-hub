@@ -9,7 +9,6 @@ Zero external dependencies (Python 3.10+ standard library only).
 
 import os
 import sys
-import re
 import shutil
 import argparse
 from datetime import datetime
@@ -197,10 +196,10 @@ def migrate_single_env(
     # Build injection block
     injection_lines = [
         "",
-        f"# ==============================================================================",
+        "# ==============================================================================",
         f"# Injected by Homelab Schema Migrator ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})",
-        f"# Newly introduced configuration keys with recommended template defaults.",
-        f"# ==============================================================================",
+        "# Newly introduced configuration keys with recommended template defaults.",
+        "# ==============================================================================",
     ]
 
     for key in sorted(missing_keys.keys()):
@@ -308,7 +307,7 @@ def run_migration_suite(
         return 0
     elif check_only:
         print(f"{BOLD}{YELLOW}  ⚠️ {overall_out_of_date} environment(s) have missing configuration keys.{RESET}")
-        print(f"  Run './setup.sh --migrate' to automatically upgrade them safely.")
+        print("  Run './setup.sh --migrate' to automatically upgrade them safely.")
         print(f"{BOLD}{CYAN}============================================================{RESET}\n")
         return 1
     else:

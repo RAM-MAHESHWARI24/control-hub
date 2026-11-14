@@ -4,7 +4,7 @@ Detects host port collisions before Docker containers are launched.
 """
 
 import socket
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 DEFAULT_PORT_CATALOG = {
     "control_hub": {

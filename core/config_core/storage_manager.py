@@ -29,7 +29,7 @@ def get_disk_partitions() -> List[Dict[str, Any]]:
                 for line in f:
                     parts = line.strip().split()
                     if len(parts) >= 3:
-                        device, mount, fstype = parts[0], parts[1], parts[2]
+                        device, mount, _fstype = parts[0], parts[1], parts[2]
                         # Filter out virtual filesystems (proc, sysfs, tmpfs, cgroup, overlay)
                         if device.startswith(("/dev/sd", "/dev/nvme", "/dev/vd", "/dev/mapper")):
                             if mount not in seen_mounts:

@@ -4,6 +4,7 @@ Coordinates storage tree creation, Netplan application, .env synchronization, an
 """
 
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -119,13 +120,13 @@ def deploy_homelab_stack(base_dir: str, config: Dict[str, Any]) -> Dict[str, Any
         log(f"Generating .env previews inside isolated folder: '{preview_dir.relative_to(root_path)}'...")
         # Write to preview directory instead of actual root and app directories
         env_result = sync_all_blueprint_envs(str(preview_dir), config)
-        for env_name, env_path in env_result.items():
+        for _env_name, env_path in env_result.items():
             log(f"  -> Generated preview: {Path(env_path).relative_to(root_path)}")
         log("Original monorepo .env files remain completely untouched.")
     else:
         log("Synchronizing unified environment files across all monorepo subsystems...")
         env_result = sync_all_blueprint_envs(str(root_path), config)
-        for env_name, env_path in env_result.items():
+        for _env_name, env_path in env_result.items():
             log(f"  -> Generated: {Path(env_path).relative_to(root_path)}")
 
     # Step 4: Docker Stacks & Host Services Orchestration
