@@ -139,6 +139,10 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
     sonarr_key = _ensure_secret(config, "sonarr_api_key", lambda: generate_api_key(32))
     prowlarr_key = _ensure_secret(config, "prowlarr_api_key", lambda: generate_api_key(32))
     hub_token = _ensure_secret(config, "control_hub_token", lambda: generate_api_key(48))
+    # Jellyfin / Seerr admin password; defaults to the qBittorrent password so Express mode has one "master" password
+    if not str(config.get("media_admin_pass") or "").strip():
+        config["media_admin_pass"] = qbit_pass
+    media_admin_pass = config["media_admin_pass"]
 
     def render(module_id: str, module_dir: Path, updates: Dict[str, Any]) -> Path:
         template = module_dir / ".env.example"
@@ -199,7 +203,12 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                     "--dns-result-order=ipv4first --require /app/config/tmdb-interceptor.js"
                     if config.get("enable_tmdb_bypass") else ""
                 ),
-                "DNS_OVERRIDE": config.get("dns_override", ""),
+                "COMPOSE_PROFILES": "byparr" if config.get("enable_byparr") else "",
+                "DNS_OVERRIDE": "true" if config.get("dns_override") else "",
+                "DNS_PRIMARY": (config.get("dns_servers") or ["1.1.1.1"])[0],
+                "DNS_SECONDARY": (config.get("dns_servers") or ["1.1.1.1", "8.8.8.8"])[-1],
+                "MEDIA_ADMIN_USER": config.get("media_admin_user", "admin"),
+                "MEDIA_ADMIN_PASS": media_admin_pass,
             },
         )
     )
