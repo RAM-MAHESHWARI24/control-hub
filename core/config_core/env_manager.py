@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from .secrets_generator import generate_password, generate_api_key
+from .paths import STATE_DIR as _STATE_DIR
 
 PLACEHOLDER_SECRETS = {"adminadmin", "postgres", "postgres_pass", "postgres_secure_pass", "changeme", "password"}
 
@@ -248,6 +249,9 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                 "QBITTORRENT_USER": qbit_user,
                 "QBITTORRENT_PASS": qbit_pass,
                 "HDD_DATA": data_dir,
+                "TV_UPDATER_STATE_FILE": str(_STATE_DIR / "tv-autoupdater" / "state.json"),
+                "TV_UPDATER_INCOMING_DIR": str(_STATE_DIR / "tv-autoupdater" / "incoming_apks"),
+                "TV_UPDATER_LOG_FILE": str(_STATE_DIR / "tv-autoupdater" / "tv-autoupdater.log"),
             },
         )
     )

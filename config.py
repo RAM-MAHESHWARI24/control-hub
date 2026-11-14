@@ -43,7 +43,6 @@ SUSPEND_CONFIG_FILE = os.getenv("SUSPEND_CONFIG_FILE", "/etc/server-suspend.conf
 SUSPEND_CRON_FILE = os.getenv("SUSPEND_CRON_FILE", "/etc/cron.d/server-suspend")
 BACKUP_LOG_FILE = os.getenv("BACKUP_LOG_FILE", "/opt/immich/backups/backup.log")
 BACKUP_DIR = os.getenv("BACKUP_DIR", "/opt/immich/backups")
-WATCHTOWER_LOG_DIR = os.getenv("WATCHTOWER_LOG_DIR", "/var/log/watchtower")
 SPEEDTEST_CACHE_FILE = os.getenv("SPEEDTEST_CACHE_FILE", str(BASE_DIR / "speedtest_cache.json"))
 SPEEDTEST_BIN = os.getenv("SPEEDTEST_BIN", "/usr/local/bin/speedtest")
 RECYCLARR_LOG_FILE = os.getenv("RECYCLARR_LOG_FILE", "/var/log/recyclarr.log")

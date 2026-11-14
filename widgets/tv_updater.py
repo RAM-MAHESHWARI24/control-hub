@@ -1,6 +1,6 @@
 """
 Widget: CleanYourTV - Android TV App Updater
-Orchestrates silent ADB sideload deployments (SmartTube, CloudStream Beta, HD Streamz),
+Orchestrates silent ADB sideload deployments (SmartTube, CloudStream Beta; official releases only),
 tracks hardware model discovery across dynamic DHCP subnets, inspects foreground app status,
 and provides granular controls including force-update overrides.
 """

@@ -1,8 +1,10 @@
 """
 Widget: System Automation & Scheduled Cron Tasks
-Monitors and dispatches on-demand execution for 5 core background automations:
-1) Google Drive Cloud Backup, 2) Midnight Sleep Suspend, 3) Watchtower Container Updates,
-4) Recyclarr TRaSH Sync, and 5) Immich Machine Learning RAM conserver.
+Monitors and dispatches on-demand execution for the background automations:
+1) cloud photo backup, 2) midnight sleep suspend, 3) TV auto-updater,
+4) Recyclarr TRaSH sync, and 5) Immich machine-learning scheduler.
+Container image updates arrive as Dependabot pull requests (images are pinned);
+there is no Watchtower job.
 """
 
 import os
@@ -12,7 +14,7 @@ import subprocess
 from flask import Blueprint, jsonify
 
 from config import (
-    BACKUP_LOG_FILE, WATCHTOWER_LOG_DIR,
+    BACKUP_LOG_FILE,
     RECYCLARR_LOG_FILE, IMMICH_ML_LOG_FILE,
     SERVER_SUSPEND_LOG_FILE, SUSPEND_SKIP_FILE
 )
@@ -27,41 +29,6 @@ cron_tasks_bp = Blueprint("cron_tasks", __name__)
 
 CRON_RUNNING_LOCK = threading.Lock()
 cron_running_jobs = set()
-
-def get_latest_watchtower_log_file():
-    """Finds the most recent Watchtower dated log file"""
-    if not os.path.exists(WATCHTOWER_LOG_DIR):
-        return None
-    try:
-        logs = sorted([f for f in os.listdir(WATCHTOWER_LOG_DIR) if f.startswith("watchtower_") and f.endswith(".log")])
-        if logs:
-            return os.path.join(WATCHTOWER_LOG_DIR, logs[-1])
-    except Exception:
-        pass
-    return None
-
-
-@cron_tasks_bp.route("/api/watchtower/latest", methods=["GET"])
-def get_watchtower_status():
-    """Returns status and summary of latest Watchtower container update log"""
-    if not os.path.exists(WATCHTOWER_LOG_DIR):
-        return jsonify({"status": "No logs", "summary": "Watchtower logs not found"})
-    try:
-        logs = sorted([f for f in os.listdir(WATCHTOWER_LOG_DIR) if f.startswith("watchtower_") and f.endswith(".log")])
-        if not logs:
-            return jsonify({"status": "No logs", "summary": "No logs recorded yet"})
-        latest_file = os.path.join(WATCHTOWER_LOG_DIR, logs[-1])
-        with open(latest_file, "r") as f:
-            lines = f.readlines()
-            last_line = lines[-1].strip() if lines else "Log empty"
-            return jsonify({
-                "latest_log": logs[-1],
-                "summary": last_line,
-                "total_logs": len(logs)
-            })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 
 @cron_tasks_bp.route("/api/cron/status", methods=["GET"])
 def get_cron_tasks_status():
@@ -95,32 +62,6 @@ def get_cron_tasks_status():
                 for line in reversed(f.readlines()[-30:]):
                     if "[CRON] Server suspend check triggered." in line or "[RESUME]" in line:
                         sleep_last_run = line.split("]")[0].replace("[", "").strip()
-                        break
-        except Exception:
-            pass
-
-    # 3. Watchtower
-    wt_running = "watchtower" in cron_running_jobs
-    if not wt_running:
-        try:
-            res = subprocess.run(["pgrep", "-f", "watchtower"], stdout=subprocess.PIPE, text=True)
-            wt_running = bool(res.stdout.strip())
-        except Exception:
-            pass
-
-    wt_last_log = get_latest_watchtower_log_file()
-    wt_summary = "Ready"
-    wt_last_run = "Unknown"
-    if wt_last_log and os.path.exists(wt_last_log):
-        try:
-            mtime = os.path.getmtime(wt_last_log)
-            wt_last_run = datetime.datetime.fromtimestamp(mtime).strftime("%b %d, %H:%M IST")
-            with open(wt_last_log, "r") as f:
-                lines = f.readlines()
-                for line in reversed(lines[-20:]):
-                    s = line.strip()
-                    if s and not s.startswith("="):
-                        wt_summary = s
                         break
         except Exception:
             pass
@@ -228,7 +169,7 @@ def get_cron_tasks_status():
         {
             "id": "tv_updater",
             "name": "Android TV App Updater",
-            "description": "Silent ADB sideload updater for SmartTube, CloudStream Beta & HD Streamz",
+            "description": "Silent ADB sideload updater for SmartTube and CloudStream (official releases, pinned signing keys)",
             "schedule": "Every 15 min (06:00 - 23:59 IST)",
             "is_running": tv_running,
             "status_text": tv_status_text,
@@ -237,19 +178,6 @@ def get_cron_tasks_status():
             "can_run": True,
             "run_label": "Deploy Now",
             "icon": "tv"
-        },
-        {
-            "id": "watchtower",
-            "name": "Watchtower Container Updates",
-            "description": "One-shot auto-update checks and image cleanup for Docker containers",
-            "schedule": "Daily at 07:00 AM IST",
-            "is_running": wt_running,
-            "status_text": "Checking..." if wt_running else "Up to Date",
-            "last_run": wt_last_run,
-            "summary": wt_summary,
-            "can_run": True,
-            "run_label": "Check Updates",
-            "icon": "refresh-cw"
         },
         {
             "id": "recyclarr",
@@ -289,8 +217,6 @@ def get_cron_job_log(job_id):
         log_file = BACKUP_LOG_FILE
     elif job_id == "server_suspend":
         log_file = SERVER_SUSPEND_LOG_FILE
-    elif job_id == "watchtower":
-        log_file = get_latest_watchtower_log_file()
     elif job_id == "recyclarr":
         log_file = RECYCLARR_LOG_FILE
     elif job_id == "immich_ml":
@@ -331,9 +257,7 @@ def trigger_cron_job(job_id):
         with CRON_RUNNING_LOCK:
             cron_running_jobs.add(jid)
         try:
-            if jid == "watchtower":
-                subprocess.run(["sudo", "/usr/local/sbin/watchtower-run.sh"], check=False)
-            elif jid == "recyclarr":
+            if jid == "recyclarr":
                 recyclarr_bin = os.getenv("RECYCLARR_BIN", "recyclarr")
                 recyclarr_cfg = os.getenv("RECYCLARR_CONFIG", os.path.expanduser("~/.config/recyclarr/recyclarr.yml"))
                 subprocess.run([recyclarr_bin, "sync", "--config", recyclarr_cfg], check=False)
@@ -348,7 +272,7 @@ def trigger_cron_job(job_id):
             with CRON_RUNNING_LOCK:
                 cron_running_jobs.discard(jid)
 
-    if job_id not in ["watchtower", "recyclarr", "immich_ml"]:
+    if job_id not in ["recyclarr", "immich_ml"]:
         return jsonify({"success": False, "error": f"Invalid job ID '{job_id}'"}), 400
 
     if job_id in cron_running_jobs:

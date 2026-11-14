@@ -31,7 +31,6 @@ const tvFleetPreview = $("tv-fleet-preview");
 const tvValOnline = $("tv-val-online");
 const tvValSt = $("tv-val-st");
 const tvValCs = $("tv-val-cs");
-const tvValHds = $("tv-val-hds");
 
 // Stepper Elements
 const stepTvUpstream = $("step-tv-upstream");
@@ -382,9 +381,6 @@ export async function fetchTvUpdaterStatus(force = false) {
     }
     if (tvValCs && upApps["com.lagradost.cloudstream3.prerelease"]) {
       tvValCs.innerHTML = `v${upApps["com.lagradost.cloudstream3.prerelease"].version_name || '4.8.0-PRE'}`;
-    }
-    if (tvValHds && upApps["topic.election.sector"]) {
-      tvValHds.innerHTML = `v${upApps["topic.election.sector"].version_name || '3.19-a'}`;
     }
 
     // Modal elements
