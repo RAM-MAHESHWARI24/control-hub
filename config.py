@@ -68,6 +68,11 @@ QBITTORRENT_URL = os.getenv("QBITTORRENT_URL", "http://127.0.0.1:8080")
 QBITTORRENT_USER = os.getenv("QBITTORRENT_USER", "admin")
 QBITTORRENT_PASS = os.getenv("QBITTORRENT_PASS", "")
 
+# Prowlarr (indexer picker). The installer writes the API key to PROWLARR_KEY_FILE
+# (0640 root:homelab); PROWLARR_API_KEY in the environment takes precedence.
+PROWLARR_URL = os.getenv("PROWLARR_URL", "http://127.0.0.1:9696")
+PROWLARR_KEY_FILE = os.getenv("PROWLARR_KEY_FILE", str(Path(os.getenv("HOMELAB_ETC_DIR", "/etc/homelab")) / "prowlarr.key"))
+
 # Services Catalog for Service Matrix
 SERVICES_CATALOG = {
     "jellyfin": {"name": "Jellyfin", "port": 8096, "desc": "Media Streaming Server", "icon": "film", "category": "media"},

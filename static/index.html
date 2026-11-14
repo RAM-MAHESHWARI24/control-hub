@@ -66,6 +66,10 @@
           </svg>
           <span>Settings</span>
         </button>
+        <button class="btn-hud-action btn-indexers-toggle" id="btn-open-indexers" style="display: none;" title="Add indexers from Prowlarr's definition list">
+          <span>🔎</span>
+          <span>Indexers</span>
+        </button>
         <button class="btn-hud-action btn-ai-toggle" id="btn-open-ai-copilot" title="Hardware-tailored diagnostics & compact AI prompt exporter">
           <span class="ai-sparkle">🤖</span>
           <span>AI Copilot</span>
@@ -78,6 +82,19 @@
         </button>
       </div>
     </header>
+
+    <!-- ONE-TIME INDEXER PICKER BANNER (shown while Prowlarr has no indexers) -->
+    <section class="indexer-banner" id="indexer-banner" style="display: none;">
+      <div class="indexer-banner-text">
+        <strong>Pick your indexers.</strong>
+        Everything is wired, but Prowlarr has no indexers yet, so Radarr and Sonarr cannot search.
+        Choose from Prowlarr's own list; nothing is pre-selected and you can skip this.
+      </div>
+      <div class="indexer-banner-actions">
+        <button class="btn-primary" id="btn-indexer-banner-open">Pick indexers</button>
+        <button class="btn-secondary" id="btn-indexer-banner-skip">Skip for now</button>
+      </div>
+    </section>
 
     <!-- DEDICATED SLEEP GUARD HERO COMMAND MODULE -->
     <section class="sleep-guard-hero" id="sleep-guard-card">
@@ -1279,6 +1296,52 @@
   </div>
 
   <!-- MODAL: ANDROID TV UPDATER LOG STREAMER -->
+  <!-- INDEXER PICKER MODAL -->
+  <div class="modal-overlay" id="indexer-modal" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span class="modal-dot dot-live"></span>
+          <div>
+            <h3>Add indexers to Prowlarr</h3>
+            <span class="modal-sub-path">List comes live from your Prowlarr. You are responsible for which indexers you add and for local law.</span>
+          </div>
+        </div>
+        <button class="modal-close" id="indexer-modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body indexer-modal-body">
+        <div class="indexer-toolbar">
+          <input type="search" id="indexer-search" class="cyber-input" placeholder="Search by name or description" autocomplete="off">
+          <select id="indexer-filter-protocol" class="cyber-input">
+            <option value="all">All protocols</option>
+            <option value="torrent">Torrent</option>
+            <option value="usenet">Usenet</option>
+          </select>
+          <select id="indexer-filter-privacy" class="cyber-input">
+            <option value="all">Public and private</option>
+            <option value="public">Public only</option>
+            <option value="semiPrivate">Semi-private</option>
+            <option value="private">Private only</option>
+          </select>
+        </div>
+        <div class="indexer-summary" id="indexer-summary">Loading…</div>
+        <div class="indexer-list" id="indexer-list"></div>
+        <div class="indexer-results" id="indexer-results"></div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-left">
+          <label class="indexer-force"><input type="checkbox" id="indexer-force-save"> Save even if Prowlarr's connection test fails</label>
+        </div>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="indexer-modal-cancel">Close</button>
+          <button class="btn-primary" id="indexer-modal-add" disabled>Add selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="tv-updater-log-modal" style="display: none;">
     <div class="modal-glass modal-wide">
       <div class="modal-header">

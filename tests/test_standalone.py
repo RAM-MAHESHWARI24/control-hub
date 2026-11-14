@@ -45,6 +45,16 @@ class TestControlHubStandalone(unittest.TestCase):
         self.assertEqual(anon.get("/api/system/vitals", headers={"Authorization": "Bearer nope"}).status_code, 401)
         self.assertEqual(self.client.get("/api/auth/check").status_code, 200)
 
+    def test_indexer_picker_hidden_without_prowlarr_key(self):
+        """The indexer picker reports installed=false (and hides itself) when no Prowlarr key exists"""
+        res = self.client.get("/api/indexers/status")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn("installed", data)
+        self.assertIsInstance(data["installed"], bool)
+        if not data["installed"]:
+            self.assertEqual(self.client.get("/api/indexers/available").status_code, 404)
+
     def test_observability_endpoints(self):
         """Verify /api/health, /api/livez, and /api/readyz probes"""
         res = self.client.get("/api/health")

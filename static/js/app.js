@@ -18,6 +18,7 @@ import { fetchCronTasks, setupCronTasks } from "./widgets/cronTasks.js";
 import { fetchServices, setupServiceMatrix } from "./widgets/serviceMatrix.js";
 import { fetchTvUpdaterStatus, setupTvUpdater } from "./widgets/tvUpdater.js";
 import { setupConfigCenter } from "./widgets/configCenter.js";
+import { fetchIndexerStatus, setupIndexers } from "./widgets/indexers.js";
 
 const btnModeHover = $("btn-mode-hover");
 const btnModeRealtime = $("btn-mode-realtime");
@@ -258,9 +259,11 @@ async function init() {
   setupCronTasks();
   setupServiceMatrix();
   setupConfigCenter();
+  setupIndexers();
 
   // Load initial static snapshot for all cards
   await Promise.all([
+    fetchIndexerStatus(),
     fetchSleepStatus(),
     fetchSpeedometers(),
     fetchVitals(),

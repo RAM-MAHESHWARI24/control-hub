@@ -23,6 +23,7 @@ from widgets.cron_tasks import cron_tasks_bp
 from widgets.service_matrix import service_matrix_bp
 from widgets.tv_updater import tv_updater_bp
 from widgets.config_center import config_center_bp
+from widgets.indexers import indexers_bp
 
 APP_START_TIME = time.time()
 
@@ -123,6 +124,7 @@ def create_app():
     app.register_blueprint(service_matrix_bp)
     app.register_blueprint(tv_updater_bp)
     app.register_blueprint(config_center_bp)
+    app.register_blueprint(indexers_bp)
 
     # 5. Catch-all static proxy
     @app.route("/<path:path>")
