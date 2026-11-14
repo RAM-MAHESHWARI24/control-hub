@@ -15,10 +15,11 @@ services:
     environment:
       - CONTROL_HUB_HOST=0.0.0.0
       - CONTROL_HUB_PORT=7575
-      - ACTIVE_NIC=${ACTIVE_NIC:-eth0}
+      - CONTROL_HUB_TOKEN=${CONTROL_HUB_TOKEN:?Set CONTROL_HUB_TOKEN in .env}
+      - ACTIVE_NIC=${ACTIVE_NIC:-}
       - QBITTORRENT_URL=${QBITTORRENT_URL:-http://127.0.0.1:8080}
       - QBITTORRENT_USER=${QBITTORRENT_USER:-admin}
-      - QBITTORRENT_PASS=${QBITTORRENT_PASS:-adminadmin}
+      - QBITTORRENT_PASS=${QBITTORRENT_PASS:?Set QBITTORRENT_PASS in .env}
       - HDD_DATA=${HDD_DATA:-/mnt/hdd/data}
     volumes:
       # Optional: Read-only Docker socket for container status and logs

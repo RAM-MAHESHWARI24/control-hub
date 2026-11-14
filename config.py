@@ -6,19 +6,31 @@ Copy this file to config.py or set environment variables in a .env file.
 import os
 from pathlib import Path
 
-# Optional: Load .env file automatically if present
-env_file = Path(__file__).resolve().parent / ".env"
-if env_file.exists():
-    with open(env_file, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
-
 # Directory Anchors
 BASE_DIR = Path(__file__).resolve().parent
 APPS_DIR = BASE_DIR.parent
+
+
+def _load_env_file(path: Path) -> None:
+    """Loads KEY=VALUE lines into the environment without overriding existing values."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+    except OSError:
+        pass
+
+
+# Configuration sources, first match wins per key:
+#   1. real environment (systemd EnvironmentFile=/etc/homelab/control-hub.env)
+#   2. ./.env next to this file (standalone / docker usage; the installer symlinks it)
+#   3. /etc/homelab/control-hub.env directly (when run by hand on an installed host)
+for _candidate in (BASE_DIR / ".env", Path(os.getenv("HOMELAB_ETC_DIR", "/etc/homelab")) / "control-hub.env"):
+    if _candidate.exists():
+        _load_env_file(_candidate)
 
 # Server Binding
 HOST = os.getenv("CONTROL_HUB_HOST", "0.0.0.0")
@@ -46,14 +58,15 @@ TV_UPDATER_LOCAL_LOG_FILE = os.getenv("TV_UPDATER_LOCAL_LOG_FILE", str(APPS_DIR 
 TV_UPDATER_STATE_FILE = os.getenv("TV_UPDATER_STATE_FILE", str(APPS_DIR / "tv-updater" / "state.json"))
 TV_UPDATER_INCOMING_DIR = os.getenv("TV_UPDATER_INCOMING_DIR", str(APPS_DIR / "tv-updater" / "incoming_apks"))
 
-# Network Interface for LAN Sampling
-ACTIVE_NIC = os.getenv("ACTIVE_NIC", "eth0")
+# Network interface for LAN sampling. Empty = auto-detect the default-route NIC
+# (see core.telemetry_sampler.detect_active_nic). Never assume "eth0".
+ACTIVE_NIC = os.getenv("ACTIVE_NIC", "")
 LINK_SPEED_MBPS = int(os.getenv("LINK_SPEED_MBPS", 1000))
 
-# qBittorrent Configuration
+# qBittorrent Configuration (no default password is shipped)
 QBITTORRENT_URL = os.getenv("QBITTORRENT_URL", "http://127.0.0.1:8080")
 QBITTORRENT_USER = os.getenv("QBITTORRENT_USER", "admin")
-QBITTORRENT_PASS = os.getenv("QBITTORRENT_PASS", "adminadmin")
+QBITTORRENT_PASS = os.getenv("QBITTORRENT_PASS", "")
 
 # Services Catalog for Service Matrix
 SERVICES_CATALOG = {

@@ -1,20 +1,31 @@
 """
-Environment Configuration (.env) File Parser & Synchronizer
-Safely reads, updates, and writes .env files while preserving structure and comments.
+.env rendering for every module, from the wizard/headless configuration.
+
+Rendered files are written with 0600 permissions because they hold database
+passwords and API keys. On a real install they live in /etc/homelab/ and a
+symlink is placed next to each module's docker-compose.yml so a plain
+`docker compose up -d` in that directory keeps working. In dry-run or
+standalone mode (no env_dir given) they are written next to the module.
 """
 
 import json
+import os
+import stat
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
+from .secrets_generator import generate_password, generate_api_key
+
+PLACEHOLDER_SECRETS = {"adminadmin", "postgres", "postgres_pass", "postgres_secure_pass", "changeme", "password"}
 
 
 def load_env_file(filepath: str) -> Dict[str, str]:
-    """Parses a .env file into a dictionary of key-value pairs"""
+    """Parses a .env file into a dictionary of key-value pairs."""
     p = Path(filepath)
     if not p.exists():
         return {}
 
-    env_vars = {}
+    env_vars: Dict[str, str] = {}
     with open(p, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -22,16 +33,14 @@ def load_env_file(filepath: str) -> Dict[str, str]:
                 continue
             if "=" in line:
                 k, v = line.split("=", 1)
-                k = k.strip()
-                v = v.strip().strip("'\"")
-                env_vars[k] = v
+                env_vars[k.strip()] = v.strip().strip("'\"")
     return env_vars
 
 
 def update_env_variables(template_content: str, updates: Dict[str, Any]) -> str:
     """
-    Updates variable values in template .env text while preserving comments and order.
-    Appends any new variables not present in the template at the bottom.
+    Updates values in template .env text while preserving comments and order.
+    Variables not present in the template are appended at the bottom.
     """
     lines = template_content.splitlines()
     updated_lines = []
@@ -44,15 +53,11 @@ def update_env_variables(template_content: str, updates: Dict[str, Any]) -> str:
             key = key.strip()
             seen_keys.add(key)
             if key in updates:
-                val = updates[key]
-                # Format value cleanly
-                val_str = str(val)
-                updated_lines.append(f"{key}={val_str}")
+                updated_lines.append(f"{key}={updates[key]}")
                 continue
         updated_lines.append(line)
 
-    # Append any updates that were not in the template
-    unseen_keys = [k for k in updates.keys() if k not in seen_keys]
+    unseen_keys = [k for k in updates if k not in seen_keys]
     if unseen_keys:
         updated_lines.append("\n# --- Additional Configured Settings ---")
         for k in unseen_keys:
@@ -61,141 +66,214 @@ def update_env_variables(template_content: str, updates: Dict[str, Any]) -> str:
     return "\n".join(updated_lines) + "\n"
 
 
-def write_env_file(target_path: str, content: str) -> None:
-    """Atomically writes content to target file via temporary file to prevent corruption"""
+def write_env_file(target_path: str, content: str, mode: int = 0o600) -> None:
+    """Atomically writes a secrets-bearing file with restrictive permissions."""
     p = Path(target_path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    temp_file = p.with_suffix(".tmp")
+    temp_file = p.with_name(p.name + ".tmp")
     with open(temp_file, "w", encoding="utf-8") as f:
         f.write(content)
+    try:
+        os.chmod(temp_file, mode)
+    except OSError:
+        pass
     temp_file.replace(p)
 
 
-def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any]) -> Dict[str, Any]:
+def _link_into_module(env_path: Path, module_dir: Path, link_name: str = ".env") -> None:
+    """Creates module_dir/<link_name> -> env_path so standalone compose usage keeps working."""
+    if os.name == "nt":
+        return
+    link = module_dir / link_name
+    try:
+        if link.is_symlink():
+            if os.readlink(link) == str(env_path):
+                return
+            link.unlink()
+        elif link.exists():
+            link.unlink()
+        module_dir.mkdir(parents=True, exist_ok=True)
+        os.symlink(str(env_path), str(link))
+    except OSError:
+        pass
+
+
+def _ensure_secret(config: Dict[str, Any], key: str, generator) -> str:
+    """Returns config[key], generating and storing a value when it is empty or a placeholder."""
+    value = str(config.get(key) or "").strip()
+    if not value or value.upper().startswith("YOUR_") or value.lower() in PLACEHOLDER_SECRETS:
+        value = generator()
+        config[key] = value
+    return value
+
+
+def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Optional[str] = None) -> Dict[str, Any]:
     """
-    Synchronizes unified settings across all 5 monorepo component configs.
-    Uses .env.example templates if destination .env does not exist.
+    Renders every module's environment file from its .env.example template.
+
+    base_dir: repository root (or dry-run preview root) holding apps/<module>/.env.example
+    env_dir:  where to write the rendered files (e.g. /etc/homelab). When None the
+              files are written beside each module (dry-run / standalone behaviour).
+
+    Secrets that are missing or still placeholders are generated here so no
+    install ever ships default credentials. Generated values are written back
+    into `config` so the caller can show them to the operator once.
     """
     root_path = Path(base_dir)
-    results = {}
+    out_dir = Path(env_dir) if env_dir else None
+    results: Dict[str, Any] = {}
 
-    # 1. Master Root .env
-    master_template_file = root_path / ".env.example"
-    master_env_file = root_path / ".env"
-    template_content = master_template_file.read_text(encoding="utf-8") if master_template_file.exists() else ""
+    tz = config.get("timezone") or "UTC"
+    puid = config.get("puid", 1000)
+    pgid = config.get("pgid", 1000)
+    data_dir = config.get("hdd_data", "/mnt/hdd/data")
+    memories_dir = config.get("hdd_memories", "/mnt/hdd/Memories")
+    active_nic = config.get("active_nic") or ""
+    server_ip = config.get("server_ip", "")
+    qbit_port = config.get("qbittorrent_port", 8080)
 
-    master_updates = {
-        "HOST_USER": config.get("host_user", "homelab_user"),
-        "PUID": config.get("puid", 1000),
-        "PGID": config.get("pgid", 1000),
-        "SERVER_IP": config.get("server_ip", "192.168.1.100"),
-        "TIMEZONE": config.get("timezone", "Asia/Kolkata"),
-        "SSD_ROOT": config.get("ssd_root", "/"),
-        "HDD_DATA": config.get("hdd_data", "/mnt/hdd/data"),
-        "HDD_MEMORIES": config.get("hdd_memories", "/mnt/hdd/Memories"),
-        "RADARR_API_KEY": config.get("radarr_api_key", ""),
-        "SONARR_API_KEY": config.get("sonarr_api_key", ""),
-        "PROWLARR_API_KEY": config.get("prowlarr_api_key", ""),
-        "CONTROL_HUB_PORT": config.get("control_hub_port", 7575),
-        "ACTIVE_NIC": config.get("active_nic", "eth0"),
-        "LINK_SPEED_MBPS": config.get("link_speed_mbps", 1000),
-        "QBITTORRENT_URL": f"http://127.0.0.1:{config.get('qbittorrent_port', 8080)}",
-        "QBITTORRENT_USER": config.get("qbittorrent_user", "admin"),
-        "QBITTORRENT_PASS": config.get("qbittorrent_pass", "adminadmin"),
-        "GDRIVE_REMOTE": config.get("gdrive_remote", "gdrive:"),
-    }
-    master_content = update_env_variables(template_content, master_updates)
-    write_env_file(str(master_env_file), master_content)
-    results["master_env"] = str(master_env_file)
+    qbit_user = config.get("qbittorrent_user") or "admin"
+    qbit_pass = _ensure_secret(config, "qbittorrent_pass", lambda: generate_password(18))
+    pg_pass = _ensure_secret(config, "postgres_password", lambda: generate_password(24))
+    radarr_key = _ensure_secret(config, "radarr_api_key", lambda: generate_api_key(32))
+    sonarr_key = _ensure_secret(config, "sonarr_api_key", lambda: generate_api_key(32))
+    prowlarr_key = _ensure_secret(config, "prowlarr_api_key", lambda: generate_api_key(32))
+    hub_token = _ensure_secret(config, "control_hub_token", lambda: generate_api_key(48))
 
-    # 2. Mediaserver Pipeline (apps/mediaserver/.env)
-    media_dir = root_path / "apps" / "mediaserver"
-    media_template = media_dir / ".env.example"
-    media_env = media_dir / ".env"
-    media_template_content = media_template.read_text(encoding="utf-8") if media_template.exists() else ""
+    def render(module_id: str, module_dir: Path, updates: Dict[str, Any]) -> Path:
+        template = module_dir / ".env.example"
+        template_content = template.read_text(encoding="utf-8") if template.exists() else ""
+        content = update_env_variables(template_content, updates)
+        target = (out_dir / f"{module_id}.env") if out_dir else (module_dir / ".env")
+        write_env_file(str(target), content)
+        if out_dir and module_dir.exists():
+            _link_into_module(target, module_dir)
+        return target
 
-    media_updates = {
-        "PUID": config.get("puid", 1000),
-        "PGID": config.get("pgid", 1000),
-        "TZ": config.get("timezone", "Asia/Kolkata"),
-        "CONFIG_DIR": config.get("config_dir", "./config"),
-        "DATA_DIR": config.get("hdd_data", "/mnt/hdd/data"),
-        "RADARR_API_KEY": config.get("radarr_api_key", ""),
-        "SONARR_API_KEY": config.get("sonarr_api_key", ""),
-        "PROWLARR_API_KEY": config.get("prowlarr_api_key", ""),
-    }
-    media_content = update_env_variables(media_template_content, media_updates)
-    write_env_file(str(media_env), media_content)
-    results["mediaserver_env"] = str(media_env)
+    # 1. Blueprint-wide values (root .env)
+    results["master_env"] = str(
+        render(
+            "homelab",
+            root_path,
+            {
+                "HOST_USER": config.get("host_user", "homelab"),
+                "PUID": puid,
+                "PGID": pgid,
+                "SERVER_IP": server_ip,
+                "TIMEZONE": tz,
+                "SSD_ROOT": config.get("ssd_root", "/"),
+                "HDD_DATA": data_dir,
+                "HDD_MEMORIES": memories_dir,
+                "RADARR_API_KEY": radarr_key,
+                "SONARR_API_KEY": sonarr_key,
+                "PROWLARR_API_KEY": prowlarr_key,
+                "CONTROL_HUB_PORT": config.get("control_hub_port", 7575),
+                "ACTIVE_NIC": active_nic,
+                "LINK_SPEED_MBPS": config.get("link_speed_mbps", 1000),
+                "QBITTORRENT_URL": f"http://127.0.0.1:{qbit_port}",
+                "QBITTORRENT_USER": qbit_user,
+                "QBITTORRENT_PASS": qbit_pass,
+                "GDRIVE_REMOTE": config.get("gdrive_remote", ""),
+            },
+        )
+    )
 
-    # 3. Noodle Photo Cloud (apps/noodle-gallery/.env)
-    noodle_dir = root_path / "apps" / "noodle-gallery"
-    noodle_template = noodle_dir / ".env.example"
-    noodle_env = noodle_dir / ".env"
-    noodle_template_content = noodle_template.read_text(encoding="utf-8") if noodle_template.exists() else ""
+    # 2. Media pipeline
+    results["mediaserver_env"] = str(
+        render(
+            "mediaserver",
+            root_path / "apps" / "mediaserver",
+            {
+                "PUID": puid,
+                "PGID": pgid,
+                "TZ": tz,
+                "CONFIG_DIR": config.get("config_dir", "./config"),
+                "DATA_DIR": data_dir,
+                "RADARR_API_KEY": radarr_key,
+                "SONARR_API_KEY": sonarr_key,
+                "PROWLARR_API_KEY": prowlarr_key,
+                "QBITTORRENT_USER": qbit_user,
+                "QBITTORRENT_PASS": qbit_pass,
+                "ENABLE_TMDB_BYPASS": "true" if config.get("enable_tmdb_bypass") else "false",
+                "SEERR_NODE_OPTIONS": (
+                    "--dns-result-order=ipv4first --require /app/config/tmdb-interceptor.js"
+                    if config.get("enable_tmdb_bypass") else ""
+                ),
+                "DNS_OVERRIDE": config.get("dns_override", ""),
+            },
+        )
+    )
 
-    noodle_updates = {
-        "UPLOAD_LOCATION": config.get("photo_upload_dir", "/mnt/hdd/immich"),
-        "DB_DATA_LOCATION": config.get("photo_db_dir", "./data/postgres"),
-        "THUMBS_LOCATION": config.get("photo_thumbs_dir", "./data/thumbs"),
-        "ENCODED_VIDEO_LOCATION": config.get("photo_video_dir", "./data/encoded-video"),
-        "EXTERNAL_LIBRARY_LOCATION": config.get("hdd_memories", "/mnt/hdd/Memories"),
-        "GALLERY_PORT": config.get("gallery_port", 2283),
-        "TZ": config.get("timezone", "Asia/Kolkata"),
-        "DB_PASSWORD": config.get("postgres_password", "postgres_secure_pass"),
-        "DB_USERNAME": config.get("postgres_user", "postgres"),
-        "DB_DATABASE_NAME": config.get("postgres_db", "immich"),
-    }
-    noodle_content = update_env_variables(noodle_template_content, noodle_updates)
-    write_env_file(str(noodle_env), noodle_content)
-    results["noodle_gallery_env"] = str(noodle_env)
+    # 3. Photo cloud
+    results["noodle_gallery_env"] = str(
+        render(
+            "noodle-gallery",
+            root_path / "apps" / "noodle-gallery",
+            {
+                "UPLOAD_LOCATION": config.get("photo_upload_dir", f"{memories_dir.rstrip('/')}/uploads"),
+                "DB_DATA_LOCATION": config.get("photo_db_dir", "./data/postgres"),
+                "THUMBS_LOCATION": config.get("photo_thumbs_dir", "./data/thumbs"),
+                "ENCODED_VIDEO_LOCATION": config.get("photo_video_dir", "./data/encoded-video"),
+                "EXTERNAL_LIBRARY_LOCATION": memories_dir,
+                "GALLERY_PORT": config.get("gallery_port", 2283),
+                "TZ": tz,
+                "DB_PASSWORD": pg_pass,
+                "DB_USERNAME": config.get("postgres_user", "postgres"),
+                "DB_DATABASE_NAME": config.get("postgres_db", "immich"),
+            },
+        )
+    )
 
-    # 4. Control Hub Dashboard (apps/control-hub/.env)
-    ch_dir = root_path / "apps" / "control-hub"
-    ch_template = ch_dir / ".env.example"
-    ch_env = ch_dir / ".env"
-    ch_template_content = ch_template.read_text(encoding="utf-8") if ch_template.exists() else ""
+    # 4. Control Hub
+    results["control_hub_env"] = str(
+        render(
+            "control-hub",
+            root_path / "apps" / "control-hub",
+            {
+                "CONTROL_HUB_HOST": config.get("control_hub_host", "0.0.0.0"),
+                "CONTROL_HUB_PORT": config.get("control_hub_port", 7575),
+                "CONTROL_HUB_TOKEN": hub_token,
+                "ACTIVE_NIC": active_nic,
+                "LINK_SPEED_MBPS": config.get("link_speed_mbps", 1000),
+                "QBITTORRENT_URL": f"http://127.0.0.1:{qbit_port}",
+                "QBITTORRENT_USER": qbit_user,
+                "QBITTORRENT_PASS": qbit_pass,
+                "HDD_DATA": data_dir,
+            },
+        )
+    )
 
-    ch_updates = {
-        "CONTROL_HUB_PORT": config.get("control_hub_port", 7575),
-        "ACTIVE_NIC": config.get("active_nic", "eth0"),
-        "LINK_SPEED_MBPS": config.get("link_speed_mbps", 1000),
-        "QBITTORRENT_URL": f"http://127.0.0.1:{config.get('qbittorrent_port', 8080)}",
-        "QBITTORRENT_USER": config.get("qbittorrent_user", "admin"),
-        "QBITTORRENT_PASS": config.get("qbittorrent_pass", "adminadmin"),
-    }
-    ch_content = update_env_variables(ch_template_content, ch_updates)
-    write_env_file(str(ch_env), ch_content)
-    results["control_hub_env"] = str(ch_env)
+    # 5. TV auto-updater (JSON config rather than .env)
+    tv_dir = next(
+        (root_path / "apps" / name for name in ("tv-autoupdater", "tv-updater") if (root_path / "apps" / name).exists()),
+        None,
+    )
+    if tv_dir is not None:
+        tv_template_file = tv_dir / "config.example.json"
+        tv_data: Dict[str, Any] = {}
+        if tv_template_file.exists():
+            try:
+                tv_data = json.loads(tv_template_file.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                tv_data = {}
 
-    # 5. CleanYourTV (apps/tv-updater/config.json)
-    tv_dir = root_path / "apps" / "tv-updater"
-    tv_config_file = tv_dir / "config.json"
-    tv_template_file = tv_dir / "config.example.json"
+        tv_ips = config.get("tv_ips", [])
+        if tv_ips:
+            tv_data["target_profiles"] = [
+                {
+                    "id": f"tv_{idx + 1}",
+                    "name": f"Smart TV {idx + 1}",
+                    "match_models": ["android_tv", "mibox", "bravia", "chromecast"],
+                    "default_ip": ip.strip(),
+                    "port": 5555,
+                }
+                for idx, ip in enumerate(tv_ips)
+            ]
 
-    tv_data = {}
-    if tv_template_file.exists():
-        try:
-            tv_data = json.loads(tv_template_file.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-
-    tv_ips = config.get("tv_ips", [])
-    if tv_ips:
-        # Update target profile default IPs
-        target_profiles = []
-        for idx, ip in enumerate(tv_ips):
-            target_profiles.append({
-                "id": f"tv_{idx + 1}",
-                "name": f"Smart TV {idx + 1}",
-                "match_models": ["android_tv", "mibox", "bravia", "chromecast"],
-                "default_ip": ip.strip(),
-                "port": 5555,
-            })
-        tv_data["target_profiles"] = target_profiles
-    tv_config_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(tv_config_file, "w", encoding="utf-8") as f:
-        json.dump(tv_data, f, indent=2)
-    results["tv_updater_config"] = str(tv_config_file)
+        tv_target = (out_dir / "tv-autoupdater.json") if out_dir else (tv_dir / "config.json")
+        write_env_file(str(tv_target), json.dumps(tv_data, indent=2) + "\n", mode=stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
+        if out_dir:
+            _link_into_module(tv_target, tv_dir, "config.json")
+        results["tv_autoupdater_config"] = str(tv_target)
 
     return results

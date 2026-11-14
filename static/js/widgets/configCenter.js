@@ -51,7 +51,7 @@ function populateFormFields(cfg, sys) {
   if (cfgPgid) cfgPgid.value = cfg.pgid || "1000";
   if (cfgTimezone) cfgTimezone.value = cfg.timezone || "Asia/Kolkata";
 
-  if (cfgQbitPass) cfgQbitPass.value = cfg.qbittorrent_pass || "adminadmin";
+  if (cfgQbitPass) cfgQbitPass.value = cfg.qbittorrent_pass || "";
   if (cfgRadarrKey) cfgRadarrKey.value = cfg.radarr_api_key || "";
   if (cfgSonarrKey) cfgSonarrKey.value = cfg.sonarr_api_key || "";
   if (cfgProwlarrKey) cfgProwlarrKey.value = cfg.prowlarr_api_key || "";
@@ -62,7 +62,7 @@ function populateFormFields(cfg, sys) {
     const cfgNetGw = $("cfg-netplan-gw");
     const cfgNetDns = $("cfg-netplan-dns");
 
-    if (cfgNetIface) cfgNetIface.value = sys.network.active_nic || "eth0";
+    if (cfgNetIface) cfgNetIface.value = sys.network.active_nic || "";
     if (cfgNetIp) cfgNetIp.value = sys.network.current_ip || "192.168.1.100";
     if (cfgNetGw) cfgNetGw.value = sys.network.default_gateway || "192.168.1.1";
     if (cfgNetDns) cfgNetDns.value = (sys.network.dns_servers || ["1.1.1.1", "8.8.8.8"]).join(", ");
@@ -227,7 +227,7 @@ export async function previewNetplan() {
   const btnPreviewNetplan = $("btn-preview-netplan");
   const netplanYamlPreview = $("netplan-yaml-preview");
 
-  const iface = cfgNetIface ? cfgNetIface.value.trim() : "eth0";
+  const iface = cfgNetIface ? cfgNetIface.value.trim() : "";
   const ip = cfgNetIp ? cfgNetIp.value.trim() : "192.168.1.100";
   const gw = cfgNetGw ? cfgNetGw.value.trim() : "192.168.1.1";
   const dnsRaw = cfgNetDns ? cfgNetDns.value : "1.1.1.1, 8.8.8.8";
@@ -262,7 +262,7 @@ export async function applyNetplanSafe() {
   const cfgNetDns = $("cfg-netplan-dns");
   const btnApplyNetplan = $("btn-apply-netplan");
 
-  const iface = cfgNetIface ? cfgNetIface.value.trim() : "eth0";
+  const iface = cfgNetIface ? cfgNetIface.value.trim() : "";
   const ip = cfgNetIp ? cfgNetIp.value.trim() : "192.168.1.100";
   const gw = cfgNetGw ? cfgNetGw.value.trim() : "192.168.1.1";
   const dnsRaw = cfgNetDns ? cfgNetDns.value : "1.1.1.1, 8.8.8.8";
@@ -322,7 +322,7 @@ export async function saveConfiguration() {
     puid: cfgPuid ? parseInt(cfgPuid.value, 10) || 1000 : 1000,
     pgid: cfgPgid ? parseInt(cfgPgid.value, 10) || 1000 : 1000,
     timezone: cfgTimezone ? cfgTimezone.value.trim() : "Asia/Kolkata",
-    qbittorrent_pass: cfgQbitPass ? cfgQbitPass.value.trim() : "adminadmin",
+    qbittorrent_pass: cfgQbitPass ? cfgQbitPass.value.trim() : "",
     radarr_api_key: cfgRadarrKey ? cfgRadarrKey.value.trim() : "",
     sonarr_api_key: cfgSonarrKey ? cfgSonarrKey.value.trim() : "",
     prowlarr_api_key: cfgProwlarrKey ? cfgProwlarrKey.value.trim() : "",
