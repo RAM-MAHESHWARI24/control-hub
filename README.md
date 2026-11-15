@@ -54,7 +54,7 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 * Real-time read/write I/O throughput with dynamic block device resolution (`/dev/nvme*`, `/dev/sd*`, `/dev/vd*`).
 
 ### 7. ⏰ Scheduled Cron Tasks (`widgets/cron_tasks.py`)
-* Visual inspection of system cron jobs (nightly ML scheduler, daily Recyclarr sync, weekly Watchtower updates).
+* Visual inspection of system cron jobs (nightly ML scheduler, daily Recyclarr sync, photo backup, TV auto-updater).
 
 ### 8. 📜 Service Matrix & Container Logs (`widgets/service_matrix.py`)
 * Instant launcher for all running services.
@@ -87,7 +87,7 @@ Accessible via the header button **⚙️ Settings** (`btn-open-config-center`),
 ### Tab 4: Safe Netplan Static IP Manager
 * Inspects active network interface, gateway, and DNS servers.
 * Generates clean Ubuntu Netplan YAML.
-* Executes safe rollback validation (`netplan try --timeout 45`) so you never get locked out over SSH.
+* Applies the change with an armed revert timer and keeps it only after confirmation from the new address, so you never get locked out over SSH.
 
 ### Tab 5: Setup Wizard Fast Launcher
 * 1-Click button to launch the zero-dependency Onboarding Setup Wizard on port `8000` for full cluster re-provisioning.
@@ -150,7 +150,7 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `POST` | `/api/config/generate-secrets` | None | Generates cryptographically secure passwords & API keys |
 | `GET` | `/api/config/ai-diagnostics` | None | Returns hardware specs and ~300-token preformatted AI prompt |
 | `POST` | `/api/config/netplan-preview` | `{"ip": "...", "gateway": "..."}` | Generates clean Netplan YAML configuration |
-| `POST` | `/api/config/netplan-apply` | `{"config_yaml": "..."}` | Runs safe `netplan try --timeout 45` with auto-rollback |
+| `POST` | `/api/config/netplan-apply` | `{"interface": "...", "ip": ".../24", "gateway": "...", "dns": [...]}` | Applies with a revert timer; confirm with `POST /api/config/netplan-confirm`, inspect with `GET /api/config/netplan-status` |
 
 ---
 
