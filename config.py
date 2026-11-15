@@ -49,13 +49,13 @@ RECYCLARR_LOG_FILE = os.getenv("RECYCLARR_LOG_FILE", "/var/log/recyclarr.log")
 IMMICH_ML_LOG_FILE = os.getenv("IMMICH_ML_LOG_FILE", "/var/log/immich-ml.log")
 SERVER_SUSPEND_LOG_FILE = os.getenv("SERVER_SUSPEND_LOG_FILE", "/var/log/server-suspend.log")
 
-# Android TV Updater Integration (Dynamically resolves to sibling apps/tv-updater)
-TV_UPDATER_DIR = os.getenv("TV_UPDATER_DIR", str(APPS_DIR / "tv-updater"))
-TV_UPDATER_PY = os.getenv("TV_UPDATER_PY", str(APPS_DIR / "tv-updater" / "tv_updater.py"))
+# Android TV Updater Integration (Dynamically resolves to sibling apps/tv-autoupdater)
+TV_UPDATER_DIR = os.getenv("TV_UPDATER_DIR", str(APPS_DIR / "tv-autoupdater"))
+TV_UPDATER_PY = os.getenv("TV_UPDATER_PY", str(APPS_DIR / "tv-autoupdater" / "tv_updater.py"))
 TV_UPDATER_LOG_FILE = os.getenv("TV_UPDATER_LOG_FILE", "/var/log/tv-updater.log")
-TV_UPDATER_LOCAL_LOG_FILE = os.getenv("TV_UPDATER_LOCAL_LOG_FILE", str(APPS_DIR / "tv-updater" / "tv_updater.log"))
-TV_UPDATER_STATE_FILE = os.getenv("TV_UPDATER_STATE_FILE", str(APPS_DIR / "tv-updater" / "state.json"))
-TV_UPDATER_INCOMING_DIR = os.getenv("TV_UPDATER_INCOMING_DIR", str(APPS_DIR / "tv-updater" / "incoming_apks"))
+TV_UPDATER_LOCAL_LOG_FILE = os.getenv("TV_UPDATER_LOCAL_LOG_FILE", str(APPS_DIR / "tv-autoupdater" / "tv_updater.log"))
+TV_UPDATER_STATE_FILE = os.getenv("TV_UPDATER_STATE_FILE", str(APPS_DIR / "tv-autoupdater" / "state.json"))
+TV_UPDATER_INCOMING_DIR = os.getenv("TV_UPDATER_INCOMING_DIR", str(APPS_DIR / "tv-autoupdater" / "incoming_apks"))
 
 # Network interface for LAN sampling. Empty = auto-detect the default-route NIC
 # (see core.telemetry_sampler.detect_active_nic). Never assume "eth0".
