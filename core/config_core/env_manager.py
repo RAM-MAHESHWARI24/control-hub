@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from .secrets_generator import generate_password, generate_api_key
+from .paths import APPDATA_DIR as _APPDATA_DIR
 from .paths import STATE_DIR as _STATE_DIR
 
 PLACEHOLDER_SECRETS = {"adminadmin", "postgres", "postgres_pass", "postgres_secure_pass", "changeme", "password"}
@@ -215,15 +216,18 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
     )
 
     # 3. Photo cloud
+    # Installed: photo DB, thumbnails and transcodes live under appdata, not in the
+    # replaceable checkout. Standalone (no env_dir): beside the module, as before.
+    photo_state = f"{_APPDATA_DIR}/noodle-gallery" if out_dir else "./data"
     results["noodle_gallery_env"] = str(
         render(
             "noodle-gallery",
             root_path / "apps" / "noodle-gallery",
             {
                 "UPLOAD_LOCATION": config.get("photo_upload_dir", f"{memories_dir.rstrip('/')}/uploads"),
-                "DB_DATA_LOCATION": config.get("photo_db_dir", "./data/postgres"),
-                "THUMBS_LOCATION": config.get("photo_thumbs_dir", "./data/thumbs"),
-                "ENCODED_VIDEO_LOCATION": config.get("photo_video_dir", "./data/encoded-video"),
+                "DB_DATA_LOCATION": config.get("photo_db_dir", f"{photo_state}/postgres"),
+                "THUMBS_LOCATION": config.get("photo_thumbs_dir", f"{photo_state}/thumbs"),
+                "ENCODED_VIDEO_LOCATION": config.get("photo_video_dir", f"{photo_state}/encoded-video"),
                 "EXTERNAL_LIBRARY_LOCATION": memories_dir,
                 "GALLERY_PORT": config.get("gallery_port", 2283),
                 "TZ": tz,
