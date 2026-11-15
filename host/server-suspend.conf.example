@@ -1,0 +1,11 @@
+{
+  "_README": "Server Suspend & RTCWake Schedule Configuration Template. Copy to '/etc/server-suspend.conf' to set permanent sleep schedules.",
+  "_DESCRIPTION": {
+    "duration_seconds": "Duration to remain suspended to RAM (S3) in seconds. Default: 21600 (6 hours). Calculated as wake_time minus sleep_time.",
+    "sleep_time": "24-hour HH:MM timestamp when the nightly cron job (/etc/cron.d/server-suspend) triggers the system suspend routine.",
+    "wake_time": "24-hour HH:MM timestamp when the motherboard RTC (Real-Time Clock) alarm automatically awakens the host."
+  },
+  "duration_seconds": 21600,
+  "sleep_time": "00:00",
+  "wake_time": "06:00"
+}
