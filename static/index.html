@@ -452,7 +452,7 @@
       </div>
     </section>
 
-    <!-- DEDICATED COMMAND CARD: ANDROID TV APP UPDATER (CleanYourTV ADB Cluster) -->
+    <!-- DEDICATED COMMAND CARD: ANDROID TV AUTO-UPDATER -->
     <section class="tv-updater-section" id="tv-updater-section">
       <div class="card tv-updater-card">
         <div class="card-header">
@@ -1341,7 +1341,7 @@
           <span class="modal-dot dot-live"></span>
           <div>
             <h3>Android TV App Updater: Execution Log</h3>
-            <span class="modal-sub-path">Log: /var/log/tv-updater.log &bull; Target: CleanYourTV ADB Cluster</span>
+            <span class="modal-sub-path">Log: /var/lib/homelab/tv-autoupdater/tv-autoupdater.log</span>
           </div>
         </div>
         <button class="modal-close" id="tv-log-modal-close">&times;</button>
@@ -1684,7 +1684,7 @@
           <div class="cfg-grid-form">
             <div class="cfg-field-group">
               <label for="cfg-qbit-pass">qBittorrent Password</label>
-              <input type="text" id="cfg-qbit-pass" value="adminadmin" class="cyber-input">
+              <input type="text" id="cfg-qbit-pass" value="" placeholder="set in /etc/homelab/control-hub.env" class="cyber-input">
             </div>
             <div class="cfg-field-group">
               <label for="cfg-radarr-key">Radarr API Key</label>

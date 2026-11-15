@@ -1,5 +1,5 @@
 /**
- * Widget: Android TV App Updater (CleanYourTV ADB Cluster)
+ * Widget: Android TV auto-updater
  * Renders 4-stage deployment stepper, cluster status summary strip,
  * comprehensive granular device management modal with force-update overrides,
  * per-app TV install/update controllers, and 1-click terminal log streamer.

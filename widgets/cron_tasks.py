@@ -107,7 +107,7 @@ def get_cron_tasks_status():
         except Exception:
             pass
 
-    # 6. Android TV App Updater (CleanYourTV)
+    # 6. Android TV auto-updater
     tv_running = is_deploying_tv
     if not tv_running:
         try:
