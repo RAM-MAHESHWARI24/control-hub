@@ -57,6 +57,8 @@ def main() -> int:
     apply_p.add_argument("--gateway", required=True, type=lambda v: _valid_ip(v, allow_cidr=False))
     apply_p.add_argument("--dns", action="append", default=[], type=lambda v: _valid_ip(v, allow_cidr=False))
     apply_p.add_argument("--timeout", type=int, default=120)
+    apply_p.add_argument("--delay", type=int, default=3,
+                         help="Seconds before netplan apply runs, so the HTTP reply leaves on the old address (0 = now)")
 
     sub.add_parser("confirm")
     sub.add_parser("status")
@@ -73,6 +75,7 @@ def main() -> int:
             gateway=args.gateway,
             dns_servers=args.dns or ["1.1.1.1", "8.8.8.8"],
             timeout_sec=timeout,
+            apply_delay_sec=max(0, min(args.delay, 30)),
         )
     elif args.command == "confirm":
         result = confirm_netplan_change()

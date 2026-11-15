@@ -23,6 +23,7 @@ All subprocess calls carry explicit timeouts.
 
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 REVERT_UNIT = "homelab-netplan-revert"
+APPLY_UNIT = "homelab-netplan-apply"
 TARGET_FILENAME = "99-homelab-blueprint.yaml"
 DEFAULT_TIMEOUT_SEC = 120
 PENDING_STATE_FILE = Path(os.getenv("HOMELAB_STATE_DIR", "/var/lib/homelab")) / "netplan-pending.json"
@@ -178,6 +180,34 @@ def _run(cmd: List[str], timeout: int = 30) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
+def current_prefix(interface: str) -> Optional[int]:
+    """Prefix length of the interface's current IPv4 address (e.g. 24 or 20), or None."""
+    try:
+        out = _run(["ip", "-4", "-o", "addr", "show", "dev", interface], timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    m = re.search(r"inet \d+\.\d+\.\d+\.\d+/(\d+)", out)
+    return int(m.group(1)) if m else None
+
+
+def netplan_id_for(interface: str) -> str:
+    """
+    The netplan ID that currently configures `interface`.
+
+    Netplan merges files per ID. Cloud images and some installers configure the NIC
+    under an ID such as `default` with a `match: macaddress` rule; a second file using
+    the interface name as its ID creates a separate networkd .network file, and networkd
+    uses the alphabetically first match, so the static config would be ignored. Writing
+    under the owning ID merges instead. Falls back to the interface name.
+    """
+    try:
+        out = _run(["networkctl", "status", interface, "--no-pager"], timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return interface
+    m = re.search(r"Network File: \S*/10-netplan-(\S+)\.network", out)
+    return m.group(1) if m else interface
+
+
 def _write_revert_script(backup_dir: str, netplan_dir: str, target_file: Path) -> Path:
     """Writes the shell script the revert timer executes."""
     script = f"""#!/usr/bin/env bash
@@ -199,6 +229,23 @@ rm -f "{PENDING_STATE_FILE}"
     return REVERT_SCRIPT
 
 
+def _schedule_apply(delay_sec: int) -> subprocess.CompletedProcess:
+    """Runs `netplan apply` after a delay, so a caller can answer an HTTP request on the old address first."""
+    _run(["systemctl", "stop", f"{APPLY_UNIT}.timer"], timeout=15)
+    _run(["systemctl", "reset-failed", f"{APPLY_UNIT}.service"], timeout=15)
+    return _run(
+        [
+            "systemd-run",
+            f"--unit={APPLY_UNIT}",
+            f"--on-active={delay_sec}",
+            "--timer-property=AccuracySec=1s",
+            "netplan",
+            "apply",
+        ],
+        timeout=15,
+    )
+
+
 def _arm_revert_timer(timeout_sec: int) -> subprocess.CompletedProcess:
     """Schedules the revert script via a transient systemd timer."""
     # Clear any previous pending revert first.
@@ -218,23 +265,33 @@ def _arm_revert_timer(timeout_sec: int) -> subprocess.CompletedProcess:
 def safe_apply_netplan(
     interface: str,
     ip_address: str,
-    cidr: int = 24,
+    cidr: Optional[int] = None,
     gateway: str = "192.168.1.1",
     dns_servers: Optional[List[str]] = None,
     timeout_sec: int = DEFAULT_TIMEOUT_SEC,
     netplan_dir: str = "/etc/netplan",
     target_filename: str = TARGET_FILENAME,
+    apply_delay_sec: int = 0,
 ) -> Dict[str, Any]:
     """
-    Applies a static IP with an armed revert timer. Returns immediately after
-    `netplan apply`; the change becomes permanent only when
-    confirm_netplan_change() is called before `timeout_sec` elapses.
+    Applies a static IP with an armed revert timer. The change becomes permanent
+    only when confirm_netplan_change() is called before `timeout_sec` elapses.
+
+    cidr: prefix length when `ip_address` has none; defaults to the interface's
+          current prefix (a /24 assumption breaks the default route on /20 networks).
+    apply_delay_sec: > 0 schedules `netplan apply` that many seconds later and returns
+          at once. Callers answering an HTTP request use this: if the address changed
+          during the request, the reply to the browser would be lost with the old address.
     """
     if dns_servers is None:
         dns_servers = ["1.1.1.1", "8.8.8.8"]
 
-    ip_with_cidr = f"{ip_address}/{cidr}" if "/" not in ip_address else ip_address
-    yaml_content = generate_netplan_yaml(interface, ip_with_cidr, gateway, dns_servers)
+    if "/" in ip_address:
+        ip_with_cidr = ip_address
+    else:
+        ip_with_cidr = f"{ip_address}/{cidr or current_prefix(interface) or 24}"
+    netplan_id = netplan_id_for(interface) if os.name != "nt" else interface
+    yaml_content = generate_netplan_yaml(netplan_id, ip_with_cidr, gateway, dns_servers)
     p_dir = Path(netplan_dir)
 
     # Non-Linux / development hosts: simulate.
@@ -266,7 +323,7 @@ def safe_apply_netplan(
             }
 
         _write_revert_script(backup_dir or "", netplan_dir, config_file)
-        armed = _arm_revert_timer(timeout_sec)
+        armed = _arm_revert_timer(timeout_sec + max(apply_delay_sec, 0))
         if armed.returncode != 0:
             config_file.unlink(missing_ok=True)
             return {
@@ -290,6 +347,32 @@ def safe_apply_netplan(
             encoding="utf-8",
         )
 
+        if apply_delay_sec > 0:
+            scheduled = _schedule_apply(apply_delay_sec)
+            if scheduled.returncode != 0:
+                _run([str(REVERT_SCRIPT)], timeout=90)
+                _run(["systemctl", "stop", f"{REVERT_UNIT}.timer"], timeout=15)
+                return {
+                    "success": False,
+                    "stage": "schedule_apply",
+                    "error": scheduled.stderr or scheduled.stdout,
+                    "message": "Could not schedule netplan apply; the previous configuration was restored.",
+                }
+            return {
+                "success": True,
+                "pending": True,
+                "ip": ip_with_cidr,
+                "interface": interface,
+                "netplan_id": netplan_id,
+                "backup_dir": backup_dir,
+                "timeout_sec": timeout_sec,
+                "apply_in_sec": apply_delay_sec,
+                "message": (
+                    f"Static IP {ip_with_cidr} will be applied in {apply_delay_sec}s. Confirm from the new "
+                    f"address within {timeout_sec}s or the previous network configuration is restored."
+                ),
+            }
+
         applied = _run(["netplan", "apply"], timeout=60)
         if applied.returncode != 0:
             # Revert right away rather than waiting for the timer.
@@ -307,6 +390,7 @@ def safe_apply_netplan(
             "pending": True,
             "ip": ip_with_cidr,
             "interface": interface,
+            "netplan_id": netplan_id,
             "backup_dir": backup_dir,
             "timeout_sec": timeout_sec,
             "message": (
