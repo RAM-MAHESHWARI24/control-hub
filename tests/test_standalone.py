@@ -55,6 +55,15 @@ class TestControlHubStandalone(unittest.TestCase):
         if not data["installed"]:
             self.assertEqual(self.client.get("/api/indexers/available").status_code, 404)
 
+    def test_tv_widget_hidden_without_tv_module(self):
+        """Without TV_UPDATER_PY the TV card reports not installed and its actions refuse"""
+        from widgets import tv_updater
+        if tv_updater.tv_module_installed():
+            self.skipTest("a TV auto-updater checkout is configured in this environment")
+        data = self.client.get("/api/tv-updater/status").get_json()
+        self.assertIs(data["installed"], False)
+        self.assertEqual(self.client.post("/api/tv-updater/deploy", json={}).status_code, 404)
+
     def test_observability_endpoints(self):
         """Verify /api/health, /api/livez, and /api/readyz probes"""
         res = self.client.get("/api/health")

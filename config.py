@@ -8,7 +8,6 @@ from pathlib import Path
 
 # Directory Anchors
 BASE_DIR = Path(__file__).resolve().parent
-APPS_DIR = BASE_DIR.parent
 
 
 def _load_env_file(path: Path) -> None:
@@ -41,21 +40,23 @@ SUSPEND_SKIP_FILE = os.getenv("SUSPEND_SKIP_FILE", "/run/server-suspend.skip")
 SUSPEND_OVERRIDE_FILE = os.getenv("SUSPEND_OVERRIDE_FILE", "/run/server-suspend.override")
 SUSPEND_CONFIG_FILE = os.getenv("SUSPEND_CONFIG_FILE", "/etc/server-suspend.conf")
 SUSPEND_CRON_FILE = os.getenv("SUSPEND_CRON_FILE", "/etc/cron.d/server-suspend")
-BACKUP_LOG_FILE = os.getenv("BACKUP_LOG_FILE", "/opt/immich/backups/backup.log")
-BACKUP_DIR = os.getenv("BACKUP_DIR", "/opt/immich/backups")
+BACKUP_LOG_FILE = os.getenv("BACKUP_LOG_FILE", "/var/backups/immich/backup.log")
+BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/immich")
 SPEEDTEST_CACHE_FILE = os.getenv("SPEEDTEST_CACHE_FILE", str(BASE_DIR / "speedtest_cache.json"))
 SPEEDTEST_BIN = os.getenv("SPEEDTEST_BIN", "/usr/local/bin/speedtest")
 RECYCLARR_LOG_FILE = os.getenv("RECYCLARR_LOG_FILE", "/var/log/recyclarr.log")
 IMMICH_ML_LOG_FILE = os.getenv("IMMICH_ML_LOG_FILE", "/var/log/immich-ml.log")
 SERVER_SUSPEND_LOG_FILE = os.getenv("SERVER_SUSPEND_LOG_FILE", "/var/log/server-suspend.log")
 
-# Android TV Updater Integration (Dynamically resolves to sibling apps/tv-autoupdater)
-TV_UPDATER_DIR = os.getenv("TV_UPDATER_DIR", str(APPS_DIR / "tv-autoupdater"))
-TV_UPDATER_PY = os.getenv("TV_UPDATER_PY", str(APPS_DIR / "tv-autoupdater" / "tv_updater.py"))
+# Android TV auto-updater integration (optional). Unset means the TV widget reports
+# "not installed" and the dashboard hides it. The blueprint installer sets both when
+# the tv_autoupdater module is enabled; standalone users point them at their checkout.
+TV_UPDATER_DIR = os.getenv("TV_UPDATER_DIR", "")
+TV_UPDATER_PY = os.getenv("TV_UPDATER_PY", "")
 TV_UPDATER_LOG_FILE = os.getenv("TV_UPDATER_LOG_FILE", "/var/log/tv-updater.log")
-TV_UPDATER_LOCAL_LOG_FILE = os.getenv("TV_UPDATER_LOCAL_LOG_FILE", str(APPS_DIR / "tv-autoupdater" / "tv_updater.log"))
-TV_UPDATER_STATE_FILE = os.getenv("TV_UPDATER_STATE_FILE", str(APPS_DIR / "tv-autoupdater" / "state.json"))
-TV_UPDATER_INCOMING_DIR = os.getenv("TV_UPDATER_INCOMING_DIR", str(APPS_DIR / "tv-autoupdater" / "incoming_apks"))
+TV_UPDATER_LOCAL_LOG_FILE = os.getenv("TV_UPDATER_LOCAL_LOG_FILE", os.path.join(TV_UPDATER_DIR, "tv_updater.log") if TV_UPDATER_DIR else "")
+TV_UPDATER_STATE_FILE = os.getenv("TV_UPDATER_STATE_FILE", os.path.join(TV_UPDATER_DIR, "state.json") if TV_UPDATER_DIR else "")
+TV_UPDATER_INCOMING_DIR = os.getenv("TV_UPDATER_INCOMING_DIR", os.path.join(TV_UPDATER_DIR, "incoming_apks") if TV_UPDATER_DIR else "")
 
 # Network interface for LAN sampling. Empty = auto-detect the default-route NIC
 # (see core.telemetry_sampler.detect_active_nic). Never assume "eth0".

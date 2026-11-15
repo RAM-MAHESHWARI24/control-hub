@@ -341,6 +341,14 @@ export async function fetchTvUpdaterStatus(force = false) {
     const res = await fetch(url);
     const data = await res.json();
 
+    // The TV auto-updater is an optional module: hide its card when it is absent.
+    const tvSection = document.getElementById("tv-updater-section");
+    if (data.installed === false) {
+      if (tvSection) tvSection.style.display = "none";
+      return;
+    }
+    if (tvSection) tvSection.style.display = "";
+
     const isDeploying = data.is_deploying || data.status === "deploying";
     const isError = data.status === "error";
     const stage = data.current_stage || 4;

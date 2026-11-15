@@ -146,6 +146,8 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
         config["media_admin_pass"] = qbit_pass
     media_admin_pass = config["media_admin_pass"]
 
+    tv_enabled = any(str(m) in ("tv_autoupdater", "tv_updater", "tv-updater") for m in (config.get("enabled_services") or []))
+
     def render(module_id: str, module_dir: Path, updates: Dict[str, Any]) -> Path:
         template = module_dir / ".env.example"
         template_content = template.read_text(encoding="utf-8") if template.exists() else ""
@@ -253,7 +255,13 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                 "QBITTORRENT_USER": qbit_user,
                 "QBITTORRENT_PASS": qbit_pass,
                 "HDD_DATA": data_dir,
+                # Set only when the TV module is part of this install; empty hides the TV card.
+                "TV_UPDATER_DIR": str(root_path / "apps" / "tv-autoupdater") if tv_enabled else "",
+                "TV_UPDATER_PY": str(root_path / "apps" / "tv-autoupdater" / "tv_updater.py") if tv_enabled else "",
                 "TV_UPDATER_STATE_FILE": str(_STATE_DIR / "tv-autoupdater" / "state.json"),
+                # Where the photo-backup cron (apps/immich-face-xmp-exporter/host/cron/immich-backup) writes
+                "BACKUP_DIR": str(_STATE_DIR / "photo-backups"),
+                "BACKUP_LOG_FILE": str(_STATE_DIR / "photo-backups" / "backup.log"),
                 "TV_UPDATER_INCOMING_DIR": str(_STATE_DIR / "tv-autoupdater" / "incoming_apks"),
                 "TV_UPDATER_LOG_FILE": str(_STATE_DIR / "tv-autoupdater" / "tv-autoupdater.log"),
             },

@@ -20,8 +20,16 @@ from config import (
 )
 
 # Ensure tv-updater directory is in sys.path for direct python imports
-if TV_UPDATER_DIR not in sys.path and os.path.exists(TV_UPDATER_DIR):
+if TV_UPDATER_DIR and TV_UPDATER_DIR not in sys.path and os.path.exists(TV_UPDATER_DIR):
     sys.path.insert(0, TV_UPDATER_DIR)
+
+
+def tv_module_installed() -> bool:
+    """The TV auto-updater is optional; without it the dashboard hides the TV card."""
+    return bool(TV_UPDATER_PY) and os.path.isfile(TV_UPDATER_PY)
+
+
+NOT_INSTALLED = {"success": False, "installed": False, "message": "TV auto-updater is not installed (set TV_UPDATER_PY)."}
 
 try:
     import tv_updater
@@ -105,6 +113,8 @@ def fetch_telemetry_snapshot(force=False):
 @tv_updater_bp.route("/api/tv-updater/status", methods=["GET"])
 def get_tv_updater_status():
     """Returns cluster deployment status, active stage, and device telemetry"""
+    if not tv_module_installed():
+        return jsonify({"installed": False, "status": "not_installed", "status_text": "Not installed"})
     force = request.args.get("refresh", "false").lower() == "true"
     is_deploying = is_deploying_tv
 
@@ -183,6 +193,7 @@ def get_tv_updater_status():
         status_text = f"{pending_cnt} Update{'s' if pending_cnt != 1 else ''} Pending"
 
     return jsonify({
+        "installed": True,
         "status": overall_status,
         "status_text": status_text,
         "is_deploying": is_deploying,
@@ -205,6 +216,8 @@ def get_tv_updater_status():
 @tv_updater_bp.route("/api/tv-updater/deploy", methods=["POST"])
 def trigger_tv_deployment():
     """Triggers opportunistic or forced deployment across all target TVs"""
+    if not tv_module_installed():
+        return jsonify(NOT_INSTALLED), 404
     global is_deploying_tv
     if is_deploying_tv:
         return jsonify({"success": False, "message": "Deployment is already in progress..."})
@@ -236,6 +249,8 @@ def trigger_tv_deployment():
 @tv_updater_bp.route("/api/tv-updater/sync-upstream", methods=["POST"])
 def trigger_upstream_sync():
     """Forces an immediate daily upstream check against GitHub and official releases"""
+    if not tv_module_installed():
+        return jsonify(NOT_INSTALLED), 404
     global is_deploying_tv
     if is_deploying_tv:
         return jsonify({"success": False, "message": "Another task is already in progress..."})
@@ -248,6 +263,8 @@ def trigger_upstream_sync():
 @tv_updater_bp.route("/api/tv-updater/install-app", methods=["POST"])
 def trigger_single_app_install():
     """Granular action: installs/updates a specific app on a specific TV with force support"""
+    if not tv_module_installed():
+        return jsonify(NOT_INSTALLED), 404
     req_data = request.get_json(silent=True) or {}
     device_id = req_data.get("device_id")
     package = req_data.get("package")
@@ -283,6 +300,8 @@ def trigger_single_app_install():
 @tv_updater_bp.route("/api/tv-updater/push-incoming", methods=["POST"])
 def trigger_push_incoming():
     """Pushes manual APK drops from incoming_apks/ to all online target TVs"""
+    if not tv_module_installed():
+        return jsonify(NOT_INSTALLED), 404
     global is_deploying_tv
     if is_deploying_tv:
         return jsonify({"success": False, "message": "Another task is already in progress..."})
