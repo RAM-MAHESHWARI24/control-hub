@@ -18,9 +18,17 @@ servers:
         default: 192.168.1.100
         description: LAN IP of the target homelab server
 
+# Every route except the public probes (/api/health, /api/livez, /api/readyz,
+# /api/docs, /api/openapi.yaml) requires `Authorization: Bearer <token>`.
+# The token lives in /etc/homelab/control-hub.token (shown by `./setup.sh token`);
+# whoever holds it controls a daemon that is root-equivalent on the host.
+security:
+  - bearerToken: []
+
 paths:
   /api/health:
     get:
+      security: []
       summary: Service Health Check
       description: Returns overall operational health status of the Control Hub daemon.
       tags: [Observability]
@@ -39,6 +47,7 @@ paths:
 
   /api/livez:
     get:
+      security: []
       summary: Liveness Probe
       description: Kubernetes-style liveness probe. Fast check to confirm the event loop is active.
       tags: [Observability]
@@ -54,6 +63,7 @@ paths:
 
   /api/readyz:
     get:
+      security: []
       summary: Readiness Probe
       description: Kubernetes-style readiness probe. Verifies downstream storage and telemetry subsystems.
       tags: [Observability]
@@ -289,8 +299,170 @@ paths:
   /api/config/update:
     post:
       summary: Update Configuration Settings
-      description: Updates specified configuration settings and synchronizes all downstream .env files.
+      description: >
+        Re-renders the module env files from the submitted configuration. On a blueprint
+        install /etc/homelab is root-owned, so this returns 403 with instructions to edit
+        /etc/homelab/config.json and re-run `sudo ./setup.sh --headless --config ...`.
       tags: [Configuration]
       responses:
         '200':
           description: Configuration updated
+        '403':
+          description: Environment directory is root-owned; apply the change through setup.sh
+
+  /api/auth/check:
+    get:
+      summary: Validate the bearer token
+      description: Returns 200 when the Authorization header carries the daemon's token, 401 otherwise.
+      tags: [Auth]
+      responses:
+        '200':
+          description: Token accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  authenticated: { type: boolean, example: true }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/config/netplan-preview:
+    post:
+      summary: Render the Netplan YAML for a static address
+      tags: [Configuration]
+      requestBody:
+        $ref: '#/components/requestBodies/NetplanChange'
+      responses:
+        '200':
+          description: Rendered YAML and the address it configures
+
+  /api/config/netplan-apply:
+    post:
+      summary: Apply a static IP with an armed revert timer
+      description: >
+        Backs up the current Netplan files, runs `netplan generate` and `netplan apply`, and arms
+        a transient systemd timer (default 120 s) that restores the backup unless
+        /api/config/netplan-confirm is called first. Runs through the privileged netplan_cli helper.
+      tags: [Configuration]
+      requestBody:
+        $ref: '#/components/requestBodies/NetplanChange'
+      responses:
+        '200':
+          description: Change applied; revert timer pending
+        '500':
+          description: Validation or apply failed; nothing changed
+
+  /api/config/netplan-confirm:
+    post:
+      summary: Keep the pending static IP change
+      description: Cancels the revert timer and deletes the backup. Call it from the new address.
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Change confirmed or nothing was pending
+
+  /api/config/netplan-status:
+    get:
+      summary: Is a static IP change awaiting confirmation?
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Pending state and seconds left on the revert timer
+
+  /api/indexers/status:
+    get:
+      summary: Indexer picker state
+      description: >
+        Whether the media module is installed (a Prowlarr API key exists), whether Prowlarr is
+        reachable and how many indexers are configured. The dashboard shows a one-time banner
+        while the count is zero.
+      tags: [Indexers]
+      responses:
+        '200':
+          description: installed / reachable / configured count
+        '404':
+          description: Media module not installed
+
+  /api/indexers/available:
+    get:
+      summary: Prowlarr's own indexer definition list
+      description: >
+        Fetched live from the user's Prowlarr (`indexer/schema`): name, protocol, privacy and the
+        credential fields private trackers need. The repository ships no tracker list and nothing
+        is pre-selected.
+      tags: [Indexers]
+      responses:
+        '200':
+          description: Definitions with count
+        '502':
+          description: Prowlarr did not answer
+
+  /api/indexers/add:
+    post:
+      summary: Add indexers chosen from the list
+      description: >
+        Adds up to 50 definitions by name through Prowlarr's API, filling any credential fields
+        given. Prowlarr's connection test runs on save unless `force` is true.
+      tags: [Indexers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [indexers]
+              properties:
+                indexers:
+                  type: array
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name: { type: string, example: "1337x" }
+                      fields:
+                        type: object
+                        additionalProperties: true
+                        description: Credential fields for private trackers, keyed by Prowlarr field name
+                force: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Per-indexer results
+        '400':
+          description: Malformed body
+
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: Contents of /etc/homelab/control-hub.token (or CONTROL_HUB_TOKEN when run standalone)
+  responses:
+    Unauthorized:
+      description: Missing or wrong bearer token
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: string, example: error }
+              error: { type: string, example: unauthorized }
+              hint: { type: string }
+  requestBodies:
+    NetplanChange:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [interface, ip]
+            properties:
+              interface: { type: string, example: enp3s0 }
+              ip: { type: string, example: 192.168.1.50/24 }
+              gateway: { type: string, example: 192.168.1.1 }
+              dns:
+                type: array
+                items: { type: string }
+                example: ["1.1.1.1", "8.8.8.8"]
+              timeout: { type: integer, default: 120, description: Seconds before the automatic revert }
