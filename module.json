@@ -1,0 +1,12 @@
+{
+  "name": "control-hub",
+  "description": "Token-protected homelab dashboard: health, downloads, cron jobs, Sleep Guard, static-IP changes and the Prowlarr indexer picker.",
+  "publish": true,
+  "repo": "RAM-MAHESHWARI24/control-hub",
+  "split_secret": "SPLIT_KEY_CONTROL_HUB",
+  "blueprint_modules": ["control_hub", "sleep_guard"],
+  "standalone": {
+    "install": "install.sh",
+    "requires": ["python3 >= 3.10 with venv, or Docker with Compose v2"]
+  }
+}

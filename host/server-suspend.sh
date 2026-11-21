@@ -128,7 +128,7 @@ sleep 5
 # ------------------------------------------------------------------------------
 # Post-wake hooks: every executable *.sh in the hooks directory runs once, in
 # name order, after resume. Modules drop their own recovery steps here (the
-# blueprint installs apps/mediaserver/host/post-wake-arr.sh as 50-mediaserver.sh).
+# blueprint installs the media stack's post-wake hook as 50-mediaserver.sh).
 # A failing hook is logged and never aborts the others.
 # ------------------------------------------------------------------------------
 HOOKS_DIR="${SERVER_SUSPEND_HOOKS_DIR:-/etc/server-suspend.d}"

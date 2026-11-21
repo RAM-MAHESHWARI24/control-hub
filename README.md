@@ -154,35 +154,30 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 
 ---
 
+> This repository is a read-only mirror of a folder in [homelab-blueprint](https://github.com/RAM-MAHESHWARI24/homelab-blueprint), published on every release. Please open issues and pull requests there.
+
 ## 🚀 Quickstart & Standalone Deployment
 
-Control Hub can run either as a **standalone Docker container** or as a **native systemd service**.
+Control Hub ships with the [homelab-blueprint](https://github.com/RAM-MAHESHWARI24/homelab-blueprint) installer. To run it on its own, next to an existing setup:
 
-### Option A: Standalone Docker (Fastest for Existing Homelabs)
 ```bash
-# 1. Clone standalone repository
 git clone https://github.com/RAM-MAHESHWARI24/control-hub.git
 cd control-hub
-
-# 2. Configure environment & launch container
-cp .env.example .env
-docker compose up -d
+./install.sh            # creates .env with a new access token and a Python venv
+./run.sh                # starts the dashboard on port 7575
 ```
-Open `http://<your-server-ip>:7575` in your browser.
 
-### Option B: Standalone Native Launcher
+Or in Docker:
+
 ```bash
-# Automatically creates virtualenv, installs requirements, and launches daemon
-./run.sh
+./install.sh --docker   # same .env, then docker compose up -d --build
 ```
 
-### Option C: Manual Installation
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python3 server.py
-```
+The script prints the dashboard link with the token. Anyone holding the token controls the host, so keep it private. Then edit `.env`:
+
+- `QBITTORRENT_URL`, `QBITTORRENT_USER`, `QBITTORRENT_PASS` for the downloads card. In Docker the default `http://host.docker.internal:8080` reaches a qBittorrent on the host.
+- `BACKUP_DIR` for the backup card, where your photo backups land.
+- `TV_UPDATER_DIR` and `TV_UPDATER_PY` only if you also run [tv-autoupdater](https://github.com/RAM-MAHESHWARI24/tv-autoupdater). Without them the TV card stays hidden.
 
 ---
 
