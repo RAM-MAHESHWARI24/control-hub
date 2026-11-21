@@ -909,8 +909,8 @@ def telemetry_worker():
             collective_storage_mbps = round(total_disk_read_mbps + total_disk_write_mbps, 2)
             collective_storage_mbs = round(total_disk_read_mbs + total_disk_write_mbs, 2)
 
-            # 5. Sample SMB and Jellyfin every 3 seconds (monotonic delta, never skips)
-            if now - last_slow_poll >= 3.0:
+            # 5. Sample SMB and Jellyfin every 15 seconds (monotonic delta, avoids sudo PAM log spam)
+            if now - last_slow_poll >= 15.0:
                 smb_clients = get_smb_sessions()
                 jellyfin_streams = get_jellyfin_streams()
                 last_slow_poll = now

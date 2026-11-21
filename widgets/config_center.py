@@ -52,9 +52,15 @@ config_center_bp = Blueprint("config_center", __name__)
 
 
 def _blueprint_env_path() -> Path:
-    """Rendered blueprint-wide env (/etc/homelab/homelab.env) or legacy/standalone fallbacks."""
-    for candidate in (ETC_DIR / "homelab.env", REPO_ROOT / ".env", HUB_ROOT / ".env", REPO_ROOT / ".env.example"):
-        if candidate.exists():
+    """First readable blueprint or hub env file; falls back to control-hub.env when homelab.env is 0600 root."""
+    for candidate in (
+        ETC_DIR / "homelab.env",
+        ETC_DIR / "control-hub.env",
+        REPO_ROOT / ".env",
+        HUB_ROOT / ".env",
+        REPO_ROOT / ".env.example",
+    ):
+        if candidate.exists() and os.access(candidate, os.R_OK):
             return candidate
     return REPO_ROOT / ".env.example"
 
@@ -99,7 +105,7 @@ def get_current_config():
             "puid": env_vars.get("PUID", "1000"),
             "pgid": env_vars.get("PGID", "1000"),
             "server_ip": env_vars.get("SERVER_IP", interfaces.get("current_ip", "")),
-            "timezone": env_vars.get("TIMEZONE", snapshot.get("timezone", "UTC")),
+            "timezone": env_vars.get("TIMEZONE") or env_vars.get("TZ") or snapshot.get("timezone", "UTC"),
             "ssd_root": env_vars.get("SSD_ROOT", "/"),
             "hdd_data": env_vars.get("HDD_DATA", "/mnt/hdd/data"),
             "hdd_memories": env_vars.get("HDD_MEMORIES", "/mnt/hdd/Memories"),

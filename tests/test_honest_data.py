@@ -554,6 +554,38 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
             self.assertIn("AMD VAAPI", hw["details"][0])
             self.assertNotIn("Intel", hw["details"][0])
 
+    def test_config_center_falls_back_to_readable_control_hub_env(self) -> None:
+        from widgets import config_center
+
+        etc_dir = self.root / "etc_homelab"
+        etc_dir.mkdir(parents=True, exist_ok=True)
+        root_only = etc_dir / "homelab.env"
+        hub_env = etc_dir / "control-hub.env"
+        root_only.write_text("HDD_DATA=/secret\n", encoding="utf-8")
+        hub_env.write_text(
+            "HDD_DATA=/mnt/hdd/data\nHDD_MEMORIES=/mnt/hdd/Memories\nTZ=Asia/Kolkata\nQBITTORRENT_PASS=supersecret\n",
+            encoding="utf-8",
+        )
+
+        orig_access = os.access
+
+        def fake_access(path, mode):
+            if Path(path) == root_only:
+                return False
+            if Path(path) == etc_dir and mode == os.W_OK:
+                return False
+            return orig_access(path, mode)
+
+        with mock.patch.object(config_center, "ETC_DIR", etc_dir), \
+             mock.patch("os.access", side_effect=fake_access):
+            resp = self.client.get("/api/config/current", headers=self.headers)
+            self.assertEqual(resp.status_code, 200)
+            payload = resp.get_json()
+            self.assertTrue(payload["read_only"])
+            self.assertEqual(payload["config"]["hdd_data"], "/mnt/hdd/data")
+            self.assertEqual(payload["config"]["timezone"], "Asia/Kolkata")
+            self.assertEqual(payload["config"]["qbittorrent_pass"], "********")
+
 
 if __name__ == "__main__":
     unittest.main()
