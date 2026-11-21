@@ -235,7 +235,9 @@ export async function fetchSpeedometers() {
     if (lanNicSpec) lanNicSpec.textContent = net.spec_text || "Link unknown";
     if (net.link_speed_mbps && lanTotalSub) {
       const linkLabel = net.link_speed_mbps >= 1000 ? `${(net.link_speed_mbps / 1000).toFixed(0)} Gbps` : `${net.link_speed_mbps} Mbps`;
-      lanTotalSub.textContent = `Ethernet Traffic • ${linkLabel} ${(net.duplex || "Full").toUpperCase() === "FULL" ? "Full Duplex" : "Half Duplex"}`;
+      const duplex = String(net.duplex || "").toLowerCase();
+      const duplexLabel = duplex === "full" ? "Full Duplex" : duplex === "half" ? "Half Duplex" : "duplex unknown";
+      lanTotalSub.textContent = `Ethernet Traffic • ${linkLabel} ${duplexLabel}`;
     }
 
     renderSpeedReadouts();
