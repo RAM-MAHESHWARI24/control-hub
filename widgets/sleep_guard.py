@@ -281,14 +281,8 @@ def shift_tonight():
 
         # Schedule transient one-shot timer via systemd-run
         cal_spec = target_sleep_dt.strftime("%Y-%m-%d %H:%M:00")
-        subprocess.run(["sudo", "systemctl", "stop", "server-suspend-override.timer"], stderr=subprocess.DEVNULL)
-        cmd = [
-            "sudo", "systemd-run",
-            f"--on-calendar={cal_spec}",
-            "--unit=server-suspend-override",
-            "/usr/local/sbin/server-suspend.sh", "--override"
-        ]
-        subprocess.run(cmd, check=True)
+        # The helper stops any earlier override timer and validates the time (see sudoers).
+        subprocess.run(["sudo", "/usr/local/sbin/server-suspend-override.sh", cal_spec], check=True)
 
         return jsonify({
             "success": True,
