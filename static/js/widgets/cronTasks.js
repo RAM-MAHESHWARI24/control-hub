@@ -74,7 +74,7 @@ export async function fetchCronTasks() {
           <div>
             <div class="cron-item-top">
               <div class="cron-item-brand">
-                <div class="cron-icon-box" aria-hidden="true">${uiIcon(spriteName)}</div>
+                <span class="cron-inline-icon" aria-hidden="true">${uiIcon(spriteName)}</span>
                 <div class="cron-title-group">
                   <h4>${safeName}</h4>
                   <span class="cron-schedule font-mono">${escapeHtml(job.schedule)}</span>

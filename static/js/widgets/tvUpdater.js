@@ -94,6 +94,10 @@ function renderTvStepper(currentStage, status) {
   const isDeploying = status === "deploying";
   const isError = status === "error";
   const isSynced = status === "synced";
+  const stepperEl = $("tv-stepper");
+  if (stepperEl) {
+    stepperEl.hidden = !(isDeploying || isError);
+  }
 
   steps.forEach(({ elem, num }) => {
     if (!elem) return;
@@ -353,9 +357,7 @@ function renderDeviceCards(devices) {
       <div class="tv-device-card ${isOnline ? "device-online" : "device-offline"}">
         <div class="tv-device-header">
           <div class="tv-device-title-wrap">
-            <div class="tv-device-icon-box" aria-hidden="true">
-              <svg class="ui-icon tv-icon"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
-            </div>
+            <svg class="ui-icon tv-icon text-muted" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
             <div>
               <div class="tv-device-name-row">
                 <h4>${nameButton(dev, "modal")}</h4>
@@ -476,7 +478,10 @@ export async function fetchTvUpdaterStatus(force = false) {
     if (tvClusterCount) {
       tvClusterCount.textContent = `${totalDevices} Device${totalDevices === 1 ? "" : "s"} (${onlineDevices} Online)`;
     }
-    if (tvStatusMsg) tvStatusMsg.textContent = data.message || "Ready";
+    if (tvStatusMsg) {
+      tvStatusMsg.textContent = data.message || "Ready";
+      tvStatusMsg.hidden = !isDeploying && !isError;
+    }
     if (tvLogSubPath && data.log_file) tvLogSubPath.textContent = `Log: ${data.log_file}`;
 
     if (tvValOnline) tvValOnline.textContent = `${onlineDevices}/${totalDevices} Online`;

@@ -11,7 +11,6 @@ import { setHostIdentity, setUptime } from "./header.js";
 import { renderOverview } from "./overview.js";
 
 const cpuTempBadge = $("cpu-temp-badge");
-const cpuLoadVal = $("cpu-load-val");
 const cpuStat = $("cpu-stat");
 const cpuProgress = $("cpu-progress");
 const ramStat = $("ram-stat");
@@ -56,7 +55,6 @@ export async function fetchVitals() {
 
     const cpu = data.cpu || {};
     const cpuLoad = typeof cpu.usage_percent === "number" ? cpu.usage_percent : 0;
-    if (cpuLoadVal) cpuLoadVal.textContent = `CPU: ${cpuLoad}%`;
     if (cpuStat) cpuStat.textContent = `${cpuLoad}% Load`;
     if (cpuProgress) cpuProgress.style.width = `${Math.min(100, cpuLoad)}%`;
     if (cpuTempBadge) {

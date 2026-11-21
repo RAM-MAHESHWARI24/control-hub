@@ -85,30 +85,28 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 
 ## ⚙️ Integrated Node Configuration Center (`widgets/config_center.py`)
 
-Accessible via the header button **⚙️ Settings** (`btn-open-config-center`), this 5-tab modal allows operators to inspect and reconfigure the homelab on the fly without editing `.env` files manually:
+Accessible via the header button **Config** (`btn-open-config-center`) or the `System -> Node Administration` panel, this 4-tab modal allows operators to inspect and reconfigure the homelab on the fly without editing `.env` files manually:
 
 ![Settings Hardlink Verification](docs/assets/hub_settings_hardlink_test.png)
 
-### Tab 1: Storage & Atomic Hardlinks
+### Tab 1: Storage & Identity
 * Real-time `os.link` hardlink inode validation probe with millisecond latency measurement.
-* Live directory path modification for Media Root (`DATA_ROOT_HOST`), Photo Storage (`MEMORIES_ROOT_HOST`), and App Configs (`CONFIG_ROOT_HOST`).
+* Live directory path modification for Media Data Root (`HDD_DATA`), Photo Library Root (`HDD_MEMORIES`), container `PUID`/`PGID` auto-detection, and host IANA timezone (`TIMEZONE`).
+* When managed by the blueprint installer (`/etc/homelab/config.json`), displays a read-only banner explaining how to apply path/secret updates via `sudo ./setup.sh --headless --config /etc/homelab/config.json` while keeping live hardlink probes, Port Matrix, and Netplan controls interactive.
 
-### Tab 2: 13-Service Port Matrix & Connectivity Prober
-* Live socket-level prober testing all 13 core homelab ports simultaneously.
-* Real-time badges (`ACTIVE` in green, `INACTIVE` in amber) for Jellyfin (8096), Seerr (5055), Sonarr (8989), Radarr (7878), Prowlarr (9696), Bazarr (6767), qBittorrent (8080/6881), Immich (2283), Control Hub (7575), Cockpit (9090), and Dozzle (8888).
+### Tab 2: Port Matrix & Live Socket Prober
+* Live socket-level prober testing all core homelab service ports simultaneously (`Bound` vs `Free`).
+* Real-time status cards for Jellyfin (`8096`), Seerr (`5055`), Sonarr (`8989`), Radarr (`7878`), Prowlarr (`9696`), Bazarr (`6767`), qBittorrent (`8080`/`6881`), Immich (`2283`), Control Hub (`7575`), Cockpit (`9090`), and Dozzle (`8888`).
 
 ![Settings Port Matrix](docs/assets/hub_settings_port_matrix.png)
 
-### Tab 3: Security & Secrets Generator
-* 1-Click CSPRNG generator for high-entropy alphanumeric passwords and 32-character hex API keys for all *arr services and PostgreSQL.
+### Tab 3: API Secrets & Credentials
+* 1-Click CSPRNG generator for high-entropy alphanumeric passwords and 32-character hex API keys for qBittorrent and all `*arr` services (stored values masked as `********`).
 
 ### Tab 4: Safe Netplan Static IP Manager
 * Inspects active network interface, gateway, and DNS servers.
-* Generates clean Ubuntu Netplan YAML.
-* Applies the change with an armed revert timer and keeps it only after confirmation from the new address, so you never get locked out over SSH.
-
-### Tab 5: Setup Wizard Fast Launcher
-* 1-Click button to launch the zero-dependency Onboarding Setup Wizard on port `8099` for full cluster re-provisioning.
+* Generates clean Ubuntu Netplan YAML for preview before applying.
+* Applies the change with an armed 120s revert timer (`homelab-netplan-revert.timer`) and keeps it only after confirmation from the new address, so you never get locked out over SSH.
 
 ---
 

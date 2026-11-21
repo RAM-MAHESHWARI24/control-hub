@@ -147,6 +147,10 @@ function renderBackupStepper(currentStage, status) {
   const isSyncing = status === "syncing";
   const isError = status === "error";
   const isSynced = status === "synced";
+  const stepperEl = $("sync-stepper");
+  if (stepperEl) {
+    stepperEl.hidden = !(isSyncing || isError);
+  }
 
   steps.forEach(({ elem, num }) => {
     if (!elem) return;
