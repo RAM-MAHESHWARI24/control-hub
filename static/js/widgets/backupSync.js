@@ -20,6 +20,11 @@ const backupPreflight = $("backup-preflight");
 const backupHistory = $("backup-history");
 const backupHistoryCount = $("backup-history-count");
 const backupRetention = $("backup-retention");
+const mediaBackup = $("media-backup");
+const mediaBackupBadge = $("media-backup-badge");
+const mediaBackupLine = $("media-backup-line");
+const mediaBackupMsg = $("media-backup-msg");
+const btnMediaBackupRun = $("btn-media-backup-run");
 const backupLastTime = $("backup-last-time");
 const backupDbSize = $("backup-db-size");
 const backupRemoteMirror = $("backup-remote-mirror");
@@ -265,6 +270,47 @@ function renderHealth(health, data) {
   }
 }
 
+function renderMediaBackup(media) {
+  if (!mediaBackup) return;
+  mediaBackup.hidden = !media;
+  if (!media) return;
+  const [cls, label] = BADGES[media.state] || BADGES.unknown;
+  if (mediaBackupBadge) {
+    mediaBackupBadge.className = cls;
+    mediaBackupBadge.textContent = label;
+  }
+  if (mediaBackupLine) {
+    const parts = [];
+    parts.push(media.last_good ? `Last good: ${media.last_good} (${media.age})` : "No good run yet");
+    if (media.archive_size) parts.push(media.archive_size);
+    if (media.next_run) parts.push(`next ${media.next_run}`);
+    mediaBackupLine.textContent = parts.join(" · ");
+  }
+  if (mediaBackupMsg) {
+    const show = media.is_red || media.state === "syncing";
+    mediaBackupMsg.hidden = !show;
+    mediaBackupMsg.textContent = show ? (media.state === "syncing" ? "Backing up the media apps' settings..." : media.message) : "";
+  }
+  if (btnMediaBackupRun) {
+    btnMediaBackupRun.hidden = !media.can_run;
+    btnMediaBackupRun.disabled = media.state === "syncing";
+  }
+  if (backupSection && media.is_red) backupSection.classList.add("is-alert");
+}
+
+async function runMediaBackup() {
+  if (btnMediaBackupRun) btnMediaBackupRun.disabled = true;
+  try {
+    const res = await fetch(ENDPOINTS.backupMediaRun, { method: "POST" });
+    const data = await res.json();
+    showToast(data.success ? "Media backup started" : "Not started", data.message || "", data.success ? "☁️" : "⚠️");
+  } catch (_) {
+    showToast("Not started", "The Control Hub did not answer.", "❌");
+  } finally {
+    setTimeout(fetchBackupStatus, 2000);
+  }
+}
+
 let logPollTimer = null;
 
 function syncLogPolling(isSyncing) {
@@ -303,6 +349,7 @@ export async function fetchBackupStatus() {
     updateSyncUiState(isSyncing);
     renderBackupStepper(stage, isSyncing ? "syncing" : (status === "error" || status === "interrupted" ? "error" : status));
     renderHealth(health, data);
+    renderMediaBackup(data.media || null);
     syncLogPolling(isSyncing);
 
     if (backupStatusBadge) {
@@ -515,6 +562,7 @@ export function setupBackupSync() {
   registerModal(immichLibraryModal, { closeButtons: [immichModalClose, immichModalDismiss] });
 
   if (btnSyncCard) btnSyncCard.addEventListener("click", triggerBackupSync);
+  if (btnMediaBackupRun) btnMediaBackupRun.addEventListener("click", runMediaBackup);
   if (btnModalTriggerSync) btnModalTriggerSync.addEventListener("click", triggerBackupSync);
   if (btnViewBackupLog) btnViewBackupLog.addEventListener("click", () => openBackupLogModal(btnViewBackupLog));
   if (backupModalRefresh) backupModalRefresh.addEventListener("click", refreshBackupLog);

@@ -152,6 +152,9 @@ class TestCollectors(unittest.TestCase):
         summary = {"state": "stale", "message": "x", "stale": True, "last_good": "2026-11-20 22:06", "age": "2 days ago"}
         self.assertEqual([c.rule for c in alerts.collect_backup({"x": 1}, summary)], ["backup_stale"])
         self.assertEqual(alerts.collect_backup(None, None), [])
+        media = alerts.collect_backup({"x": 1}, {"state": "error", "message": "Upload failed", "stale": False}, what="media")
+        self.assertEqual([(c.key, c.rule, c.title) for c in media],
+                         [("backup_failed:media", "backup_failed", "Media settings backup failed or was interrupted")])
 
     def test_disks(self):
         gb = 1024**3

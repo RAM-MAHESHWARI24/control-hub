@@ -25,6 +25,9 @@ from config import (
     GDRIVE_REMOTE,
     HDD_DATA,
     HDD_MEMORIES,
+    MEDIA_BACKUP_CRON_FILE,
+    MEDIA_BACKUP_SCRIPT,
+    MEDIA_BACKUP_STATUS_FILE,
     STORAGE_SIZES_CACHE_FILE,
     get_host_timezone,
     get_tz_abbr,
@@ -352,6 +355,7 @@ def get_backup_status():
         "reason": reason,
         "schedule": _schedule_text(),
         "health": health,
+        "media": media_backup_summary(),
         "gdrive_remote": lib_meta.get("gdrive_remote"),
         "log_file": BACKUP_LOG_FILE,
         "memories_dir": HDD_MEMORIES,
@@ -372,6 +376,40 @@ def get_backup_status():
         "total_face_instances": asset_info.get("total_face_instances"),
         "assets_reason": lib_meta.get("assets_reason"),
     })
+
+
+def media_backup_summary():
+    """The media apps' settings backup, or None when it is not installed here."""
+    status = backup_health.read_status(MEDIA_BACKUP_STATUS_FILE)
+    hm = backup_health.cron_time(MEDIA_BACKUP_CRON_FILE, "media_config_backup.py")
+    if status is None and hm is None:
+        return None
+    running = False
+    try:
+        res = subprocess.run(["pgrep", "-f", "media_config_backup.py"], stdout=subprocess.PIPE, text=True, timeout=1.5)
+        running = bool(res.stdout.strip())
+    except Exception:
+        pass
+    health = backup_health.summarize(status, running=running, schedule=hm, tz_abbr=get_tz_abbr(),
+                                     stale_after_hours=BACKUP_STALE_HOURS)
+    size = (status or {}).get("dump_bytes")
+    health["archive"] = (status or {}).get("dump_file")
+    health["archive_size"] = backup_health.human_bytes(size) if size else None
+    health["can_run"] = bool(MEDIA_BACKUP_SCRIPT and os.path.isfile(MEDIA_BACKUP_SCRIPT))
+    return health
+
+
+@backup_sync_bp.route("/api/backup/media/run", methods=["POST"])
+def run_media_backup():
+    """Starts the media settings backup now (it moves itself into its own systemd unit)."""
+    if not MEDIA_BACKUP_SCRIPT or not os.path.isfile(MEDIA_BACKUP_SCRIPT):
+        return jsonify({"success": False, "message": "The media settings backup is not installed."}), 404
+    res = subprocess.run(["pgrep", "-f", "media_config_backup.py"], stdout=subprocess.PIPE, text=True, timeout=2)
+    if res.stdout.strip():
+        return jsonify({"success": False, "message": "A media settings backup is already running."})
+    subprocess.Popen(["sudo", "/usr/bin/python3", MEDIA_BACKUP_SCRIPT], stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+    return jsonify({"success": True, "message": "Media settings backup started."})
 
 
 @backup_sync_bp.route("/api/backup/sync", methods=["POST"])

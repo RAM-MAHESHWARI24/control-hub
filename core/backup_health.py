@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 STALE_AFTER_HOURS = 26
 HISTORY_SHOWN = 7
-_CRON_LINE = re.compile(r"^\s*(\S+)\s+(\S+)\s+\S+\s+\S+\s+\S+\s+\S+\s+.*immich_backup_gdrive\.sh")
+_CRON_FIELDS = r"^\s*(\S+)\s+(\S+)\s+\S+\s+\S+\s+\S+\s+\S+\s+.*"
 
 
 def read_status(path: str) -> Optional[Dict[str, Any]]:
@@ -44,14 +44,15 @@ def _parse(ts: Optional[str]) -> Optional[datetime]:
     return dt if dt.tzinfo else dt.astimezone()
 
 
-def cron_time(cron_file: str) -> Optional[tuple]:
-    """(hour, minute) of the daily backup line in the cron file, or None."""
+def cron_time(cron_file: str, script: str = "immich_backup_gdrive.sh") -> Optional[tuple]:
+    """(hour, minute) of the daily line that runs `script` in the cron file, or None."""
+    pattern = re.compile(_CRON_FIELDS + re.escape(script))
     try:
         text = Path(cron_file).read_text(encoding="utf-8")
     except OSError:
         return None
     for line in text.splitlines():
-        m = _CRON_LINE.match(line)
+        m = pattern.match(line)
         if m and m.group(1).isdigit() and m.group(2).isdigit():
             return int(m.group(2)), int(m.group(1))
     return None

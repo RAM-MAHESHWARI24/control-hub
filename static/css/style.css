@@ -1104,6 +1104,36 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+/* Media app settings backup (inside the backup card) */
+.media-backup {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.media-backup-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.media-backup-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.media-backup-line {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* TV names: nickname button, hover summary, details panel with rename */
 .tv-name-btn {
   min-height: 44px;
@@ -1139,7 +1169,9 @@ button:disabled {
 
 /* Author display rules beat the hidden attribute; restore it for toggled panels. */
 .tv-info-panel[hidden],
-.backup-preflight[hidden] {
+.backup-preflight[hidden],
+.media-backup[hidden],
+.media-backup [hidden] {
   display: none;
 }
 

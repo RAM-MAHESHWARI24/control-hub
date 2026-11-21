@@ -429,6 +429,16 @@
               <ol class="backup-history" id="backup-history" aria-label="Recent backup runs, newest first"></ol>
               <p class="status-note-text" id="backup-retention"></p>
             </details>
+
+            <div class="media-backup" id="media-backup" hidden>
+              <div class="media-backup-head">
+                <h3 class="media-backup-title">Media app settings</h3>
+                <span class="badge-status-unknown" id="media-backup-badge">Not run yet</span>
+              </div>
+              <p class="media-backup-line" id="media-backup-line"></p>
+              <p class="status-note-text" id="media-backup-msg" hidden></p>
+              <button type="button" class="btn-tile-logs" id="btn-media-backup-run" hidden>Back up now</button>
+            </div>
           </div>
         </section>
 

@@ -268,6 +268,21 @@ paths:
         '200':
           description: Backup execution telemetry
 
+  /api/backup/media/run:
+    post:
+      summary: Back up the media apps' settings now
+      description: >-
+        Starts the media module's settings backup (it moves itself into its own systemd unit).
+        Its state appears under `media` in /api/backup/status: the same health fields as the
+        photo backup plus `archive`, `archive_size` and `can_run`; `media` is null when the
+        backup is not installed.
+      tags: [Backup]
+      responses:
+        '200':
+          description: "{success, message}; success is false when a run is already in progress"
+        '404':
+          description: Not installed (MEDIA_BACKUP_SCRIPT is not set)
+
   /api/backup/sync:
     post:
       summary: Trigger On-Demand Cloud Backup

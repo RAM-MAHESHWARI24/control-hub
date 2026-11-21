@@ -155,6 +155,13 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
     media_admin_pass = config["media_admin_pass"]
 
     tv_enabled = any(str(m) in ("tv_autoupdater", "tv_updater", "tv-updater") for m in (config.get("enabled_services") or []))
+    services = [str(m) for m in (config.get("enabled_services") or ["media", "photos", "control_hub"])]
+    media_backup_enabled = (
+        any(m in ("media", "mediaserver") for m in services)
+        and any(m in ("photo_backup", "immich_backup") for m in services)
+        and bool(config.get("gdrive_remote"))
+        and config.get("media_backup", True) is not False
+    )
 
     def render(module_id: str, module_dir: Path, updates: Dict[str, Any]) -> Path:
         template = module_dir / ".env.example"
@@ -269,6 +276,8 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                 "GDRIVE_REMOTE": config.get("gdrive_remote", ""),
                 "TZ": tz,
                 # Set only when the TV module is part of this install; empty hides the TV card.
+                # "Back up now" for the media apps' settings; empty hides the button.
+                "MEDIA_BACKUP_SCRIPT": str(root_path / "apps" / "mediaserver" / "scripts" / "media_config_backup.py") if media_backup_enabled else "",
                 "TV_UPDATER_DIR": str(root_path / "apps" / "tv-autoupdater") if tv_enabled else "",
                 "TV_UPDATER_PY": str(root_path / "apps" / "tv-autoupdater" / "tv_updater.py") if tv_enabled else "",
                 "TV_UPDATER_STATE_FILE": str(_STATE_DIR / "tv-autoupdater" / "state.json"),

@@ -67,8 +67,8 @@ DEFAULT_CONFIG: Dict = {
 }
 
 RULE_INFO = {
-    "backup_failed": ("Photo backup failed or was interrupted", "critical"),
-    "backup_stale": ("No good photo backup for more than 26 hours", "warning"),
+    "backup_failed": ("Backup failed or was interrupted (photos, media settings)", "critical"),
+    "backup_stale": ("No good backup for more than 26 hours (photos, media settings)", "warning"),
     "drive_unreachable": ("Backup remote not reachable (Drive login expired or remote renamed)", "critical"),
     "disk_warning": ("Disk filling up", "warning"),
     "disk_critical": ("Disk almost full", "critical"),
@@ -359,22 +359,28 @@ def evaluate(config: Dict, state: Dict, conditions: List[Condition], now: dateti
 
 # ---------------------------------------------------------------- collectors
 
-def collect_backup(status: Optional[Dict], summary: Optional[Dict]) -> List[Condition]:
+BACKUP_LABELS = {"photo": "Photo backup", "media": "Media settings backup"}
+
+
+def collect_backup(status: Optional[Dict], summary: Optional[Dict], what: str = "photo") -> List[Condition]:
+    """Alerts for one backup job; `what` names it in the message ("photo" keeps the original keys)."""
     if not status or not summary:
         return []
+    label = BACKUP_LABELS.get(what, f"{what.capitalize()} backup")
+    suffix = "" if what == "photo" else f":{what}"
     out = []
     pre = status.get("preflight") or {}
     remote_failed = any(c.get("name") == "remote" and not c.get("ok") for c in pre.get("checks") or [])
     title, sev = RULE_INFO["drive_unreachable"]
     if summary["state"] == "error" and remote_failed:
-        out.append(Condition("drive_unreachable", "drive_unreachable", sev, title, summary["message"]))
+        out.append(Condition(f"drive_unreachable{suffix}", "drive_unreachable", sev, f"{label}: {title}", summary["message"]))
     elif summary["state"] in ("error", "interrupted"):
-        t, s = RULE_INFO["backup_failed"]
-        out.append(Condition("backup_failed", "backup_failed", s, t, summary["message"]))
+        out.append(Condition(f"backup_failed{suffix}", "backup_failed", "critical",
+                             f"{label} failed or was interrupted", summary["message"]))
     if summary.get("stale"):
-        t, s = RULE_INFO["backup_stale"]
-        out.append(Condition("backup_stale", "backup_stale", s, t,
-                             f"Last good backup: {summary.get('last_good') or 'never'} ({summary.get('age') or 'unknown'})."))
+        out.append(Condition(f"backup_stale{suffix}", "backup_stale", "warning",
+                             f"{label}: no good run for more than {int(summary.get('stale_after_hours') or 26)} hours",
+                             f"Last good run: {summary.get('last_good') or 'never'} ({summary.get('age') or 'unknown'})."))
     return out
 
 

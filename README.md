@@ -45,6 +45,7 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 * Reads only `status.json` from the backup script (no `sudo rclone`): last good run and its age, next run, Drive usage, the last 7 runs, and what retention kept and will delete next.
 * Turns red when the last run failed, was interrupted, or the last good run is older than 26 hours (`BACKUP_STALE_HOURS`). A failed pre-flight lists each check and why it failed.
 * "Run backup now" starts the same script as the nightly job and shows its log live.
+* A **Media app settings** row shows the media module's nightly settings backup (databases and config of the media apps) with **Back up now** (`MEDIA_BACKUP_SCRIPT`, `MEDIA_BACKUP_STATUS_FILE`).
 * Displays master photo and video library storage consumption.
 
 ### 4b. 🔔 Alerts (`widgets/alerts.py`, `core/alerts.py`)
@@ -140,6 +141,7 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `PUT` | `/api/alerts/config` | Save alert channels, rules and quiet hours |
 | `POST` | `/api/alerts/test` | Send a test message to one channel |
 | `POST` | `/api/alerts/check` | Check every alert rule now |
+| `POST` | `/api/backup/media/run` | Back up the media apps' settings now |
 | `GET` | `/api/services/status` | Health status and container IDs for all services |
 | `GET` | `/api/services/logs/<service>?tail=50` | Direct Docker log stream |
 | `GET` | `/api/tv/status` | Android TV fleet ADB update status |

@@ -65,6 +65,11 @@ BACKUP_STATUS_FILE = os.getenv("BACKUP_STATUS_FILE", os.path.join(BACKUP_DIR, "s
 # The nightly schedule (and the settings "Run backup now" uses) live in this cron file.
 BACKUP_CRON_FILE = os.getenv("BACKUP_CRON_FILE", "/etc/cron.d/immich-backup")
 BACKUP_STALE_HOURS = float(os.getenv("BACKUP_STALE_HOURS", "26"))
+# Media apps' settings backup (the media module's media_config_backup.py), when installed.
+MEDIA_BACKUP_DIR = os.getenv("MEDIA_BACKUP_DIR", str(STATE_DIR / "media-backups"))
+MEDIA_BACKUP_STATUS_FILE = os.getenv("MEDIA_BACKUP_STATUS_FILE", os.path.join(MEDIA_BACKUP_DIR, "status.json"))
+MEDIA_BACKUP_CRON_FILE = os.getenv("MEDIA_BACKUP_CRON_FILE", "/etc/cron.d/media-backup")
+MEDIA_BACKUP_SCRIPT = os.getenv("MEDIA_BACKUP_SCRIPT", "")
 HDD_DATA = os.getenv("HDD_DATA", "/mnt/hdd/data")
 HDD_MEMORIES = os.getenv("HDD_MEMORIES", "/mnt/hdd/Memories")
 GDRIVE_REMOTE = os.getenv("GDRIVE_REMOTE", "")

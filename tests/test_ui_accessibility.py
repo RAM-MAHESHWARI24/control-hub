@@ -128,6 +128,8 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             mock.patch.object(cron_tasks, "BACKUP_STATUS_FILE", str(root / "backups" / "status.json")),
             mock.patch.object(tv_updater, "TV_UPDATER_PY", ""),
             mock.patch.object(tv_updater, "TV_UPDATER_STATE_FILE", ""),
+            mock.patch.object(backup_sync, "MEDIA_BACKUP_STATUS_FILE", str(root / "media-backups" / "status.json")),
+            mock.patch.object(backup_sync, "MEDIA_BACKUP_CRON_FILE", str(root / "media-backup.cron")),
             mock.patch.object(alerts_widget.engine, "config_path", root / "alerts.json"),
             mock.patch.object(alerts_widget.engine, "state_path", root / "alerts_state.json"),
         ]
@@ -150,6 +152,16 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 {"started_at": "2026-11-21T22:00:01+05:30", "outcome": "synced", "dump_file": "immich_db_20261121_220001.sql.gz",
                  "dump_bytes": 356271570, "files": 12, "bytes": 48000000, "duration_s": 360},
             ],
+        }), encoding="utf-8")
+
+        media_dir = root / "media-backups"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        (media_dir / "status.json").write_text(json.dumps({
+            "status": "synced", "stage": 4, "message": "Media settings backed up to gdrive:Media_Backup",
+            "started_at": "2026-11-22T21:30:01+05:30", "completed_at": "2026-11-22T21:30:09+05:30",
+            "last_good_at": "2026-11-22T21:30:09+05:30", "remote": "gdrive:",
+            "dump_file": "media_config_20261122_213001.tar.zst", "dump_bytes": 19454318,
+            "history": [{"started_at": "2026-11-22T21:30:01+05:30", "outcome": "synced", "duration_s": 8}],
         }), encoding="utf-8")
 
         cls.password = "PlaywrightTestPass1!"
@@ -366,6 +378,10 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertIn("Failed", runs.nth(0).inner_text())
             self.assertIn("339.8 MB", runs.nth(1).inner_text())
             self.assertIn("next run deletes immich_db_20261108_220001.sql.gz", page.inner_text("#backup-retention"))
+            self.assertTrue(page.is_visible("#media-backup"))
+            self.assertEqual(page.inner_text("#media-backup-badge"), "Verified")
+            self.assertIn("18.6 MB", page.inner_text("#media-backup-line"))
+            self.assertFalse(page.is_visible("#btn-media-backup-run"), "no button without the script")
             self._assert_layout_and_touch_targets(page, 360)
             self._assert_axe_wcag_aa(page, "backup-card@360x800")
             self.assertEqual(page_errors, [])

@@ -17,6 +17,8 @@ from config import (
     BACKUP_STALE_HOURS,
     BACKUP_STATUS_FILE,
     HDD_DATA,
+    MEDIA_BACKUP_CRON_FILE,
+    MEDIA_BACKUP_STATUS_FILE,
     HDD_MEMORIES,
     SERVICES_CATALOG,
     TV_UPDATER_LOG_FILE,
@@ -36,6 +38,14 @@ def _backup_running() -> bool:
         return False
 
 
+def _media_backup_running() -> bool:
+    try:
+        res = subprocess.run(["pgrep", "-f", "media_config_backup.py"], capture_output=True, text=True, timeout=2)
+        return bool(res.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def collect(engine: alerts.AlertEngine, state: dict) -> list:
     """Reads every source once and returns what is wrong right now."""
     config = engine.config()
@@ -48,6 +58,15 @@ def collect(engine: alerts.AlertEngine, state: dict) -> list:
             tz_abbr=get_tz_abbr(), stale_after_hours=BACKUP_STALE_HOURS,
         )
         conditions += alerts.collect_backup(status, summary)
+
+    media = backup_health.read_status(MEDIA_BACKUP_STATUS_FILE)
+    if media is not None:
+        summary = backup_health.summarize(
+            media, running=_media_backup_running(),
+            schedule=backup_health.cron_time(MEDIA_BACKUP_CRON_FILE, "media_config_backup.py"),
+            tz_abbr=get_tz_abbr(), stale_after_hours=BACKUP_STALE_HOURS,
+        )
+        conditions += alerts.collect_backup(media, summary, what="media")
 
     mounts = ["/"] + [p for p in (HDD_DATA, HDD_MEMORIES) if p]
     conditions += alerts.collect_disks(config, mounts)

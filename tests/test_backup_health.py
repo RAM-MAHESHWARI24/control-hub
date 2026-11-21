@@ -77,6 +77,10 @@ class TestSchedule(unittest.TestCase):
             cron = Path(tmp) / "immich-backup"
             cron.write_text("GDRIVE_REMOTE=x:\n30 21 * * * root /usr/local/sbin/immich_backup_gdrive.sh >> /x 2>&1\n", encoding="utf-8")
             self.assertEqual(backup_health.cron_time(str(cron)), (21, 30))
+            self.assertIsNone(backup_health.cron_time(str(cron), "media_config_backup.py"))
+            media = Path(tmp) / "media-backup"
+            media.write_text("30 21 * * * root /usr/bin/python3 /opt/x/scripts/media_config_backup.py >> /x 2>&1\n", encoding="utf-8")
+            self.assertEqual(backup_health.cron_time(str(media), "media_config_backup.py"), (21, 30))
             self.assertIsNone(backup_health.cron_time(str(Path(tmp) / "missing")))
         after = datetime(2026, 11, 22, 23, 0, tzinfo=IST)
         self.assertEqual(backup_health.next_run((22, 0), after).day, 23)
