@@ -8,6 +8,19 @@ const modalStack = [];
 const modalConfigs = new WeakMap();
 let listenersBound = false;
 
+function syncBackgroundInert() {
+  const active = modalStack.length > 0;
+  document.querySelectorAll(".hub-header, .hub-shell").forEach((node) => {
+    if (active) {
+      node.setAttribute("aria-hidden", "true");
+      node.inert = true;
+    } else {
+      node.removeAttribute("aria-hidden");
+      node.inert = false;
+    }
+  });
+}
+
 function getFocusableElements(container) {
   const selector = [
     "a[href]",
@@ -109,6 +122,7 @@ export function openModal(modalEl, triggerEl = null) {
   });
 
   modalEl.style.display = "flex";
+  syncBackgroundInert();
   const dialogBox = modalEl.querySelector(".modal-glass") || modalEl;
   const focusable = getFocusableElements(dialogBox);
   if (focusable.length > 0) {
@@ -133,6 +147,7 @@ export function closeModal(modalEl) {
     previousFocus = modalStack[idx].previousFocus;
     modalStack.splice(idx, 1);
   }
+  syncBackgroundInert();
 
   if (previousFocus && typeof previousFocus.focus === "function" && document.contains(previousFocus)) {
     previousFocus.focus();
