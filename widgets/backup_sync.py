@@ -20,6 +20,7 @@ from config import (
     BACKUP_CRON_FILE,
     BACKUP_DIR,
     BACKUP_LOG_FILE,
+    BACKUP_REMOTE_HELPER,
     BACKUP_STALE_HOURS,
     BACKUP_STATUS_FILE,
     GDRIVE_REMOTE,
@@ -359,6 +360,7 @@ def get_backup_status():
         "health": health,
         "media": media_backup_summary(),
         "restore": restore_test_info(),
+        "remote_editable": os.path.isfile(BACKUP_REMOTE_HELPER),
         "gdrive_remote": lib_meta.get("gdrive_remote"),
         "log_file": BACKUP_LOG_FILE,
         "memories_dir": HDD_MEMORIES,
@@ -417,6 +419,45 @@ def restore_test_info():
     except Exception:
         pass
     return info
+
+
+def _remote_helper(*args, timeout=180):
+    """Runs the root helper through sudo and returns (http_status, json)."""
+    if not os.path.isfile(BACKUP_REMOTE_HELPER):
+        return 404, {"ok": False, "error": "Changing the remote is not available on this install."}
+    try:
+        res = subprocess.run(["sudo", BACKUP_REMOTE_HELPER, *args], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 504, {"ok": False, "error": "The remote did not answer in time."}
+    try:
+        data = json.loads(res.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return 500, {"ok": False, "error": (res.stderr or "The helper gave no answer.").strip()[:200]}
+    return 200, data
+
+
+@backup_sync_bp.route("/api/backup/remotes", methods=["GET"])
+def list_backup_remotes():
+    """rclone remotes configured for root on this server, and the one the backups use."""
+    code, data = _remote_helper("list", timeout=30)
+    return jsonify(data), code
+
+
+@backup_sync_bp.route("/api/backup/remote/test", methods=["POST"])
+def test_backup_remote():
+    remote = str((request.get_json(silent=True) or {}).get("remote", ""))
+    code, data = _remote_helper("test", remote)
+    return jsonify(data), code
+
+
+@backup_sync_bp.route("/api/backup/remote", methods=["PUT"])
+def set_backup_remote():
+    """Switches the photo and media backups to another remote (tested first by the helper)."""
+    remote = str((request.get_json(silent=True) or {}).get("remote", ""))
+    code, data = _remote_helper("set", remote)
+    if data.get("ok"):
+        immich_library_stats_cache["last_fetched"] = 0
+    return jsonify(data), code
 
 
 @backup_sync_bp.route("/api/backup/restore-test", methods=["POST"])

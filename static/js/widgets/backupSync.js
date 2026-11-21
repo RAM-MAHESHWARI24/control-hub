@@ -28,6 +28,15 @@ const btnMediaBackupRun = $("btn-media-backup-run");
 const restoreTest = $("restore-test");
 const restoreTestText = $("restore-test-text");
 const btnRestoreTestRun = $("btn-restore-test-run");
+const btnChangeRemote = $("btn-change-remote");
+const remoteModal = $("remote-modal");
+const remoteSelect = $("remote-select");
+const remoteFolder = $("remote-folder");
+const remoteResult = $("remote-result");
+const remoteCurrent = $("remote-current");
+const remoteSave = $("remote-save");
+const remoteTestBtn = $("remote-test");
+let testedRemote = null;
 const backupLastTime = $("backup-last-time");
 const backupDbSize = $("backup-db-size");
 const backupRemoteMirror = $("backup-remote-mirror");
@@ -310,6 +319,113 @@ async function runRestoreTest() {
   }
 }
 
+function chosenRemote() {
+  const name = remoteSelect ? remoteSelect.value : "";
+  const folder = remoteFolder ? remoteFolder.value.trim().replace(/^\/+/, "") : "";
+  if (!name) return "";
+  return `${name}:${folder ? `${folder.replace(/\/+$/, "")}/` : ""}`;
+}
+
+function showRemoteResult(items, isError = false) {
+  if (!remoteResult) return;
+  remoteResult.replaceChildren();
+  remoteResult.className = `remote-result ${isError ? "is-error" : ""}`;
+  items.forEach((text) => remoteResult.append(el("p", "", text)));
+}
+
+function onRemoteInput() {
+  testedRemote = null;
+  if (remoteSave) remoteSave.disabled = true;
+  showRemoteResult([]);
+}
+
+async function openRemoteModal() {
+  if (!remoteModal) return;
+  onRemoteInput();
+  openModal(remoteModal, btnChangeRemote);
+  showRemoteResult(["Reading the remotes configured on the server..."]);
+  try {
+    const res = await fetch(ENDPOINTS.backupRemotes);
+    const data = await res.json();
+    if (!res.ok || data.ok === false) {
+      showRemoteResult([data.error || "Could not read the remotes."], true);
+      return;
+    }
+    const current = data.current || "";
+    if (remoteCurrent) remoteCurrent.textContent = current || "Not set";
+    const [curName, curPath] = [current.split(":")[0], current.split(":").slice(1).join(":")];
+    remoteSelect.replaceChildren();
+    (data.remotes || []).forEach((r) => {
+      const opt = el("option", "", `${r.name} (${r.type})`);
+      opt.value = r.name;
+      if (r.name === curName) opt.selected = true;
+      remoteSelect.append(opt);
+    });
+    if (remoteFolder) remoteFolder.value = curPath || "";
+    showRemoteResult((data.remotes || []).length ? [] : ["No rclone remotes are configured for root. Run sudo rclone config on the server."], !(data.remotes || []).length);
+  } catch (_) {
+    showRemoteResult(["The Control Hub did not answer."], true);
+  }
+}
+
+function gb(bytes) {
+  return typeof bytes === "number" ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : "unknown";
+}
+
+async function testRemote() {
+  const remote = chosenRemote();
+  if (!remote) return;
+  if (remoteTestBtn) remoteTestBtn.disabled = true;
+  showRemoteResult([`Testing ${remote}...`]);
+  try {
+    const res = await fetch(ENDPOINTS.backupRemoteTest, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remote }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showRemoteResult([`${remote} cannot be used: ${data.error}`], true);
+      return;
+    }
+    const f = data.folders || {};
+    const lines = [`${data.remote} answers. Free space: ${gb(data.free_bytes)} of ${gb(data.total_bytes)}.`];
+    lines.push(f.Memories
+      ? "It already has a Memories folder: the next photo backup only uploads what changed."
+      : "It has no Memories folder yet: the next photo backup uploads the whole photo library, which can take many hours.");
+    lines.push(f["Immich_Backup/database"] ? "Database dumps folder: present." : "Database dumps folder: created by the next backup.");
+    lines.push(f.Media_Backup ? "Media settings folder: present." : "Media settings folder: created by the next backup.");
+    showRemoteResult(lines);
+    testedRemote = data.remote;
+    if (remoteSave) remoteSave.disabled = false;
+  } catch (_) {
+    showRemoteResult(["The Control Hub did not answer."], true);
+  } finally {
+    if (remoteTestBtn) remoteTestBtn.disabled = false;
+  }
+}
+
+async function saveRemote() {
+  if (!testedRemote) return;
+  if (remoteSave) remoteSave.disabled = true;
+  try {
+    const res = await fetch(ENDPOINTS.backupRemote, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remote: testedRemote }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showRemoteResult([data.error || "Not changed."], true);
+      return;
+    }
+    if (remoteCurrent) remoteCurrent.textContent = data.remote;
+    showRemoteResult([`Both backups now use ${data.remote}, starting with the next run.`]);
+    showToast("Backup remote changed", `Now ${data.remote}.`, "☁️");
+    testedRemote = null;
+    fetchBackupStatus();
+  } catch (_) {
+    showRemoteResult(["The Control Hub did not answer."], true);
+    if (remoteSave) remoteSave.disabled = false;
+  }
+}
+
 function renderMediaBackup(media) {
   if (!mediaBackup) return;
   mediaBackup.hidden = !media;
@@ -390,6 +506,7 @@ export async function fetchBackupStatus() {
     renderBackupStepper(stage, isSyncing ? "syncing" : (status === "error" || status === "interrupted" ? "error" : status));
     renderHealth(health, data);
     renderMediaBackup(data.media || null);
+    if (btnChangeRemote) btnChangeRemote.hidden = !data.remote_editable;
     renderRestoreTest(data.restore || null, (health && health.restore_test) || null);
     syncLogPolling(isSyncing);
 
@@ -605,6 +722,12 @@ export function setupBackupSync() {
   if (btnSyncCard) btnSyncCard.addEventListener("click", triggerBackupSync);
   if (btnMediaBackupRun) btnMediaBackupRun.addEventListener("click", runMediaBackup);
   if (btnRestoreTestRun) btnRestoreTestRun.addEventListener("click", runRestoreTest);
+  registerModal(remoteModal, { closeButtons: [$("remote-modal-close"), $("remote-cancel")] });
+  if (btnChangeRemote) btnChangeRemote.addEventListener("click", openRemoteModal);
+  if (remoteTestBtn) remoteTestBtn.addEventListener("click", testRemote);
+  if (remoteSave) remoteSave.addEventListener("click", saveRemote);
+  if (remoteSelect) remoteSelect.addEventListener("change", onRemoteInput);
+  if (remoteFolder) remoteFolder.addEventListener("input", onRemoteInput);
   if (btnModalTriggerSync) btnModalTriggerSync.addEventListener("click", triggerBackupSync);
   if (btnViewBackupLog) btnViewBackupLog.addEventListener("click", () => openBackupLogModal(btnViewBackupLog));
   if (backupModalRefresh) backupModalRefresh.addEventListener("click", refreshBackupLog);

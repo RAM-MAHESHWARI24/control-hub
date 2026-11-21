@@ -268,6 +268,62 @@ paths:
         '200':
           description: Backup execution telemetry
 
+  /api/backup/remotes:
+    get:
+      summary: rclone remotes available for the backups
+      description: >-
+        Remotes in root's rclone config (name and type) and the remote the backups use now,
+        read through the blueprint's root helper homelab-backup-remote. 404 on installs
+        without the helper.
+      tags: [Backup]
+      responses:
+        '200':
+          description: "{remotes: [{name, type}], current}"
+        '404':
+          description: Not available on this install
+
+  /api/backup/remote/test:
+    post:
+      summary: Test a backup remote
+      description: >-
+        `remote` is `name:` or `name:folder/`. The helper checks the value strictly, that the
+        remote exists in root's rclone config and answers, its free space, and which backup
+        folders already exist (Memories, Immich_Backup/database, Media_Backup). Nothing is changed.
+      tags: [Backup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [remote]
+              properties:
+                remote: { type: string, example: "gdrive:homelab/" }
+      responses:
+        '200':
+          description: "{ok, remote, error, free_bytes, total_bytes, folders}"
+
+  /api/backup/remote:
+    put:
+      summary: Switch both backups to another remote
+      description: >-
+        Tests the remote again, then rewrites GDRIVE_REMOTE in /etc/cron.d/immich-backup and
+        /etc/cron.d/media-backup, /etc/homelab/control-hub.env and homelab.env, and gdrive_remote
+        in /etc/homelab/config.json. Takes effect from the next backup run.
+      tags: [Backup]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [remote]
+              properties:
+                remote: { type: string, example: "gdrive:homelab/" }
+      responses:
+        '200':
+          description: "{ok, remote, changed, test} or {ok: false, error}"
+
   /api/backup/restore-test:
     post:
       summary: Run the photo backup restore test now

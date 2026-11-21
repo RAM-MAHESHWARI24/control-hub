@@ -1104,6 +1104,24 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+/* Backup remote dialog */
+#btn-change-remote[hidden] { display: none; }
+
+.remote-body {
+  display: grid;
+  gap: 12px;
+}
+
+.remote-result {
+  display: grid;
+  gap: 4px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.remote-result p { margin: 0; overflow-wrap: anywhere; }
+.remote-result.is-error { color: #fecdd3; }
+
 /* Monthly restore test (inside the backup card) */
 .restore-test {
   display: grid;

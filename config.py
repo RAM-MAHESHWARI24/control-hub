@@ -72,6 +72,8 @@ MEDIA_BACKUP_CRON_FILE = os.getenv("MEDIA_BACKUP_CRON_FILE", "/etc/cron.d/media-
 MEDIA_BACKUP_SCRIPT = os.getenv("MEDIA_BACKUP_SCRIPT", "")
 # Monthly restore test of the photo database backup (systemd service + timer of that name).
 RESTORE_TEST_UNIT = os.getenv("RESTORE_TEST_UNIT", "photo-restore-test")
+# Root helper that lists, tests and switches the backup remote (blueprint installs only).
+BACKUP_REMOTE_HELPER = os.getenv("BACKUP_REMOTE_HELPER", "/usr/local/sbin/homelab-backup-remote")
 SYSTEMD_UNIT_DIR = os.getenv("SYSTEMD_UNIT_DIR", "/etc/systemd/system")
 HDD_DATA = os.getenv("HDD_DATA", "/mnt/hdd/data")
 HDD_MEMORIES = os.getenv("HDD_MEMORIES", "/mnt/hdd/Memories")

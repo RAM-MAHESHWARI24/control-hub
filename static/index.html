@@ -390,6 +390,7 @@
               <span class="meta-pill">Next run: <strong id="backup-next-run">Not scheduled</strong></span>
               <span class="meta-pill">DB dump: <strong id="backup-db-size">No dump yet</strong></span>
               <span class="meta-pill">Remote: <strong id="backup-remote-mirror">Not configured</strong></span>
+              <button type="button" class="btn-tile-logs" id="btn-change-remote" hidden>Change remote</button>
             </div>
 
             <button type="button" class="backup-library-strip" id="btn-open-library-details" aria-label="Open Noodle Gallery photo library and Google Drive quota breakdown">
@@ -750,6 +751,39 @@
       <div class="modal-footer">
         <button type="button" class="btn-tile-logs" id="backup-modal-refresh">Refresh Log</button>
         <button type="button" class="btn-tile-restart" id="backup-modal-dismiss">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backup remote -->
+  <div class="modal-overlay" id="remote-modal" role="dialog" aria-modal="true" aria-labelledby="remote-modal-title" style="display: none;">
+    <div class="modal-glass">
+      <div class="modal-header">
+        <div>
+          <h2 id="remote-modal-title">Backup remote</h2>
+          <p class="modal-sub">Where the photo backup and the media settings backup go. Remotes are set up on the server with <code>sudo rclone config</code>.</p>
+        </div>
+        <button type="button" class="modal-close" id="remote-modal-close" aria-label="Close backup remote">&times;</button>
+      </div>
+      <div class="modal-body remote-body">
+        <p class="status-note-text">Now: <strong id="remote-current">Unknown</strong></p>
+        <div class="form-field">
+          <label for="remote-select">rclone remote</label>
+          <select id="remote-select" class="form-input"></select>
+        </div>
+        <div class="form-field">
+          <label for="remote-folder">Folder on the remote (optional)</label>
+          <input type="text" id="remote-folder" class="form-input" placeholder="for example homelab/" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="remote-result" id="remote-result" role="status" aria-live="polite"></div>
+      </div>
+      <div class="modal-footer">
+        <span class="modal-hint">Test first; saving switches both backups from the next run.</span>
+        <div class="modal-footer-btns">
+          <button type="button" class="btn-tile-restart" id="remote-cancel">Close</button>
+          <button type="button" class="btn-tile-logs" id="remote-test">Test</button>
+          <button type="button" class="btn-sync-primary" id="remote-save" disabled>Save</button>
+        </div>
       </div>
     </div>
   </div>

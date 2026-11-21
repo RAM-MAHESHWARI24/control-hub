@@ -131,6 +131,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             mock.patch.object(backup_sync, "MEDIA_BACKUP_STATUS_FILE", str(root / "media-backups" / "status.json")),
             mock.patch.object(backup_sync, "MEDIA_BACKUP_CRON_FILE", str(root / "media-backup.cron")),
             mock.patch.object(backup_sync, "SYSTEMD_UNIT_DIR", str(root / "units")),
+            mock.patch.object(backup_sync, "BACKUP_REMOTE_HELPER", str(root / "units" / "photo-restore-test.service")),
             mock.patch.object(alerts_widget.engine, "config_path", root / "alerts.json"),
             mock.patch.object(alerts_widget.engine, "state_path", root / "alerts_state.json"),
         ]
@@ -211,6 +212,20 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             })
 
         cls.app.view_functions["tv_updater.get_tv_updater_status"] = mock_tv_status
+
+        # Remote dialog: fake helper answers (the real one needs root and rclone).
+        def mock_remotes():
+            from flask import jsonify
+            return jsonify({"remotes": [{"name": "gdrive", "type": "drive"}, {"name": "b2", "type": "b2"}], "current": "gdrive:"})
+
+        def mock_remote_test():
+            from flask import jsonify, request
+            remote = (request.get_json(silent=True) or {}).get("remote")
+            return jsonify({"ok": True, "remote": remote, "free_bytes": 40 * 1024**3, "total_bytes": 100 * 1024**3,
+                            "folders": {"Memories": False, "Immich_Backup/database": False, "Media_Backup": False}})
+
+        cls.app.view_functions["backup_sync.list_backup_remotes"] = mock_remotes
+        cls.app.view_functions["backup_sync.test_backup_remote"] = mock_remote_test
 
         cls.httpd = make_server("127.0.0.1", 0, cls.app)
         cls.port = cls.httpd.server_port
@@ -393,6 +408,31 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertTrue(page.is_visible("#btn-restore-test-run"))
             self._assert_layout_and_touch_targets(page, 360)
             self._assert_axe_wcag_aa(page, "backup-card@360x800")
+            self.assertEqual(page_errors, [])
+        finally:
+            context.close()
+
+    def test_remote_dialog_requires_a_test_before_saving(self) -> None:
+        context, page, _, page_errors = self._new_authenticated_page(360, 800)
+        try:
+            if "is-collapsed" in (page.get_attribute("#backup-section", "class") or ""):
+                page.click("#backup-section .card-collapse-btn")
+            page.wait_for_selector("#btn-change-remote", state="visible", timeout=10000)
+            page.click("#btn-change-remote")
+            page.wait_for_selector("#remote-select option[value='b2']", state="attached")
+            self.assertEqual(page.inner_text("#remote-current"), "gdrive:")
+            self.assertTrue(page.is_disabled("#remote-save"))
+            page.select_option("#remote-select", "b2")
+            page.fill("#remote-folder", "homelab")
+            page.click("#remote-test")
+            page.wait_for_function("() => !document.getElementById('remote-save').disabled")
+            text = page.inner_text("#remote-result")
+            self.assertIn("b2:homelab/ answers", text)
+            self.assertIn("uploads the whole photo library", text)
+            page.fill("#remote-folder", "other")  # changing the value needs a new test
+            self.assertTrue(page.is_disabled("#remote-save"))
+            self._assert_layout_and_touch_targets(page, 360)
+            self._assert_axe_wcag_aa(page, "remote-dialog@360x800")
             self.assertEqual(page_errors, [])
         finally:
             context.close()
