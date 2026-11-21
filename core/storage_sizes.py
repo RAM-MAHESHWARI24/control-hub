@@ -53,10 +53,12 @@ def _dir_size_bytes(path_str: str, timeout: int = 120) -> tuple[Optional[int], O
             cmd = [nice_bin, "-n", "19", *cmd]
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-            if proc.returncode == 0 and proc.stdout.strip():
-                size_str = proc.stdout.strip().split()[0]
-                return int(size_str), None
-            return None, (proc.stderr.strip() or f"du exited {proc.returncode}")[:160]
+            if proc.returncode in (0, 1) and proc.stdout.strip():
+                first_tok = proc.stdout.strip().split()[0]
+                if first_tok.isdigit():
+                    warn = "some subdirectories unreadable" if proc.returncode == 1 else None
+                    return int(first_tok), warn
+            return None, (proc.stderr or f"du exited {proc.returncode}").strip()[:160]
         except subprocess.TimeoutExpired:
             return None, f"Timed out measuring {path_str}"
         except (OSError, ValueError) as exc:

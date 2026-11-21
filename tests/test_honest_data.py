@@ -315,6 +315,21 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
             called_cmd = m_run.call_args[0][0]
             self.assertEqual(called_cmd, ["docker", "restart", "jellyfin"])
 
+    def test_du_partial_permission_exit_1_still_parses_bytes(self) -> None:
+        existing_dir = self.root / "memories"
+        existing_dir.mkdir()
+        proc_partial = mock.Mock(
+            returncode=1,
+            stdout=f"48585989231\t{existing_dir}\n",
+            stderr="du: cannot read directory: Permission denied\n",
+        )
+        with mock.patch("os.name", "posix"), \
+             mock.patch("shutil.which", side_effect=lambda x: "/usr/bin/du" if x == "du" else None), \
+             mock.patch("subprocess.run", return_value=proc_partial):
+            byte_count, warn = storage_sizes._dir_size_bytes(str(existing_dir))
+            self.assertEqual(byte_count, 48585989231)
+            self.assertIsNotNone(warn)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,9 +22,17 @@ from config import (
     TV_UPDATER_STATE_FILE,
 )
 
-# Ensure tv-updater directory is in sys.path for direct python imports
+# Ensure tv-updater directory is in sys.path for direct python imports and
+# align TV_AUTOUPDATER_* env vars with the paths configured for control-hub.
 if TV_UPDATER_DIR and TV_UPDATER_DIR not in sys.path and os.path.exists(TV_UPDATER_DIR):
     sys.path.insert(0, TV_UPDATER_DIR)
+if TV_UPDATER_STATE_FILE:
+    os.environ.setdefault("TV_AUTOUPDATER_STATE_DIR", os.path.dirname(TV_UPDATER_STATE_FILE))
+if TV_UPDATER_LOG_FILE:
+    os.environ.setdefault("TV_AUTOUPDATER_LOG", TV_UPDATER_LOG_FILE)
+_default_tv_cfg = os.path.join(os.getenv("HOMELAB_ETC_DIR", "/etc/homelab"), "tv-autoupdater.json")
+if os.path.isfile(_default_tv_cfg):
+    os.environ.setdefault("TV_AUTOUPDATER_CONFIG", _default_tv_cfg)
 
 
 def tv_module_installed() -> bool:
@@ -126,7 +134,7 @@ def get_tv_updater_status():
 
     if not is_deploying:
         try:
-            res = subprocess.run(["pgrep", "-f", "tv_updater.py"], stdout=subprocess.PIPE, text=True, timeout=1.2)
+            res = subprocess.run(["pgrep", "-f", r"/tv_updater\.py(\s|$)"], stdout=subprocess.PIPE, text=True, timeout=1.2)
             lines = res.stdout.strip().splitlines()
             if lines and any(int(pid) != os.getpid() for pid in lines if pid.isdigit()):
                 is_deploying = True
