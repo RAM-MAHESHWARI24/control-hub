@@ -1,8 +1,8 @@
 """
-Widget: Nightly Google Drive Sync (Noodle Gallery Cloud Backup)
-Monitors backup pipeline execution via status.json (or log fallback),
-Drive mirror quota, PostgreSQL dumps, and Immich asset/face telemetry.
-Never returns invented fallback numbers when data cannot be read.
+Widget: Photo & Media Cloud Backup Monitor
+Monitors photo backup pipeline execution via status.json (or log fallback),
+cloud remote quota, PostgreSQL dumps, restore tests, media app settings backups,
+and Immich/Noodle asset & face telemetry. Never returns invented fallback values.
 """
 
 import json
@@ -21,17 +21,22 @@ from config import (
     BACKUP_DIR,
     BACKUP_LOG_FILE,
     BACKUP_REMOTE_HELPER,
+    BACKUP_SCRIPT,
     BACKUP_STALE_HOURS,
     BACKUP_STATUS_FILE,
     GDRIVE_REMOTE,
     HDD_DATA,
     HDD_MEMORIES,
+    IMMICH_DB_CONTAINER,
+    IMMICH_DB_NAME,
+    IMMICH_DB_USER,
     MEDIA_BACKUP_CRON_FILE,
     MEDIA_BACKUP_SCRIPT,
     MEDIA_BACKUP_STATUS_FILE,
+    PHOTO_UPLOAD_DIR,
     RESTORE_TEST_UNIT,
-    SYSTEMD_UNIT_DIR,
     STORAGE_SIZES_CACHE_FILE,
+    SYSTEMD_UNIT_DIR,
     get_host_timezone,
     get_tz_abbr,
 )
@@ -53,16 +58,24 @@ STAGE_LABELS = {
     1: "1. Face XMP Export",
     2: "2. Postgres Dump",
     3: "3. Rclone Mirror",
-    4: "4. GDrive Verified",
+    4: "4. Cloud Verified",
 }
 
 STAGE_MESSAGES = {
     0: "Checking the remote, its folders and free space...",
     1: "Exporting named faces to XMP sidecars...",
     2: "Creating PostgreSQL database dump (pg_dumpall)...",
-    3: "Mirroring database dump & photo library to Google Drive...",
-    4: "Cloud backup verified & protected on Google Drive",
+    3: "Mirroring database dump & photo library to cloud remote...",
+    4: "Cloud backup verified & protected on remote",
 }
+
+
+def photo_backup_installed() -> bool:
+    """Returns True when the photo cloud backup module is installed or has state."""
+    return any(
+        bool(p) and os.path.exists(p)
+        for p in (BACKUP_SCRIPT, BACKUP_CRON_FILE, BACKUP_STATUS_FILE, BACKUP_LOG_FILE)
+    )
 
 
 def _format_iso_display(iso_str):
@@ -94,12 +107,13 @@ def _read_status_file():
 
 
 def run_backup_sync_thread():
-    """Executes the Google Drive backup script in background."""
+    """Executes the cloud backup script in background."""
     global is_syncing_backup
     with backup_sync_lock:
         is_syncing_backup = True
         try:
-            subprocess.run(["sudo", "/usr/local/sbin/immich_backup_gdrive.sh"], check=False, timeout=14400)
+            script = BACKUP_SCRIPT or "/usr/local/sbin/immich_backup_gdrive.sh"
+            subprocess.run(["sudo", script], check=False, timeout=14400)
         except Exception:
             pass
         finally:
@@ -107,37 +121,65 @@ def run_backup_sync_thread():
 
 
 def _query_immich_db():
-    sql = """
-    SELECT json_build_object(
-        'total_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL),
-        'photos_count', (SELECT COUNT(*) FROM asset WHERE type = 'IMAGE' AND "deletedAt" IS NULL),
-        'videos_count', (SELECT COUNT(*) FROM asset WHERE type = 'VIDEO' AND "deletedAt" IS NULL),
-        'unhidden_people', (SELECT COUNT(*) FROM person WHERE "isHidden" = false),
-        'named_people', (SELECT COUNT(*) FROM person WHERE name IS NOT NULL AND name != '' AND "isHidden" = false),
-        'assets_with_named_faces', (SELECT COUNT(DISTINCT "assetId") FROM asset_face af JOIN person p ON af."personGroupId" = p."personGroupId" WHERE p.name IS NOT NULL AND p.name != ''),
-        'total_face_instances', (SELECT COUNT(*) FROM asset_face)
-    )::text;
     """
-    try:
-        cmd = ["docker", "exec", "immich_postgres", "psql", "-U", "postgres", "-d", "immich", "-t", "-A", "-c", sql]
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=4)
-        if proc.returncode == 0 and proc.stdout.strip():
-            return json.loads(proc.stdout.strip()), None
-        reason = (proc.stderr or proc.stdout or "").strip() or "Immich database unavailable"
-        return None, reason[:140]
-    except Exception as exc:
-        return None, f"Immich database unavailable ({exc})"[:140]
+    Queries Immich / Noodle Gallery Postgres for asset & face counts.
+    Handles both Noodle Gallery (`personGroupId`) and upstream Immich (`personId`).
+    """
+    sql_variants = [
+        """
+        SELECT json_build_object(
+            'total_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL),
+            'photos_count', (SELECT COUNT(*) FROM asset WHERE type = 'IMAGE' AND "deletedAt" IS NULL),
+            'videos_count', (SELECT COUNT(*) FROM asset WHERE type = 'VIDEO' AND "deletedAt" IS NULL),
+            'unhidden_people', (SELECT COUNT(*) FROM person WHERE "isHidden" = false),
+            'named_people', (SELECT COUNT(*) FROM person WHERE name IS NOT NULL AND name != '' AND "isHidden" = false),
+            'assets_with_named_faces', (SELECT COUNT(DISTINCT "assetId") FROM asset_face af JOIN person p ON af."personGroupId" = p."personGroupId" WHERE p.name IS NOT NULL AND p.name != ''),
+            'total_face_instances', (SELECT COUNT(*) FROM asset_face)
+        )::text;
+        """,
+        """
+        SELECT json_build_object(
+            'total_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL),
+            'photos_count', (SELECT COUNT(*) FROM asset WHERE type = 'IMAGE' AND "deletedAt" IS NULL),
+            'videos_count', (SELECT COUNT(*) FROM asset WHERE type = 'VIDEO' AND "deletedAt" IS NULL),
+            'unhidden_people', (SELECT COUNT(*) FROM person WHERE "isHidden" = false),
+            'named_people', (SELECT COUNT(*) FROM person WHERE name IS NOT NULL AND name != '' AND "isHidden" = false),
+            'assets_with_named_faces', (SELECT COUNT(DISTINCT "assetId") FROM asset_face af JOIN person p ON af."personId" = p.id WHERE p.name IS NOT NULL AND p.name != ''),
+            'total_face_instances', (SELECT COUNT(*) FROM asset_face)
+        )::text;
+        """,
+    ]
+    last_reason = "Photo database unavailable"
+    for idx, sql in enumerate(sql_variants):
+        try:
+            cmd = [
+                "docker", "exec", IMMICH_DB_CONTAINER,
+                "psql", "-U", IMMICH_DB_USER, "-d", IMMICH_DB_NAME,
+                "-t", "-A", "-c", sql,
+            ]
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=4)
+            if proc.returncode == 0 and proc.stdout.strip():
+                return json.loads(proc.stdout.strip()), None
+            err = (proc.stderr or proc.stdout or "").strip()
+            last_reason = err[:140] if err else "Photo database unavailable"
+            # Retry with upstream schema only if the column name differed
+            if idx == 0 and "does not exist" in err.lower():
+                continue
+            return None, last_reason
+        except Exception as exc:
+            return None, f"Photo database unavailable ({exc})"[:140]
+    return None, last_reason
 
 
 def _gdrive_from_status(status_data):
     gdrive_raw = status_data.get("gdrive") if isinstance(status_data, dict) else None
     if not isinstance(gdrive_raw, dict):
-        return None, "Drive quota not recorded yet (waiting for backup run)"
+        return None, "Remote quota not recorded yet (waiting for backup run)"
     total_b = gdrive_raw.get("total_bytes")
     used_b = gdrive_raw.get("used_bytes")
     free_b = gdrive_raw.get("free_bytes")
     if not total_b or total_b <= 0:
-        return None, "Drive quota unavailable"
+        return None, "Remote quota unavailable"
     used_b = used_b or 0
     free_b = free_b if free_b is not None else max(0, total_b - used_b)
     return {
@@ -149,7 +191,7 @@ def _gdrive_from_status(status_data):
 
 
 def fetch_immich_library_telemetry(force=False):
-    """Fetches measured Immich DB metrics, local folder size, and Drive quota from status.json."""
+    """Fetches measured photo DB metrics, local folder size, and remote quota from status.json."""
     now = time.time()
     if not force and immich_library_stats_cache["data"] and (now - immich_library_stats_cache["last_fetched"] < 300):
         return immich_library_stats_cache["data"]
@@ -160,14 +202,19 @@ def fetch_immich_library_telemetry(force=False):
         cache_file=STORAGE_SIZES_CACHE_FILE,
         media_path=HDD_DATA,
         photos_path=HDD_MEMORIES,
+        photo_upload_path=PHOTO_UPLOAD_DIR,
         appdata_path=APPDATA_DIR,
         backup_path=BACKUP_DIR,
         force=force,
     )
     disk_size = None
     disk_reason = None
+    disk_partial = bool(sizes.get("photos_partial"))
     if sizes.get("photos_gb") is not None:
-        disk_size = f"{sizes['photos_gb']} GB"
+        prefix = "\u2265 " if disk_partial else ""
+        disk_size = f"{prefix}{sizes['photos_gb']} GB"
+        if disk_partial:
+            disk_reason = sizes.get("reason") or "Some photo subdirectories are unreadable without root timer"
     elif sizes.get("measuring"):
         disk_reason = "Measuring photo library size"
     else:
@@ -192,6 +239,8 @@ def fetch_immich_library_telemetry(force=False):
     payload = {
         "disk_size": disk_size,
         "disk_reason": disk_reason,
+        "disk_partial": disk_partial,
+        "disk_measured_by": sizes.get("measured_by"),
         "gdrive": gdrive_usage,
         "gdrive_reason": gdrive_reason,
         "assets": db_metrics,
@@ -210,7 +259,7 @@ def fetch_immich_library_telemetry(force=False):
 
 @backup_sync_bp.route("/api/backup/status", methods=["GET"])
 def get_backup_status():
-    """Checks photo backup status from status.json (or log fallback), never returning fake numbers."""
+    """Checks photo & media backup status from status.json (or log fallback), never returning fake numbers."""
     is_syncing = is_syncing_backup
     active_process_stage = 0
 
@@ -274,7 +323,7 @@ def get_backup_status():
         if latest_db_size is None and isinstance(status_data.get("dump_bytes"), (int, float)):
             latest_db_size = f"{round(status_data['dump_bytes'] / (1024**2), 1)} MB"
         reason = None if backup_status == "synced" else last_message
-    elif os.path.exists(BACKUP_LOG_FILE):
+    elif BACKUP_LOG_FILE and os.path.exists(BACKUP_LOG_FILE):
         log_stage = 0
         is_error = False
         try:
@@ -339,14 +388,21 @@ def get_backup_status():
     if is_syncing and health is None:
         backup_status = "syncing"
         current_stage = active_process_stage if active_process_stage > 0 else (current_stage or 1)
-        last_message = STAGE_MESSAGES.get(current_stage, "Syncing to Google Drive...")
+        last_message = STAGE_MESSAGES.get(current_stage, "Syncing to cloud remote...")
         reason = None
 
     lib_meta = fetch_immich_library_telemetry(force=False)
     gdrive_info = lib_meta.get("gdrive") or {}
     asset_info = lib_meta.get("assets") or {}
+    media_info = media_backup_summary()
+    restore_info = restore_test_info()
+    photo_installed = photo_backup_installed()
+    any_installed = bool(photo_installed or media_info is not None or restore_info.get("installed") or asset_info)
 
     return jsonify({
+        "installed": any_installed,
+        "photo_backup_installed": photo_installed,
+        "media_backup_installed": media_info is not None,
         "status": backup_status,
         "is_syncing": is_syncing,
         "current_stage": current_stage,
@@ -358,15 +414,17 @@ def get_backup_status():
         "reason": reason,
         "schedule": _schedule_text(),
         "health": health,
-        "media": media_backup_summary(),
-        "restore": restore_test_info(),
-        "remote_editable": os.path.isfile(BACKUP_REMOTE_HELPER),
+        "media": media_info,
+        "restore": restore_info,
+        "remote_editable": bool(BACKUP_REMOTE_HELPER and os.path.isfile(BACKUP_REMOTE_HELPER)),
         "gdrive_remote": lib_meta.get("gdrive_remote"),
         "log_file": BACKUP_LOG_FILE,
         "memories_dir": HDD_MEMORIES,
         "timezone": get_host_timezone(),
         "disk_size": lib_meta.get("disk_size"),
         "disk_reason": lib_meta.get("disk_reason"),
+        "disk_partial": lib_meta.get("disk_partial", False),
+        "disk_measured_by": lib_meta.get("disk_measured_by"),
         "gdrive_used_gb": gdrive_info.get("used_gb"),
         "gdrive_total_gb": gdrive_info.get("total_gb"),
         "gdrive_free_gb": gdrive_info.get("free_gb"),
@@ -395,8 +453,13 @@ def media_backup_summary():
         running = bool(res.stdout.strip())
     except Exception:
         pass
-    health = backup_health.summarize(status, running=running, schedule=hm, tz_abbr=get_tz_abbr(),
-                                     stale_after_hours=BACKUP_STALE_HOURS)
+    health = backup_health.summarize(
+        status,
+        running=running,
+        schedule=hm,
+        tz_abbr=get_tz_abbr(),
+        stale_after_hours=BACKUP_STALE_HOURS,
+    )
     size = (status or {}).get("dump_bytes")
     health["archive"] = (status or {}).get("dump_file")
     health["archive_size"] = backup_health.human_bytes(size) if size else None
@@ -412,8 +475,12 @@ def restore_test_info():
     try:
         res = subprocess.run(["systemctl", "is-active", f"{RESTORE_TEST_UNIT}.service"], capture_output=True, text=True, timeout=2)
         info["running"] = res.stdout.strip() in ("active", "activating")
-        res = subprocess.run(["systemctl", "show", f"{RESTORE_TEST_UNIT}.timer", "-p", "NextElapseUSecRealtime", "--value"],
-                             capture_output=True, text=True, timeout=2)
+        res = subprocess.run(
+            ["systemctl", "show", f"{RESTORE_TEST_UNIT}.timer", "-p", "NextElapseUSecRealtime", "--value"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
         nxt = res.stdout.strip()
         info["next"] = nxt if nxt and nxt != "n/a" else None
     except Exception:
@@ -423,12 +490,14 @@ def restore_test_info():
 
 def _remote_helper(*args, timeout=180):
     """Runs the root helper through sudo and returns (http_status, json)."""
-    if not os.path.isfile(BACKUP_REMOTE_HELPER):
+    if not BACKUP_REMOTE_HELPER or not os.path.isfile(BACKUP_REMOTE_HELPER):
         return 404, {"ok": False, "error": "Changing the remote is not available on this install."}
     try:
         res = subprocess.run(["sudo", BACKUP_REMOTE_HELPER, *args], capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return 504, {"ok": False, "error": "The remote did not answer in time."}
+    except OSError as exc:
+        return 500, {"ok": False, "error": str(exc)[:200]}
     try:
         data = json.loads(res.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -468,8 +537,15 @@ def run_restore_test():
         return jsonify({"success": False, "message": "The restore test is not installed."}), 404
     if info.get("running"):
         return jsonify({"success": False, "message": "A restore test is already running."})
-    res = subprocess.run(["sudo", "/usr/bin/systemctl", "start", "--no-block", f"{RESTORE_TEST_UNIT}.service"],
-                         capture_output=True, text=True, timeout=10)
+    try:
+        res = subprocess.run(
+            ["sudo", "/usr/bin/systemctl", "start", "--no-block", f"{RESTORE_TEST_UNIT}.service"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)[:200]}), 500
     if res.returncode != 0:
         return jsonify({"success": False, "message": (res.stderr or "systemctl failed").strip()[:200]}), 500
     return jsonify({"success": True, "message": "Restore test started. It takes a few minutes."})
@@ -480,30 +556,46 @@ def run_media_backup():
     """Starts the media settings backup now (it moves itself into its own systemd unit)."""
     if not MEDIA_BACKUP_SCRIPT or not os.path.isfile(MEDIA_BACKUP_SCRIPT):
         return jsonify({"success": False, "message": "The media settings backup is not installed."}), 404
-    res = subprocess.run(["pgrep", "-f", "media_config_backup.py"], stdout=subprocess.PIPE, text=True, timeout=2)
-    if res.stdout.strip():
-        return jsonify({"success": False, "message": "A media settings backup is already running."})
-    subprocess.Popen(["sudo", "/usr/bin/python3", MEDIA_BACKUP_SCRIPT], stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        res = subprocess.run(["pgrep", "-f", "media_config_backup.py"], stdout=subprocess.PIPE, text=True, timeout=2)
+        if res.stdout.strip():
+            return jsonify({"success": False, "message": "A media settings backup is already running."})
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(
+            ["sudo", "/usr/bin/python3", MEDIA_BACKUP_SCRIPT],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)[:200]}), 500
     return jsonify({"success": True, "message": "Media settings backup started."})
 
 
 @backup_sync_bp.route("/api/backup/sync", methods=["POST"])
 def trigger_backup_sync():
-    """Triggers an immediate Immich/Noodle Gallery backup and Google Drive sync."""
-    res = subprocess.run(["pgrep", "-f", "immich_backup_gdrive.sh"], stdout=subprocess.PIPE, text=True, timeout=2)
-    if is_syncing_backup or res.stdout.strip():
-        return jsonify({"success": False, "message": "Google Drive sync is already in progress..."})
+    """Triggers an immediate photo library backup and cloud sync."""
+    if not BACKUP_SCRIPT or not os.path.isfile(BACKUP_SCRIPT):
+        return jsonify({"success": False, "message": "Photo cloud backup is not installed on this server."}), 404
+    try:
+        res = subprocess.run(["pgrep", "-f", "immich_backup_gdrive.sh"], stdout=subprocess.PIPE, text=True, timeout=2)
+        if is_syncing_backup or res.stdout.strip():
+            return jsonify({"success": False, "message": "Cloud backup sync is already in progress..."})
+    except Exception:
+        if is_syncing_backup:
+            return jsonify({"success": False, "message": "Cloud backup sync is already in progress..."})
 
     t = threading.Thread(target=run_backup_sync_thread, daemon=True)
     t.start()
-    return jsonify({"success": True, "message": "Noodle Gallery sync to Google Drive started."})
+    return jsonify({"success": True, "message": "Photo library cloud sync started."})
 
 
 @backup_sync_bp.route("/api/backup/log", methods=["GET"])
 def get_backup_log():
     """Returns the tail of backup.log for the 1-click modal."""
-    if not os.path.exists(BACKUP_LOG_FILE):
+    if not BACKUP_LOG_FILE or not os.path.exists(BACKUP_LOG_FILE):
         return jsonify({"log_file": BACKUP_LOG_FILE, "log": f"Log file ({BACKUP_LOG_FILE}) not found yet."})
     try:
         with open(BACKUP_LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
@@ -515,6 +607,6 @@ def get_backup_log():
 
 @backup_sync_bp.route("/api/backup/library-stats", methods=["GET"])
 def get_library_stats():
-    """Returns detailed Noodle Gallery storage, assets, and facial recognition stats."""
+    """Returns detailed photo library storage, assets, and facial recognition stats."""
     force = request.args.get("refresh", "false").lower() == "true"
     return jsonify(fetch_immich_library_telemetry(force=force))

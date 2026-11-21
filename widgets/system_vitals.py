@@ -1,26 +1,32 @@
 """
 Widget: Hardware Vitals & Storage Headroom
-Monitors host CPU load, physical RAM & swap usage, OS SSD capacity,
-and measured media/photo/appdata storage breakdown.
+Monitors host CPU load/temp, physical RAM & swap usage, OS root capacity,
+and filesystem-accurate measured storage breakdown (never plotting SSD appdata
+inside a separate data HDD pool, and aligning thresholds with Alerts config).
 """
 
 import ctypes
 import datetime
 import os
 import shutil
+import socket
 import sys
 
 from flask import Blueprint, jsonify
 
 from config import (
+    ALERTS_CONFIG_FILE,
     APPDATA_DIR,
     BACKUP_DIR,
     HDD_DATA,
     HDD_MEMORIES,
+    PHOTO_UPLOAD_DIR,
+    PORT,
     STORAGE_SIZES_CACHE_FILE,
     get_host_timezone,
     get_tz_abbr,
 )
+from core import alerts as alerts_core
 from core.storage_sizes import get_storage_sizes
 from core.telemetry_sampler import telemetry_lock, telemetry_state
 
@@ -42,9 +48,27 @@ def _resolve_data_mount(data_path: str) -> tuple[str, bool]:
     return candidate_mount or data_path, False
 
 
+def _disk_thresholds() -> tuple[float, float]:
+    """Reads warning/critical disk percentages from the user's Alerts config."""
+    try:
+        cfg = alerts_core.load_config(ALERTS_CONFIG_FILE)
+        warn = float(cfg.get("rules", {}).get("disk_warning", {}).get("percent", 85))
+        crit = float(cfg.get("rules", {}).get("disk_critical", {}).get("percent", 95))
+        return warn, crit
+    except Exception:
+        return 85.0, 95.0
+
+
+def _st_dev(path: str):
+    try:
+        return os.stat(path).st_dev if path and os.path.exists(path) else None
+    except OSError:
+        return None
+
+
 @system_vitals_bp.route("/api/system/vitals", methods=["GET"])
 def get_system_vitals():
-    """Returns CPU, RAM, Swap, SSD, HDD headroom, measured folder breakdown, and uptime."""
+    """Returns CPU, RAM, Swap, OS root, media pool headroom, honest folder breakdown, and uptime."""
     # 1. RAM and Swap from /proc/meminfo (with Windows fallback)
     mem_total_kb = 0
     mem_avail_kb = 0
@@ -94,14 +118,21 @@ def get_system_vitals():
     swap_used_kb = max(0, swap_total_kb - swap_free_kb)
     swap_pct = round((swap_used_kb / max(1, swap_total_kb)) * 100, 1) if swap_total_kb > 0 else 0.0
 
+    warn_pct, crit_pct = _disk_thresholds()
+
     # 2. Disk Storage Vitals
     ssd_stat = shutil.disk_usage("/")
     ssd_total_gb = round(ssd_stat.total / (1024**3), 1)
     ssd_used_gb = round(ssd_stat.used / (1024**3), 1)
     ssd_free_gb = round(ssd_stat.free / (1024**3), 1)
     ssd_pct = round((ssd_stat.used / ssd_stat.total) * 100, 1)
+    ssd_warning_level = "critical" if ssd_pct >= crit_pct else ("warning" if ssd_pct >= warn_pct else "normal")
+    root_dev_id = _st_dev("/")
 
     data_mount, mount_exists = _resolve_data_mount(HDD_DATA)
+    data_dev_id = _st_dev(data_mount) if mount_exists else None
+    single_disk = bool(mount_exists and root_dev_id is not None and data_dev_id == root_dev_id)
+
     hdd_total_gb = None
     hdd_used_gb = None
     hdd_free_gb = None
@@ -115,39 +146,70 @@ def get_system_vitals():
             hdd_used_gb = round(hdd_stat.used / (1024**3), 1)
             hdd_free_gb = round(hdd_stat.free / (1024**3), 1)
             hdd_pct = round((hdd_stat.used / hdd_stat.total) * 100, 1)
-            hdd_critical = (hdd_free_gb < 100 or hdd_pct >= 90.0)
-            hdd_warning_level = "critical" if hdd_pct >= 90 else ("warning" if hdd_pct >= 80 else "normal")
+            hdd_critical = hdd_pct >= crit_pct
+            hdd_warning_level = "critical" if hdd_pct >= crit_pct else ("warning" if hdd_pct >= warn_pct else "normal")
         except Exception:
             mount_exists = False
 
-    # 3. Measured folder breakdown (async hourly cache, never guesses 75%/20%)
+    # 3. Measured folder breakdown (async hourly cache or root systemd timer)
     sizes = get_storage_sizes(
         cache_file=STORAGE_SIZES_CACHE_FILE,
         media_path=HDD_DATA,
         photos_path=HDD_MEMORIES,
         appdata_path=APPDATA_DIR,
         backup_path=BACKUP_DIR,
+        photo_upload_path=PHOTO_UPLOAD_DIR,
     )
     media_gb = sizes.get("media_gb")
     photos_gb = sizes.get("photos_gb")
     appdata_gb = sizes.get("appdata_gb")
+    fs_devs = sizes.get("fs_devs") or {}
+    appdata_dev = fs_devs.get("appdata") or _st_dev(APPDATA_DIR) or fs_devs.get("backup") or _st_dev(BACKUP_DIR)
 
-    def _pct_of_pool(gb_val):
-        if gb_val is None or not hdd_total_gb or hdd_total_gb <= 0:
+    # Only include Appdata & Backups in the Data Pool bar when they physically live on that pool.
+    appdata_on_pool = bool(
+        single_disk or (data_dev_id is not None and appdata_dev is not None and appdata_dev == data_dev_id)
+    )
+    pool_appdata_gb = appdata_gb if appdata_on_pool else None
+
+    def _pct_of(gb_val, total_gb):
+        if gb_val is None or not total_gb or total_gb <= 0:
             return None
-        return round(min(100.0, max(0.0, (gb_val / hdd_total_gb) * 100.0)), 1)
+        return round(min(100.0, max(0.0, (gb_val / total_gb) * 100.0)), 1)
+
+    pool_measured_sum = sum(v for v in (media_gb, photos_gb, pool_appdata_gb) if isinstance(v, (int, float)))
+    pool_other_gb = (
+        round(max(0.0, (hdd_used_gb or 0.0) - pool_measured_sum), 2)
+        if mount_exists and hdd_used_gb is not None and sizes.get("measured")
+        else None
+    )
 
     breakdown = {
         "measured": bool(sizes.get("measured")),
         "measuring": bool(sizes.get("measuring")),
         "measured_at": sizes.get("measured_at"),
+        "measured_by": sizes.get("measured_by"),
+        "any_partial": bool(sizes.get("any_partial")),
+        "media_partial": bool(sizes.get("media_partial")),
+        "photos_partial": bool(sizes.get("photos_partial")),
+        "appdata_partial": bool(sizes.get("appdata_partial")),
+        "appdata_on_pool": appdata_on_pool,
         "reason": sizes.get("reason"),
         "media_gb": media_gb,
         "photos_gb": photos_gb,
-        "appdata_gb": appdata_gb,
-        "media_pct": _pct_of_pool(media_gb),
-        "photos_pct": _pct_of_pool(photos_gb),
-        "appdata_pct": _pct_of_pool(appdata_gb),
+        "appdata_gb": pool_appdata_gb,
+        "other_gb": pool_other_gb,
+        "media_pct": _pct_of(media_gb, hdd_total_gb),
+        "photos_pct": _pct_of(photos_gb, hdd_total_gb),
+        "appdata_pct": _pct_of(pool_appdata_gb, hdd_total_gb),
+        "other_pct": _pct_of(pool_other_gb, hdd_total_gb),
+    }
+
+    ssd_appdata_gb = appdata_gb if not appdata_on_pool else None
+    ssd_breakdown = {
+        "appdata_gb": ssd_appdata_gb,
+        "appdata_pct": _pct_of(ssd_appdata_gb, ssd_total_gb),
+        "other_gb": round(max(0.0, ssd_used_gb - (ssd_appdata_gb or 0.0)), 2) if ssd_appdata_gb is not None else None,
     }
 
     # 4. Uptime
@@ -167,6 +229,8 @@ def get_system_vitals():
         cpu_data = telemetry_state["cpu"]
 
     return jsonify({
+        "hostname": socket.gethostname(),
+        "port": PORT,
         "cpu": cpu_data,
         "memory": {
             "total_gib": round(mem_total_kb / 1048576, 2),
@@ -179,17 +243,25 @@ def get_system_vitals():
             "used_gib": round(swap_used_kb / 1048576, 2),
             "percent": swap_pct,
         },
+        "thresholds": {
+            "disk_warning_percent": warn_pct,
+            "disk_critical_percent": crit_pct,
+        },
         "storage": {
+            "single_disk": single_disk,
             "ssd": {
                 "mount": "/",
                 "total_gb": ssd_total_gb,
                 "used_gb": ssd_used_gb,
                 "free_gb": ssd_free_gb,
                 "percent": ssd_pct,
+                "warning_level": ssd_warning_level,
+                "breakdown": ssd_breakdown,
             },
             "hdd": {
                 "mount": data_mount,
                 "available": mount_exists,
+                "same_as_root": single_disk,
                 "reason": None if mount_exists else f"Storage path not mounted ({data_mount})",
                 "total_gb": hdd_total_gb,
                 "used_gb": hdd_used_gb,

@@ -9,6 +9,7 @@ LOG_FILE="${SERVER_SUSPEND_LOG:-/var/log/server-suspend.log}"
 SKIP_FILE="${SERVER_SUSPEND_SKIP:-/run/server-suspend.skip}"
 OVERRIDE_FILE="${SERVER_SUSPEND_OVERRIDE:-/run/server-suspend.override}"
 CONFIG_FILE="${SERVER_SUSPEND_CONF:-/etc/server-suspend.conf}"
+CONTROL_HUB_ENV="${CONTROL_HUB_ENV:-/etc/homelab/control-hub.env}"
 
 # Touch log if directory is accessible
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
@@ -32,7 +33,7 @@ if [ -e "$SKIP_FILE" ]; then
     exit 0
 fi
 
-# 2. Check for Tonight's Override Deferral (unless invoked with --override or --force)
+# 2. Parse flags & check permanent enabled / tonight's override deferral
 IS_OVERRIDE_RUN=false
 IS_DRY_RUN=false
 for arg in "$@"; do
@@ -47,7 +48,16 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
     IS_DRY_RUN=true
 fi
 
-if [ "$IS_OVERRIDE_RUN" = false ] && [ -f "$OVERRIDE_FILE" ]; then
+# Honor "enabled": false in permanent config unless invoked as an explicit override
+if [ "$IS_OVERRIDE_RUN" = false ] && [ -f "$CONFIG_FILE" ] && command -v jq >/dev/null 2>&1; then
+    CONF_ENABLED=$(jq -r 'if has("enabled") then (.enabled | tostring) else "true" end' "$CONFIG_FILE" 2>/dev/null || echo "true")
+    if [ "$CONF_ENABLED" = "false" ]; then
+        echo "[$(ts)] [DISABLED] Permanent sleep schedule is disabled in '$CONFIG_FILE'. Aborting suspend." >> "$LOG_FILE"
+        exit 0
+    fi
+fi
+
+if [ "$IS_OVERRIDE_RUN" = false ] && [ -f "$OVERRIDE_FILE" ] && command -v jq >/dev/null 2>&1; then
     OVERRIDE_ACTIVE=$(jq -r '.active // empty' "$OVERRIDE_FILE" 2>/dev/null || echo "")
     OVERRIDE_TIME=$(jq -r '.sleep_time // empty' "$OVERRIDE_FILE" 2>/dev/null || echo "")
     CURRENT_TIME=$(date '+%H:%M')
@@ -58,24 +68,86 @@ if [ "$IS_OVERRIDE_RUN" = false ] && [ -f "$OVERRIDE_FILE" ]; then
     fi
 fi
 
-# 3. Dynamic Safety: Defer midnight suspend if backup or sync is in progress
-if pgrep -f "immich_backup_gdrive.sh" >/dev/null 2>&1 || pgrep -f "rclone sync" >/dev/null 2>&1 || pgrep -f "pg_dumpall" >/dev/null 2>&1; then
-    echo "[$(ts)] [DEFER] Cloud backup or database dump is currently in progress. Skipping suspend." >> "$LOG_FILE"
+# 3. Dynamic Safety Guards (ADR-0003): defer suspend while critical work is active
+# 3a. Active cloud backup, media settings backup, restore test, or database dump
+if pgrep -f "immich_backup_gdrive.sh" >/dev/null 2>&1 \
+    || pgrep -f "media_config_backup.py" >/dev/null 2>&1 \
+    || pgrep -f "photo_restore_test" >/dev/null 2>&1 \
+    || pgrep -f "rclone sync" >/dev/null 2>&1 \
+    || pgrep -f "rclone copy" >/dev/null 2>&1 \
+    || pgrep -f "pg_dumpall" >/dev/null 2>&1; then
+    echo "[$(ts)] [DEFER] Cloud backup, restore test, or database dump is currently in progress. Skipping suspend." >> "$LOG_FILE"
     exit 0
+fi
+
+# 3b. Active LAN SMB file transfers / share sessions (excluding idle IPC$ probes)
+if command -v smbstatus >/dev/null 2>&1; then
+    if smbstatus -S 2>/dev/null | awk 'NR>3 && $1 != "" && $1 != "IPC$" && $1 !~ /^-+$/ {found=1} END {exit !found}'; then
+        echo "[$(ts)] [DEFER] Active LAN Samba (SMB) share session detected. Skipping suspend." >> "$LOG_FILE"
+        exit 0
+    fi
+fi
+
+# Helper to read a single KEY=VALUE from control-hub.env without sourcing arbitrary code
+read_env_key() {
+    local key="$1"
+    if [ -r "$CONTROL_HUB_ENV" ]; then
+        awk -F= -v k="$key" '$1 == k {sub(/^[^=]*=/, ""); gsub(/^["'\'']|["'\'']$/, ""); print; exit}' "$CONTROL_HUB_ENV" 2>/dev/null || true
+    fi
+}
+
+# 3c. Active qBittorrent downloads (> 50 KB/s)
+if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    QBIT_URL="${QBITTORRENT_URL:-$(read_env_key QBITTORRENT_URL)}"
+    QBIT_URL="${QBIT_URL:-http://127.0.0.1:8080}"
+    QBIT_USER="${QBITTORRENT_USER:-$(read_env_key QBITTORRENT_USER)}"
+    QBIT_USER="${QBIT_USER:-admin}"
+    QBIT_PASS="${QBITTORRENT_PASS:-$(read_env_key QBITTORRENT_PASS)}"
+
+    if [ -n "$QBIT_PASS" ]; then
+        COOKIE_JAR=$(mktemp)
+        if curl -fsS --max-time 2 -c "$COOKIE_JAR" \
+            --data-urlencode "username=$QBIT_USER" \
+            --data-urlencode "password=$QBIT_PASS" \
+            "${QBIT_URL%/}/api/v2/auth/login" 2>/dev/null | grep -q "Ok\."; then
+            DL_SPEED=$(curl -fsS --max-time 2 -b "$COOKIE_JAR" "${QBIT_URL%/}/api/v2/transfer/info" 2>/dev/null \
+                | jq -r '.dl_info_speed // 0' 2>/dev/null || echo "0")
+            rm -f "$COOKIE_JAR"
+            if [[ "$DL_SPEED" =~ ^[0-9]+$ ]] && [ "$DL_SPEED" -gt 51200 ]; then
+                echo "[$(ts)] [DEFER] Active qBittorrent download in progress (${DL_SPEED} B/s). Skipping suspend." >> "$LOG_FILE"
+                exit 0
+            fi
+        else
+            rm -f "$COOKIE_JAR"
+        fi
+    fi
+
+    # 3d. Active Jellyfin playback (when JELLYFIN_API_KEY is configured)
+    JF_URL="${JELLYFIN_URL:-$(read_env_key JELLYFIN_URL)}"
+    JF_URL="${JF_URL:-http://127.0.0.1:8096}"
+    JF_KEY="${JELLYFIN_API_KEY:-$(read_env_key JELLYFIN_API_KEY)}"
+    if [ -n "$JF_KEY" ]; then
+        JF_PLAYING=$(curl -fsS --max-time 2 -H "X-Emby-Token: $JF_KEY" "${JF_URL%/}/Sessions" 2>/dev/null \
+            | jq -r '[.[] | select(.NowPlayingItem != null and ((.PlayState.IsPaused // false) == false))] | length' 2>/dev/null || echo "0")
+        if [[ "$JF_PLAYING" =~ ^[0-9]+$ ]] && [ "$JF_PLAYING" -gt 0 ]; then
+            echo "[$(ts)] [DEFER] Active Jellyfin media playback (${JF_PLAYING} stream(s)). Skipping suspend." >> "$LOG_FILE"
+            exit 0
+        fi
+    fi
 fi
 
 # 4. Calculate Sleep Duration (Seconds)
 SLEEP_DURATION=21600 # Default fallback: 6 hours (21600 seconds)
 
-if [ -f "$OVERRIDE_FILE" ]; then
+if [ -f "$OVERRIDE_FILE" ] && command -v jq >/dev/null 2>&1; then
     O_DUR=$(jq -r '.duration_seconds // empty' "$OVERRIDE_FILE" 2>/dev/null || echo "")
-    if [[ -n "$O_DUR" && "$O_DUR" -gt 0 ]]; then
+    if [[ "$O_DUR" =~ ^[0-9]+$ && "$O_DUR" -gt 0 ]]; then
         SLEEP_DURATION=$O_DUR
         echo "[$(ts)] [OVERRIDE] Using tonight's override sleep duration: ${SLEEP_DURATION}s." >> "$LOG_FILE"
     fi
-elif [ -f "$CONFIG_FILE" ]; then
+elif [ -f "$CONFIG_FILE" ] && command -v jq >/dev/null 2>&1; then
     C_DUR=$(jq -r '.duration_seconds // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
-    if [[ -n "$C_DUR" && "$C_DUR" -gt 0 ]]; then
+    if [[ "$C_DUR" =~ ^[0-9]+$ && "$C_DUR" -gt 0 ]]; then
         SLEEP_DURATION=$C_DUR
         echo "[$(ts)] [CONFIG] Using configured permanent sleep duration: ${SLEEP_DURATION}s." >> "$LOG_FILE"
     fi

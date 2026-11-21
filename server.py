@@ -4,13 +4,14 @@ Homelab Control Hub - modular backend API daemon.
 Lightweight Flask dashboard engine for low-power home servers.
 """
 
+import os
 import time
 from pathlib import Path
 from flask import Flask, jsonify, send_file, send_from_directory
 
-from config import HOST, PORT
+from config import HOST, HUB_CACHE_DIR, PORT
 from core.auth import install_auth
-from core.telemetry_sampler import start_telemetry_sampler
+from core.telemetry_sampler import sampler_health, start_telemetry_sampler
 
 # Import all visual widget blueprints
 from widgets.sleep_guard import sleep_guard_bp
@@ -55,14 +56,34 @@ def create_app():
 
     @app.route("/api/readyz")
     def readyz():
-        # Subsystem checks: ensure basic paths and memory telemetry accessible
-        return jsonify({
-            "status": "ready",
+        """Verifies telemetry sampler health and local storage/cache accessibility."""
+        sh = sampler_health()
+        telemetry_degraded = False
+        telemetry_detail = "standby"
+        if sh.get("started"):
+            age = sh.get("age_seconds")
+            if not sh.get("alive"):
+                telemetry_degraded = True
+                telemetry_detail = "dead"
+            elif age is not None and age > 30:
+                telemetry_degraded = True
+                telemetry_detail = f"stale ({age}s)"
+            else:
+                telemetry_detail = "alive"
+
+        cache_parent = Path(HUB_CACHE_DIR) if Path(HUB_CACHE_DIR).exists() else Path(HUB_CACHE_DIR).parent
+        storage_ok = os.path.isdir("/") and cache_parent.exists()
+
+        ready = (not telemetry_degraded) and storage_ok
+        payload = {
+            "status": "ready" if ready else "degraded",
             "checks": {
-                "telemetry": "ok",
-                "storage": "ok"
-            }
-        })
+                "telemetry": "degraded" if telemetry_degraded else "ok",
+                "telemetry_detail": telemetry_detail,
+                "storage": "ok" if storage_ok else "degraded",
+            },
+        }
+        return jsonify(payload), (200 if ready else 503)
 
     # 2. OpenAPI Specification & Swagger UI
     @app.route("/api/openapi.yaml")

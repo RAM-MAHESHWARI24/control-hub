@@ -65,14 +65,14 @@ def probe_network_interfaces() -> Dict[str, Any]:
     if sys_net.exists():
         for iface_path in sorted(sys_net.iterdir()):
             iface_name = iface_path.name
-            if iface_name == "lo" or iface_name.startswith(("docker", "veth", "br-", "tailscale", "virbr")):
+            if iface_name == "lo" or iface_name.startswith(("docker", "veth", "br-", "tailscale", "virbr", "wg", "podman", "cni", "tun", "tap")):
                 continue
 
-            speed_mbps = 1000
+            speed_mbps = None
             speed_file = iface_path / "speed"
             if speed_file.exists():
                 try:
-                    val = int(speed_file.read_text().strip())
+                    val = int(speed_file.read_text(encoding="utf-8").strip())
                     if val > 0:
                         speed_mbps = val
                 except Exception:
@@ -82,7 +82,7 @@ def probe_network_interfaces() -> Dict[str, Any]:
             operstate_file = iface_path / "operstate"
             if operstate_file.exists():
                 try:
-                    is_up = operstate_file.read_text().strip() == "up"
+                    is_up = operstate_file.read_text(encoding="utf-8").strip() == "up"
                 except Exception:
                     pass
 
@@ -122,7 +122,7 @@ def probe_network_interfaces() -> Dict[str, Any]:
         up = [i["name"] for i in interfaces if i["is_up"]]
         active_nic = up[0] if up else (interfaces[0]["name"] if interfaces else "eth0")
     if not interfaces:
-        interfaces.append({"name": active_nic, "is_up": True, "speed_mbps": 1000})
+        interfaces.append({"name": active_nic, "is_up": True, "speed_mbps": None})
     if not gateway:
         # Best-effort guess: x.y.z.1 on the detected subnet
         parts = default_ip.split(".")

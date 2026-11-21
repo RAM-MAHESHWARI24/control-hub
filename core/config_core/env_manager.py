@@ -273,7 +273,10 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                 "QBITTORRENT_PASS": qbit_pass,
                 "HDD_DATA": data_dir,
                 "HDD_MEMORIES": memories_dir,
+                "PHOTO_UPLOAD_DIR": config.get("photo_upload_dir", f"{memories_dir.rstrip('/')}/uploads"),
                 "GDRIVE_REMOTE": config.get("gdrive_remote", ""),
+                "IMMICH_DB_USER": config.get("postgres_user", "postgres"),
+                "IMMICH_DB_NAME": config.get("postgres_db", "immich"),
                 "TZ": tz,
                 # Set only when the TV module is part of this install; empty hides the TV card.
                 # "Back up now" for the media apps' settings; empty hides the button.

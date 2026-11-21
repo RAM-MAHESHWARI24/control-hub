@@ -4,40 +4,45 @@ Probes CPU/GPU, RAM, Host User IDs, Docker status, Disks, and Network.
 """
 
 import os
-import sys
 import platform
 import shutil
 import subprocess
+import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 
-from .storage_manager import get_disk_partitions
 from .netplan_manager import probe_network_interfaces
 from .port_manager import get_default_ports
+from .storage_manager import get_disk_partitions
+
+_DRM_VENDORS = {
+    "0x8086": ("intel", "Intel QuickSync / VAAPI"),
+    "0x1002": ("amd", "AMD VAAPI"),
+    "0x10de": ("nvidia", "NVIDIA GPU"),
+}
 
 
-def probe_cpu_info() -> Dict[str, Any]:
-    """Detects CPU model, core/thread count, architecture, and Haswell/Direct Play class"""
-    model_name = ""
+def probe_cpu_info(model_override: Optional[str] = None) -> Dict[str, Any]:
+    """Detects CPU model, core/thread count, architecture, and legacy low-power class."""
+    model_name = model_override or ""
     cores = os.cpu_count() or 2
     arch = platform.machine()
     is_low_power = False
 
-    # 1. Linux /proc/cpuinfo
-    proc_cpuinfo = Path("/proc/cpuinfo")
-    if proc_cpuinfo.exists():
-        try:
-            with open(proc_cpuinfo, "r", encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    if line.startswith("model name"):
-                        m = line.split(":", 1)[1].strip()
-                        if m:
-                            model_name = m
-                            break
-        except Exception:
-            pass
+    if not model_name:
+        proc_cpuinfo = Path("/proc/cpuinfo")
+        if proc_cpuinfo.exists():
+            try:
+                with open(proc_cpuinfo, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        if line.startswith("model name"):
+                            m = line.split(":", 1)[1].strip()
+                            if m:
+                                model_name = m
+                                break
+            except Exception:
+                pass
 
-    # 2. Windows registry fallback for clean processor brand string
     if not model_name and sys.platform == "win32":
         try:
             import winreg
@@ -46,7 +51,6 @@ def probe_cpu_info() -> Dict[str, Any]:
         except Exception:
             pass
 
-    # 3. macOS sysctl fallback
     if not model_name and sys.platform == "darwin":
         try:
             res = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True, timeout=2)
@@ -58,9 +62,10 @@ def probe_cpu_info() -> Dict[str, Any]:
     if not model_name:
         model_name = platform.processor() or f"{arch} Host Processor"
 
-    # Detect older low-power architectures (e.g. Haswell, Broadwell, Celeron, Atom)
+    # Legacy CPUs lacking HEVC 10-bit hardware decode (Haswell/Broadwell/Bay Trail/Atom).
+    # Modern Alder Lake-N (N100, N200) and Jasper Lake (N5105) have full QuickSync 4K HEVC.
     model_lower = model_name.lower()
-    if any(k in model_lower for k in ["i3-4", "i5-4", "haswell", "celeron", "atom", "j1900", "n5105", "n100"]):
+    if any(k in model_lower for k in ["i3-4", "i5-4", "i7-4", "haswell", "broadwell", "j1900", "celeron j", "atom"]):
         is_low_power = True
 
     return {
@@ -69,19 +74,19 @@ def probe_cpu_info() -> Dict[str, Any]:
         "cores": cores,
         "architecture": arch,
         "is_low_power": is_low_power,
-        "recommended_playback": "Direct Play (CPU Protection)" if is_low_power else "Intel QuickSync / Hardware Transcode",
+        "recommended_playback": "Direct Play (CPU Protection)" if is_low_power else "Hardware Transcode / Direct Play",
     }
 
 
 def probe_ram_info() -> Dict[str, Any]:
-    """Detects total memory and available memory in GiB across Linux, Windows, or macOS"""
-    total_gib = 8.0
-    free_gib = 4.0
+    """Detects total memory and available memory in GiB across Linux, Windows, or macOS."""
+    total_gib: Optional[float] = None
+    free_gib: Optional[float] = None
 
     meminfo = Path("/proc/meminfo")
     if meminfo.exists():
         try:
-            with open(meminfo, "r") as f:
+            with open(meminfo, "r", encoding="utf-8") as f:
                 mem = {}
                 for line in f:
                     parts = line.split(":")
@@ -98,18 +103,20 @@ def probe_ram_info() -> Dict[str, Any]:
     elif sys.platform == "win32":
         try:
             import ctypes
+
             class MEMORYSTATUSEX(ctypes.Structure):
                 _fields_ = [
-                    ('dwLength', ctypes.c_ulong),
-                    ('dwMemoryLoad', ctypes.c_ulong),
-                    ('ullTotalPhys', ctypes.c_ulonglong),
-                    ('ullAvailPhys', ctypes.c_ulonglong),
-                    ('ullTotalPageFile', ctypes.c_ulonglong),
-                    ('ullAvailPageFile', ctypes.c_ulonglong),
-                    ('ullTotalVirtual', ctypes.c_ulonglong),
-                    ('ullAvailVirtual', ctypes.c_ulonglong),
-                    ('ullAvailExtendedVirtual', ctypes.c_ulonglong)
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
                 ]
+
             s = MEMORYSTATUSEX()
             s.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
             ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s))
@@ -117,58 +124,94 @@ def probe_ram_info() -> Dict[str, Any]:
             free_gib = round(s.ullAvailPhys / (1024**3), 2)
         except Exception:
             pass
+    elif sys.platform == "darwin":
+        try:
+            res = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=2)
+            if res.returncode == 0 and res.stdout.strip().isdigit():
+                total_gib = round(int(res.stdout.strip()) / (1024**3), 2)
+        except Exception:
+            pass
 
     return {
         "total_gib": total_gib,
         "free_gib": free_gib,
-        "is_constrained": total_gib < 8.0,
+        "is_constrained": (total_gib is not None and total_gib < 8.0),
     }
 
 
-def probe_hardware_acceleration() -> Dict[str, Any]:
-    """Inspects Linux DRI render nodes (/dev/dri/renderD128) and NVIDIA drivers"""
+def probe_hardware_acceleration(
+    dri_root: Path = Path("/dev/dri"),
+    drm_sys_root: Path = Path("/sys/class/drm"),
+) -> Dict[str, Any]:
+    """Inspects Linux DRI render nodes, PCI vendor IDs (Intel/AMD/NVIDIA), and nvidia-smi."""
     has_vaapi_dri = False
     has_nvidia = False
+    vendor = None
+    vendor_label = None
     details = []
 
-    render_node = Path("/dev/dri/renderD128")
+    if drm_sys_root.is_dir():
+        try:
+            for card in sorted(drm_sys_root.glob("card*")):
+                vendor_file = card / "device" / "vendor"
+                if vendor_file.is_file():
+                    raw_vendor = vendor_file.read_text(encoding="utf-8", errors="ignore").strip().lower()
+                    if raw_vendor in _DRM_VENDORS:
+                        vendor, vendor_label = _DRM_VENDORS[raw_vendor]
+                        break
+        except OSError:
+            pass
+
+    render_node = dri_root / "renderD128"
     if render_node.exists():
         has_vaapi_dri = True
-        details.append("/dev/dri/renderD128 (Intel QuickSync / VAAPI available)")
+        desc = vendor_label or "VAAPI / Direct Rendering Manager"
+        details.append(f"/dev/dri/renderD128 ({desc} available)")
 
-    card_node = Path("/dev/dri/card0")
+    card_node = dri_root / "card0"
     if card_node.exists() and not has_vaapi_dri:
         has_vaapi_dri = True
-        details.append("/dev/dri/card0 (Direct Rendering Manager active)")
+        desc = vendor_label or "Direct Rendering Manager active"
+        details.append(f"/dev/dri/card0 ({desc})")
 
     if shutil.which("nvidia-smi"):
         has_nvidia = True
+        vendor = vendor or "nvidia"
         details.append("NVIDIA Driver detected (nvidia-smi present)")
 
     if not details:
         details.append("No dedicated GPU render node detected (CPU Direct Play will be used)")
 
+    if has_nvidia:
+        recommended_mode = "nvidia"
+    elif has_vaapi_dri:
+        recommended_mode = "qsv" if vendor == "intel" else "vaapi"
+    else:
+        recommended_mode = "direct_play"
+
     return {
         "has_vaapi_dri": has_vaapi_dri,
         "has_nvidia": has_nvidia,
+        "vendor": vendor,
+        "vendor_label": vendor_label,
         "details": details,
-        "recommended_mode": "qsv" if has_vaapi_dri else ("nvidia" if has_nvidia else "direct_play"),
+        "recommended_mode": recommended_mode,
     }
 
 
 def probe_host_user() -> Dict[str, Any]:
     """
     Identifies the ideal non-root user running Docker.
-    Checks SUDO_USER, logname, or user with UID 1000.
+    Checks SUDO_USER, configured HOST_USER/PUID/PGID, UID 1000, or current user.
     """
-    username = os.getenv("SUDO_USER") or os.getenv("USER") or "homelab_user"
-    puid = 1000
-    pgid = 1000
+    env_user = (os.getenv("HOST_USER") or "").strip()
+    username = env_user or os.getenv("SUDO_USER") or os.getenv("USER") or "homelab_user"
+    puid = int(os.getenv("PUID", "1000")) if str(os.getenv("PUID", "")).isdigit() else 1000
+    pgid = int(os.getenv("PGID", "1000")) if str(os.getenv("PGID", "")).isdigit() else 1000
 
     if hasattr(os, "getuid"):
         current_uid = os.getuid()
         current_gid = os.getgid()
-        # If running via sudo (UID 0), prefer SUDO_USER's IDs
         if current_uid == 0:
             sudo_user = os.getenv("SUDO_USER")
             if sudo_user:
@@ -181,6 +224,18 @@ def probe_host_user() -> Dict[str, Any]:
                 except Exception:
                     puid = 1000
                     pgid = 1000
+        elif current_uid < 1000:
+            # System service account (e.g. 'homelab' running control-hub.service):
+            # prefer explicit PUID/PGID env vars or primary login user UID 1000.
+            if not env_user:
+                try:
+                    import pwd
+                    u1000 = pwd.getpwuid(1000)
+                    username = u1000.pw_name
+                    puid = u1000.pw_uid
+                    pgid = u1000.pw_gid
+                except Exception:
+                    pass
         else:
             puid = current_uid
             pgid = current_gid
@@ -193,11 +248,11 @@ def probe_host_user() -> Dict[str, Any]:
 
 
 def probe_timezone() -> str:
-    """Detects server timezone from /etc/timezone or /etc/localtime symlink"""
+    """Detects server timezone from /etc/timezone or /etc/localtime symlink."""
     tz_file = Path("/etc/timezone")
     if tz_file.exists():
         try:
-            val = tz_file.read_text().strip()
+            val = tz_file.read_text(encoding="utf-8").strip()
             if val:
                 return val
         except Exception:
@@ -216,14 +271,13 @@ def probe_timezone() -> str:
 
 
 def probe_docker_status() -> Dict[str, Any]:
-    """Checks whether Docker Engine and Docker Compose plugin are installed and running"""
+    """Checks whether Docker Engine and Docker Compose plugin are installed and running."""
     docker_bin = shutil.which("docker")
     compose_installed = False
     daemon_running = False
     docker_version = "Not installed"
 
     if docker_bin:
-        # Check daemon status
         try:
             cmd = subprocess.run([docker_bin, "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True, timeout=5)
             if cmd.returncode == 0:
@@ -232,7 +286,6 @@ def probe_docker_status() -> Dict[str, Any]:
         except Exception:
             pass
 
-        # Check docker compose plugin
         try:
             comp_cmd = subprocess.run([docker_bin, "compose", "version"], capture_output=True, text=True, timeout=5)
             if comp_cmd.returncode == 0:
@@ -249,7 +302,7 @@ def probe_docker_status() -> Dict[str, Any]:
 
 
 def get_system_snapshot() -> Dict[str, Any]:
-    """Returns a comprehensive, reactive hardware and OS snapshot"""
+    """Returns a comprehensive, reactive hardware and OS snapshot."""
     return {
         "cpu": probe_cpu_info(),
         "ram": probe_ram_info(),
@@ -281,20 +334,27 @@ def generate_ai_context_dump(snapshot: Dict[str, Any]) -> str:
     disks = snapshot["disks"]
     dock = snapshot["docker"]
 
-    disk_summary = ", ".join([f"{d['mount_point']} ({d['total_gb']}GB total, {d['free_gb']}GB free)" for d in disks[:3]])
+    disk_summary = ", ".join([f"{d['mount_point']} ({d['total_gb']}GB total, {d['free_gb']}GB free)" for d in disks[:4]])
+    ram_text = (
+        f"{ram['total_gib']} GiB total ({ram['free_gib']} GiB available)"
+        if ram.get("total_gib") is not None
+        else "Unavailable"
+    )
+    hdd_data = os.getenv("HDD_DATA", "/mnt/hdd/data")
 
     return f"""# Homelab Node Diagnostic Snapshot (Token-Optimized)
-- CPU: {cpu['model']} ({cpu['threads']}T, {cpu['architecture']}) | Low-Power: {cpu['is_low_power']}
-- Memory: {ram['total_gib']} GiB total ({ram['free_gib']} GiB available)
-- HW Acceleration: {', '.join(hw['details'])}
+- Host: {snapshot.get('os_info', {}).get('hostname', 'unknown')} ({snapshot.get('os_info', {}).get('system', 'Linux')} {snapshot.get('os_info', {}).get('release', '')})
+- CPU: {cpu['model']} ({cpu['threads']}T, {cpu['architecture']}) | Low-Power: {cpu['is_low_power']} | Playback: {cpu['recommended_playback']}
+- Memory: {ram_text}
+- HW Acceleration: {', '.join(hw['details'])} (mode: {hw.get('recommended_mode', 'direct_play')})
 - Host User: {user['username']} (PUID={user['puid']}, PGID={user['pgid']})
 - Network: IP={net['current_ip']} on {net['active_nic']} | Gateway={net['default_gateway']} | DNS={', '.join(net['dns_servers'])}
 - Storage Mounts: {disk_summary or 'No physical mounts detected'}
 - Docker: Engine={dock['version']} | Daemon Running={dock['daemon_running']} | Compose={dock['compose_installed']}
 
-## Monorepo Rules Reference:
-1. STORAGE_AND_HARDLINKS.md: Torrents & Media MUST share single-mount root (/mnt/hdd/data:/data).
-2. HASWELL_DIRECT_PLAY_GUIDE.md: Direct Play enforced on older CPUs (<1.5% CPU vs 100% transcode lock).
-3. POWER_MANAGEMENT_RTCWAKE.md: S3 sleep 00:00 - 06:00 (1.2W) with rclone/backup active deferral.
-4. NETPLAN_STATIC_IP_QUIRKS.md: Use 'netplan try --timeout 45' to prevent SSH lockout.
+## Architectural Invariants Reference:
+1. STORAGE_AND_HARDLINKS.md: Downloaders & library managers MUST share a single mount ({hdd_data}:/data) for 0-I/O atomic hardlinks.
+2. Playback & Transcoding: Use hardware decode ({hw.get('recommended_mode', 'direct_play')}) or Direct Play on legacy CPUs lacking HEVC 10-bit decode.
+3. POWER_MANAGEMENT_RTCWAKE.md: Optional ACPI S3 sleep defers automatically for active backups, SMB shares, qBittorrent downloads, and Jellyfin playback.
+4. NETPLAN_STATIC_IP_QUIRKS.md: Never run raw `netplan apply` over SSH; apply via `netplan_manager.py` with the 120s `homelab-netplan-revert` confirm timer.
 """

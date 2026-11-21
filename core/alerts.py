@@ -405,7 +405,14 @@ def collect_disks(config: Dict, mounts: List[str], usage=shutil.disk_usage) -> L
             u = usage(mount)
         except OSError:
             continue
-        ident = (u.total, u.used)
+        ident = None
+        if usage is shutil.disk_usage:
+            try:
+                ident = ("dev", os.stat(mount).st_dev)
+            except OSError:
+                ident = None
+        if ident is None:
+            ident = ("size", u.total, u.used)
         if ident in seen:
             continue
         seen.add(ident)
@@ -429,9 +436,14 @@ def collect_containers(config: Dict, containers: List[Dict], catalog: Dict) -> L
         name = (c.get("Names") or "").strip()
         if name not in catalog or name in ignore:
             continue
+        meta = catalog[name] or {}
         state, status = c.get("State", ""), c.get("Status", "")
+        # Scheduled containers (e.g. immich_machine_learning) are intentionally
+        # stopped outside their run window; only alert if running and unhealthy.
+        if meta.get("scheduled") and state != "running":
+            continue
         if state != "running" or "(unhealthy)" in status:
-            label = catalog[name].get("name", name)
+            label = meta.get("name", name)
             why = "unhealthy" if state == "running" else (state or "stopped")
             out.append(Condition(f"container:{name}", "container_down", sev, f"{title}: {label}",
                                  f"{label} ({name}) is {why}: {status or 'no status'}.", min_seconds=int(rule["minutes"] * 60)))
@@ -477,14 +489,9 @@ def collect_signins(failures: Dict[str, int], limit: int) -> List[Condition]:
 
 
 def read_cpu_temp() -> Optional[float]:
-    for zone in ("/sys/class/thermal/thermal_zone0/temp", "/sys/class/thermal/thermal_zone1/temp"):
-        try:
-            raw = int(Path(zone).read_text().strip())
-            if raw > 1000:
-                return round(raw / 1000.0, 1)
-        except (OSError, ValueError):
-            continue
-    return None
+    from core.telemetry_sampler import read_cpu_temp as _sampler_read_cpu_temp
+
+    return _sampler_read_cpu_temp()
 
 
 def docker_containers() -> Optional[List[Dict]]:

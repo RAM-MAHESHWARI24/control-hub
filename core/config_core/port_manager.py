@@ -80,7 +80,7 @@ DEFAULT_PORT_CATALOG = {
         "essential": True,
     },
     "setup_wizard": {
-        "port": 8000,
+        "port": 8099,
         "name": "Homelab Setup Wizard",
         "category": "system",
         "essential": True,
@@ -102,15 +102,19 @@ def check_port(port: int, host: str = "0.0.0.0") -> bool:
         return False
 
 
-def get_default_ports() -> Dict[str, Any]:
-    """Returns catalog of blueprint ports with current availability status"""
+def get_default_ports(overrides: Dict[str, int] = None) -> Dict[str, Any]:
+    """Returns catalog of blueprint ports with current bind availability status."""
+    overrides = overrides or {}
     catalog = {}
     for key, info in DEFAULT_PORT_CATALOG.items():
-        is_free = check_port(info["port"])
+        port_num = int(overrides.get(key, info["port"]))
+        is_free = check_port(port_num)
         catalog[key] = {
             **info,
+            "port": port_num,
             "available": is_free,
-            "status": "available" if is_free else "conflict",
+            "in_use": not is_free,
+            "status": "available" if is_free else "in_use",
         }
     return catalog
 

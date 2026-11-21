@@ -1,7 +1,7 @@
 """
 Widget: Configuration & Node Control Center
 
-Environment settings, atomic hardlink testing, port conflict matrix,
+Environment settings, atomic hardlink testing, port status matrix,
 credential generation, AI Copilot diagnostics and static-IP changes.
 
 Static IP changes run through core/netplan_cli.py under sudo (the daemon is
@@ -21,6 +21,7 @@ HUB_ROOT = Path(__file__).resolve().parent.parent
 if str(HUB_ROOT) not in sys.path:
     sys.path.insert(0, str(HUB_ROOT))
 
+from config import PORT  # noqa: E402
 from core.config_core import (  # noqa: E402
     ETC_DIR,
     generate_all_secrets,
@@ -39,6 +40,13 @@ from core.config_core import (  # noqa: E402
 # Monorepo root when running inside the blueprint, otherwise the hub itself (standalone).
 REPO_ROOT = HUB_ROOT.parent.parent if (HUB_ROOT.parent.parent / "apps" / "control-hub").exists() else HUB_ROOT
 NETPLAN_CLI = HUB_ROOT / "core" / "netplan_cli.py"
+SECRET_MASK = "********"
+SECRET_CONFIG_KEYS = {
+    "radarr_api_key": "RADARR_API_KEY",
+    "sonarr_api_key": "SONARR_API_KEY",
+    "prowlarr_api_key": "PROWLARR_API_KEY",
+    "qbittorrent_pass": "QBITTORRENT_PASS",
+}
 
 config_center_bp = Blueprint("config_center", __name__)
 
@@ -49,6 +57,11 @@ def _blueprint_env_path() -> Path:
         if candidate.exists():
             return candidate
     return REPO_ROOT / ".env.example"
+
+
+def _is_env_read_only() -> bool:
+    """True on blueprint installs where /etc/homelab is root-owned (not writable by the daemon)."""
+    return bool(ETC_DIR.exists() and not os.access(ETC_DIR, os.W_OK))
 
 
 def _run_privileged_netplan(args):
@@ -69,12 +82,17 @@ def _run_privileged_netplan(args):
 
 @config_center_bp.route("/api/config/current", methods=["GET"])
 def get_current_config():
-    """Returns current environment values, system vitals, mounts and network interfaces."""
+    """Returns current environment values (secrets masked), system vitals, mounts and network interfaces."""
     try:
         env_path = _blueprint_env_path()
         env_vars = load_env_file(str(env_path))
         snapshot = get_system_snapshot()
         interfaces = probe_network_interfaces()
+        read_only = _is_env_read_only()
+
+        def _mask(key: str) -> str:
+            val = env_vars.get(key, "")
+            return SECRET_MASK if val else ""
 
         config = {
             "host_user": env_vars.get("HOST_USER", ""),
@@ -85,14 +103,14 @@ def get_current_config():
             "ssd_root": env_vars.get("SSD_ROOT", "/"),
             "hdd_data": env_vars.get("HDD_DATA", "/mnt/hdd/data"),
             "hdd_memories": env_vars.get("HDD_MEMORIES", "/mnt/hdd/Memories"),
-            "radarr_api_key": env_vars.get("RADARR_API_KEY", ""),
-            "sonarr_api_key": env_vars.get("SONARR_API_KEY", ""),
-            "prowlarr_api_key": env_vars.get("PROWLARR_API_KEY", ""),
-            "control_hub_port": env_vars.get("CONTROL_HUB_PORT", "7575"),
+            "radarr_api_key": _mask("RADARR_API_KEY"),
+            "sonarr_api_key": _mask("SONARR_API_KEY"),
+            "prowlarr_api_key": _mask("PROWLARR_API_KEY"),
+            "control_hub_port": env_vars.get("CONTROL_HUB_PORT", str(PORT)),
             "active_nic": env_vars.get("ACTIVE_NIC") or interfaces.get("active_nic", ""),
-            "link_speed_mbps": env_vars.get("LINK_SPEED_MBPS", "1000"),
+            "link_speed_mbps": env_vars.get("LINK_SPEED_MBPS", ""),
             "qbittorrent_user": env_vars.get("QBITTORRENT_USER", "admin"),
-            "qbittorrent_pass": env_vars.get("QBITTORRENT_PASS", ""),
+            "qbittorrent_pass": _mask("QBITTORRENT_PASS"),
             "gdrive_remote": env_vars.get("GDRIVE_REMOTE", ""),
         }
 
@@ -104,6 +122,11 @@ def get_current_config():
             "interfaces": interfaces,
             "env_path": str(env_path),
             "is_example_fallback": env_path.name == ".env.example",
+            "read_only": read_only,
+            "apply_hint": (
+                f"{ETC_DIR} is root-owned. Edit {ETC_DIR}/config.json and run "
+                f"'sudo ./setup.sh --headless --config {ETC_DIR}/config.json' to apply changes."
+            ) if read_only else None,
             "netplan_pending": netplan_change_status(),
         })
     except Exception as e:
@@ -118,9 +141,16 @@ def update_config():
         if not data:
             return jsonify({"status": "error", "message": "No configuration payload provided"}), 400
 
+        # Preserve existing stored secrets if the browser echoes the mask back unchanged.
+        env_vars = load_env_file(str(_blueprint_env_path()))
+        merged = dict(data)
+        for field_key, env_key in SECRET_CONFIG_KEYS.items():
+            if merged.get(field_key) == SECRET_MASK:
+                merged[field_key] = env_vars.get(env_key, "")
+
         env_dir = str(ETC_DIR) if ETC_DIR.exists() else None
         try:
-            results = sync_all_blueprint_envs(str(REPO_ROOT), data, env_dir=env_dir)
+            results = sync_all_blueprint_envs(str(REPO_ROOT), merged, env_dir=env_dir)
         except PermissionError:
             return jsonify({
                 "status": "error",
@@ -146,7 +176,8 @@ def verify_hardlink():
 @config_center_bp.route("/api/config/ports", methods=["GET"])
 def get_ports_status():
     try:
-        return jsonify({"status": "success", "ports": get_default_ports()})
+        overrides = {"control_hub": PORT}
+        return jsonify({"status": "success", "ports": get_default_ports(overrides=overrides)})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

@@ -15,11 +15,13 @@ import time
 from flask import Blueprint, jsonify, request
 
 from config import (
+    TV_UPDATER_CRON_FILE,
     TV_UPDATER_DIR,
     TV_UPDATER_LOCAL_LOG_FILE,
     TV_UPDATER_LOG_FILE,
     TV_UPDATER_PY,
     TV_UPDATER_STATE_FILE,
+    get_tz_abbr,
 )
 
 # Ensure tv-updater directory is in sys.path for direct python imports and
@@ -40,7 +42,11 @@ def tv_module_installed() -> bool:
     return bool(TV_UPDATER_PY) and os.path.isfile(TV_UPDATER_PY)
 
 
-NOT_INSTALLED = {"success": False, "installed": False, "message": "TV auto-updater is not installed (set TV_UPDATER_PY)."}
+NOT_INSTALLED = {
+    "success": False,
+    "installed": False,
+    "message": "TV auto-updater is not installed (set TV_UPDATER_PY).",
+}
 
 try:
     import tv_updater
@@ -52,16 +58,46 @@ tv_updater_bp = Blueprint("tv_updater", __name__)
 tv_deploy_lock = threading.Lock()
 is_deploying_tv = False
 
-# Cache telemetry to prevent overwhelming ADB during frequent frontend polling
+# Background refresh cache so HTTP GET never stalls on sleeping TVs over ADB
+_telemetry_lock = threading.Lock()
+_telemetry_refreshing = False
+TELEMETRY_TTL_SEC = 30.0
 telemetry_cache = {
     "data": None,
-    "last_fetched": 0,
+    "last_fetched": 0.0,
 }
+
+
+def get_tv_schedule_text(tz_abbr: str = None) -> str:
+    """Reads actual cron cadence from /etc/cron.d/tv-autoupdater when present."""
+    tz = tz_abbr or get_tz_abbr()
+    if TV_UPDATER_CRON_FILE and os.path.isfile(TV_UPDATER_CRON_FILE):
+        try:
+            with open(TV_UPDATER_CRON_FILE, "r", encoding="utf-8", errors="replace") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#") or "tv_updater.py" not in line:
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        m_field, h_field = parts[0], parts[1]
+                        if m_field.startswith("*/") and m_field[2:].isdigit():
+                            interval = int(m_field[2:])
+                            if "-" in h_field:
+                                lo, hi = h_field.split("-", 1)
+                                return f"Every {interval} min ({int(lo):02d}:00 - {int(hi):02d}:59 {tz})"
+                            return f"Every {interval} min ({tz})"
+                        if m_field.isdigit() and h_field.isdigit():
+                            return f"Daily at {int(h_field):02d}:{int(m_field):02d} {tz}"
+                        return f"Cron ({m_field} {h_field}) {tz}"
+        except Exception:
+            pass
+    return "Not scheduled"
 
 
 def get_preferred_log_file():
     """Returns the most active/recently updated log file path."""
-    if os.path.exists(TV_UPDATER_LOG_FILE):
+    if TV_UPDATER_LOG_FILE and os.path.exists(TV_UPDATER_LOG_FILE):
         return TV_UPDATER_LOG_FILE
     if TV_UPDATER_LOCAL_LOG_FILE and os.path.exists(TV_UPDATER_LOCAL_LOG_FILE):
         return TV_UPDATER_LOCAL_LOG_FILE
@@ -80,21 +116,20 @@ def run_tv_deployment_thread(args_list):
             pass
         finally:
             is_deploying_tv = False
-            telemetry_cache["last_fetched"] = 0
+            with _telemetry_lock:
+                telemetry_cache["last_fetched"] = 0.0
 
 
-def fetch_telemetry_snapshot(force=False):
-    """Fetches cluster telemetry from tv_updater or cached state without fake defaults."""
+def _refresh_telemetry_sync() -> dict:
+    """Runs tv_updater.get_cluster_telemetry(fast_probe=True) and updates cache."""
     now = time.time()
-    if not force and telemetry_cache["data"] and (now - telemetry_cache["last_fetched"] < 4):
-        return telemetry_cache["data"]
-
     if tv_updater:
         try:
             data = tv_updater.get_cluster_telemetry(fast_probe=True)
             data["available"] = True
-            telemetry_cache["data"] = data
-            telemetry_cache["last_fetched"] = now
+            with _telemetry_lock:
+                telemetry_cache["data"] = data
+                telemetry_cache["last_fetched"] = now
             return data
         except Exception:
             pass
@@ -111,7 +146,7 @@ def fetch_telemetry_snapshot(force=False):
         "devices": [],
         "upstream_apps": {},
         "incoming_apks": [],
-        "schedule": "Every 15 min (06:00 - 23:59)",
+        "schedule": get_tv_schedule_text(),
     }
     if TV_UPDATER_STATE_FILE and os.path.exists(TV_UPDATER_STATE_FILE):
         try:
@@ -124,6 +159,44 @@ def fetch_telemetry_snapshot(force=False):
     return data
 
 
+def _kick_background_refresh() -> None:
+    global _telemetry_refreshing
+    with _telemetry_lock:
+        if _telemetry_refreshing:
+            return
+        _telemetry_refreshing = True
+
+    def _worker():
+        global _telemetry_refreshing
+        try:
+            _refresh_telemetry_sync()
+        finally:
+            with _telemetry_lock:
+                _telemetry_refreshing = False
+
+    threading.Thread(target=_worker, name="tv-telemetry-refresh", daemon=True).start()
+
+
+def fetch_telemetry_snapshot(force=False):
+    """
+    Fetches cluster telemetry without stalling regular polling requests.
+    - Fresh cache (< 30s): returned immediately.
+    - Stale cache & not forced: returns cached data immediately and refreshes asynchronously.
+    - Empty cache or force=True: refreshes synchronously.
+    """
+    now = time.time()
+    with _telemetry_lock:
+        cached = telemetry_cache["data"]
+        age = now - telemetry_cache["last_fetched"]
+
+    if not force and cached is not None:
+        if age >= TELEMETRY_TTL_SEC and tv_updater is not None:
+            _kick_background_refresh()
+        return cached
+
+    return _refresh_telemetry_sync()
+
+
 @tv_updater_bp.route("/api/tv-updater/status", methods=["GET"])
 def get_tv_updater_status():
     """Returns cluster deployment status, active stage, and device telemetry."""
@@ -134,7 +207,12 @@ def get_tv_updater_status():
 
     if not is_deploying:
         try:
-            res = subprocess.run(["pgrep", "-f", r"/tv_updater\.py(\s|$)"], stdout=subprocess.PIPE, text=True, timeout=1.2)
+            res = subprocess.run(
+                ["pgrep", "-f", r"/tv_updater\.py(\s|$)"],
+                stdout=subprocess.PIPE,
+                text=True,
+                timeout=1.2,
+            )
             lines = res.stdout.strip().splitlines()
             if lines and any(int(pid) != os.getpid() for pid in lines if pid.isdigit()):
                 is_deploying = True
@@ -158,13 +236,29 @@ def get_tv_updater_status():
     current_stage = 4 if total_devices > 0 else 0
     is_error = False
 
-    if os.path.exists(log_file):
+    if log_file and os.path.exists(log_file):
         try:
             with open(log_file, "r", encoding="utf-8", errors="replace") as f:
                 recent_lines = f.readlines()[-40:]
 
+            # Scan newest -> oldest and stop at the first definitive boundary of the latest run
+            # so historical resolved errors do not permanently lock the card in red.
             for line in reversed(recent_lines):
                 line_str = line.strip()
+                if not line_str:
+                    continue
+                if "[ERROR]" in line_str or "Failed to install" in line_str:
+                    is_error = True
+                    last_run_msg = line_str.split("[ERROR]")[-1].strip()
+                    break
+                if (
+                    "completely up to date" in line_str
+                    or "Zero pending tasks" in line_str
+                    or "Daily Upstream Sync complete" in line_str
+                ):
+                    current_stage = 4
+                    last_run_msg = line_str.split("[INFO]")[-1].strip()
+                    break
                 if "Successfully installed" in line_str or "Successfully deployed" in line_str:
                     current_stage = 4
                     last_run_msg = line_str.split("[INFO]")[-1].strip()
@@ -177,15 +271,14 @@ def get_tv_updater_status():
                     current_stage = 3
                     last_run_msg = line_str.split("[INFO]")[-1].strip()
                     break
-                if "Auto-Discovered" in line_str or "Discovered Online" in line_str:
+                if "Pending TV(s)" in line_str or "Auto-Discovered" in line_str or "Discovered Online" in line_str:
                     current_stage = 2
+                    last_run_msg = line_str.split("[INFO]")[-1].strip()
                     break
                 if "Initiating Daily Upstream Sync" in line_str or "Downloading from" in line_str:
                     current_stage = 1
+                    last_run_msg = line_str.split("[INFO]")[-1].strip()
                     break
-                if "[ERROR]" in line_str or "Failed to install" in line_str:
-                    is_error = True
-                    last_run_msg = line_str.split("[ERROR]")[-1].strip()
         except Exception:
             pass
 
@@ -227,7 +320,7 @@ def get_tv_updater_status():
         "incoming_apks": telemetry.get("incoming_apks", []),
         "log_file": log_file,
         "message": last_run_msg,
-        "schedule": "Every 15 min (06:00 - 23:59)",
+        "schedule": get_tv_schedule_text(),
     })
 
 
@@ -303,13 +396,15 @@ def trigger_single_app_install():
                     subprocess.run(cmd, check=False, timeout=300)
             finally:
                 is_deploying_tv = False
-                telemetry_cache["last_fetched"] = 0
+                with _telemetry_lock:
+                    telemetry_cache["last_fetched"] = 0.0
 
     t = threading.Thread(target=run_direct, daemon=True)
     t.start()
     return jsonify({
         "success": True,
-        "message": f"Deployment for '{package}' on '{device_id}' started" + (" (Force Mode: will update even if in foreground)" if force else "."),
+        "message": f"Deployment for '{package}' on '{device_id}' started"
+        + (" (Force Mode: will update even if in foreground)" if force else "."),
     })
 
 
@@ -327,7 +422,8 @@ def set_tv_nickname(device_id):
         return jsonify({"success": False, "message": str(exc)}), 400
     except OSError as exc:
         return jsonify({"success": False, "message": f"Could not save the name: {exc}"}), 500
-    telemetry_cache["last_fetched"] = 0
+    with _telemetry_lock:
+        telemetry_cache["last_fetched"] = 0.0
     return jsonify({"success": True, "device_id": device_id, "nickname": stored})
 
 
@@ -348,7 +444,7 @@ def trigger_push_incoming():
 def get_tv_updater_log():
     """Returns the tail of the updater log for the 1-click modal."""
     log_file = get_preferred_log_file()
-    if not os.path.exists(log_file):
+    if not log_file or not os.path.exists(log_file):
         return jsonify({"log_file": log_file, "log": f"Log file ({log_file}) not found or empty."})
 
     try:

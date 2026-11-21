@@ -10,30 +10,33 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 
-def get_disk_partitions() -> List[Dict[str, Any]]:
+def get_disk_partitions(proc_mounts: Path = Path("/proc/mounts")) -> List[Dict[str, Any]]:
     """
     Auto-detect disk mounts, total capacity, and available headroom.
-    Reads /proc/mounts on Linux; falls back to standard roots on non-Linux.
+    Reads /proc/mounts on Linux (supporting sd, nvme, vd, mmcblk, md, mapper);
+    deduplicates mounts that live on the same filesystem device (st_dev).
     """
     partitions = []
     seen_mounts = set()
+    seen_devs = set()
+    mount_meta: Dict[str, tuple[str, str]] = {}
 
-    # Priority candidate paths to always check
-    candidates = ["/", "/mnt/hdd", "/mnt/hdd/data", "/mnt/storage", "/media", "/data"]
+    # Priority candidate paths to inspect
+    candidates: List[str] = ["/", "/mnt/hdd", "/mnt/hdd/data", "/mnt/storage", "/media", "/data"]
+    discovered = set(candidates)
 
-    # On Linux, inspect /proc/mounts for real physical mounts
-    proc_mounts = Path("/proc/mounts")
+    # On Linux, inspect /proc/mounts for real physical / LVM / RAID / eMMC mounts
     if proc_mounts.exists():
         try:
-            with open(proc_mounts, "r") as f:
+            with open(proc_mounts, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     parts = line.strip().split()
                     if len(parts) >= 3:
-                        device, mount, _fstype = parts[0], parts[1], parts[2]
-                        # Filter out virtual filesystems (proc, sysfs, tmpfs, cgroup, overlay)
-                        if device.startswith(("/dev/sd", "/dev/nvme", "/dev/vd", "/dev/mapper")):
-                            if mount not in seen_mounts:
-                                seen_mounts.add(mount)
+                        device, mount, fstype = parts[0], parts[1], parts[2]
+                        if device.startswith(("/dev/sd", "/dev/nvme", "/dev/vd", "/dev/mapper", "/dev/mmcblk", "/dev/md", "/dev/xvd")):
+                            mount_meta[mount] = (device, fstype)
+                            if mount not in discovered:
+                                discovered.add(mount)
                                 candidates.append(mount)
         except Exception:
             pass
@@ -41,31 +44,39 @@ def get_disk_partitions() -> List[Dict[str, Any]]:
     # Windows dev fallback drive letters
     if os.name == "nt":
         for drive_letter in ["C:\\", "D:\\", "E:\\", "Z:\\"]:
-            if os.path.exists(drive_letter):
+            if os.path.exists(drive_letter) and drive_letter not in discovered:
+                discovered.add(drive_letter)
                 candidates.append(drive_letter)
 
     for path_str in candidates:
-        p = Path(path_str)
-        if p.exists() and path_str not in seen_mounts:
-            try:
-                usage = shutil.disk_usage(str(p))
-                total_gb = round(usage.total / (1024 ** 3), 1)
-                free_gb = round(usage.free / (1024 ** 3), 1)
-                used_gb = round(usage.used / (1024 ** 3), 1)
-                percent = round((usage.used / usage.total) * 100, 1) if usage.total > 0 else 0
-
-                seen_mounts.add(path_str)
-                partitions.append({
-                    "mount_point": path_str,
-                    "total_gb": total_gb,
-                    "free_gb": free_gb,
-                    "used_gb": used_gb,
-                    "percent_used": percent,
-                    "is_root": path_str in ["/", "C:\\"],
-                    "recommended_for": "ssd_config" if path_str == "/" or total_gb < 300 else "hdd_media",
-                })
-            except Exception:
+        if not os.path.exists(path_str) or path_str in seen_mounts:
+            continue
+        try:
+            st = os.stat(path_str)
+            if st.st_dev in seen_devs:
                 continue
+            usage = shutil.disk_usage(path_str)
+            total_gb = round(usage.total / (1024 ** 3), 1)
+            free_gb = round(usage.free / (1024 ** 3), 1)
+            used_gb = round(usage.used / (1024 ** 3), 1)
+            percent = round((usage.used / usage.total) * 100, 1) if usage.total > 0 else 0
+
+            seen_mounts.add(path_str)
+            seen_devs.add(st.st_dev)
+            dev_name, fs_name = mount_meta.get(path_str, ("", ""))
+            partitions.append({
+                "mount_point": path_str,
+                "device": dev_name,
+                "fstype": fs_name,
+                "total_gb": total_gb,
+                "free_gb": free_gb,
+                "used_gb": used_gb,
+                "percent_used": percent,
+                "is_root": path_str in ["/", "C:\\"],
+                "recommended_for": "ssd_config" if path_str == "/" or total_gb < 300 else "hdd_media",
+            })
+        except Exception:
+            continue
 
     # Sort partitions: non-root mounts first (usually HDDs/storage drives)
     partitions.sort(key=lambda x: (x["is_root"], -x["total_gb"]))
