@@ -51,6 +51,7 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 * Sends a message when something needs attention: photo backup failed, interrupted or older than 26 hours; backup remote not reachable (Drive login expired); a disk over 85% or 95%; an app stopped or unhealthy for 5 minutes; CPU above 80 °C for 2 minutes; a TV app update failed; too many failed dashboard sign-ins.
 * Channels: ntfy (phone app, no account; the dashboard can generate a private topic), Telegram, Discord and email (SMTP), each with a **Send test** button.
 * Each alert is sent once, repeated after 24 hours if still open, and followed by "Resolved" when it clears. During quiet hours (default 23:00 to 07:00) only critical alerts go out; the rest arrive as one message when quiet hours end. An optional daily summary goes out at a set time.
+* Setup for every channel: [Control Hub Alerts guide](https://github.com/RAM-MAHESHWARI24/homelab-blueprint/blob/develop/docs/CONTROL_HUB_ALERTS.md).
 * Rules are checked every minute in one background thread. Settings and state live in `ALERTS_CONFIG_FILE` / `ALERTS_STATE_FILE` (0600, default the Control Hub state directory).
 
 ### 5. 📊 System Vitals & Hardware Gauges (`widgets/system_vitals.py`)
