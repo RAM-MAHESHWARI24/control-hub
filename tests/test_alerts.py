@@ -23,6 +23,7 @@ Usage = namedtuple("Usage", "total used free")
 def cfg(**changes):
     c = copy.deepcopy(alerts.DEFAULT_CONFIG)
     c["quiet_hours"]["enabled"] = False
+    c["channels"]["ntfy"]["enabled"] = True
     for path, value in changes.items():
         node = c
         keys = path.split("__")
@@ -90,6 +91,17 @@ class TestEvaluate(unittest.TestCase):
         state2 = {}
         alerts.evaluate(c, state2, [down], self.T0)
         self.assertEqual(alerts.evaluate(c, state2, [], self.T0 + timedelta(minutes=2)), [])
+
+    def test_alerts_before_any_channel_are_sent_when_one_is_enabled(self):
+        c, state = cfg(channels__ntfy__enabled=False), {}
+        self.assertEqual(alerts.evaluate(c, state, [cond()], self.T0), [])
+        self.assertTrue(state["firing"]["disk_critical:/"]["unsent"])
+        self.assertTrue(state["history"][0]["unsent"])
+        self.assertEqual(alerts.evaluate(c, state, [cond()], self.T0 + timedelta(minutes=1)), [])
+        c["channels"]["ntfy"]["enabled"] = True
+        out = alerts.evaluate(c, state, [cond()], self.T0 + timedelta(minutes=2))
+        self.assertEqual([m.title for m in out], ["T disk_critical:/"])
+        self.assertEqual(alerts.evaluate(c, state, [cond()], self.T0 + timedelta(minutes=3)), [])
 
     def test_disabled_rule_is_ignored(self):
         c = cfg(rules__disk_critical__enabled=False)
@@ -189,7 +201,7 @@ class TestDelivery(unittest.TestCase):
     def test_deliver_only_enabled_and_ready(self):
         sent = []
         senders = {name: (lambda c, m, n=name: (sent.append(n), (True, ""))[1]) for name in alerts.SENDERS}
-        c = cfg(channels__ntfy__enabled=True, channels__ntfy__topic="homelab-abcdef123456", channels__discord__enabled=True)
+        c = cfg(channels__ntfy__topic="homelab-abcdef123456", channels__discord__enabled=True)
         res = alerts.deliver(c, alerts.Outgoing("warning", "t", "m"), senders=senders)
         self.assertEqual(res, {"ntfy": "", "discord": "not configured"})
         self.assertEqual(sent, ["ntfy"])

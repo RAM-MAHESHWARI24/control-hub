@@ -139,6 +139,7 @@ function renderHistory(data) {
     top.append(el("span", { className: "alerts-item-when" }, when), el("strong", {}, h.title));
     li.append(top);
     if (h.queued) li.append(el("div", { className: "alerts-item-when" }, "Held for the morning digest (quiet hours)"));
+    if (h.unsent) li.append(el("div", { className: "alerts-item-when" }, "Not sent: no channel was on (sent when one is turned on, if still open)"));
     list.append(li);
   });
 }

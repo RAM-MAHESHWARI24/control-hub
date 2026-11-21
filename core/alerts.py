@@ -291,13 +291,18 @@ def evaluate(config: Dict, state: Dict, conditions: List[Condition], now: dateti
     queue = state.setdefault("queue", [])
     history = state.setdefault("history", [])
     quiet = in_quiet_hours(config, now)
+    # With no channel switched on nothing can be delivered: alerts are still listed in the
+    # dashboard, and the open ones are sent as soon as a channel is turned on.
+    can_send = any(ch.get("enabled") for ch in config["channels"].values())
     out: List[Outgoing] = []
 
     def emit(msg: Outgoing, key: str):
         history.insert(0, {"at": now.isoformat(timespec="seconds"), "key": key, "severity": msg.severity,
                            "title": msg.title, "message": msg.message, "resolved": msg.resolved,
-                           "queued": quiet and msg.severity != "critical"})
+                           "queued": can_send and quiet and msg.severity != "critical", "unsent": not can_send})
         del history[HISTORY_LIMIT:]
+        if not can_send:
+            return
         if quiet and msg.severity != "critical":
             queue.append({"severity": msg.severity, "title": msg.title, "message": msg.message,
                           "resolved": msg.resolved, "at": now.strftime("%H:%M")})
@@ -317,12 +322,16 @@ def evaluate(config: Dict, state: Dict, conditions: List[Condition], now: dateti
         if key in firing:
             f = firing[key]
             f["message"] = c.message
-            if ts - f["last_sent"] >= REMIND_HOURS * 3600:
+            if f.get("unsent") and can_send:
+                f["unsent"] = False
+                f["last_sent"] = ts
+                emit(Outgoing(c.severity, c.title, c.message), key)
+            elif ts - f["last_sent"] >= REMIND_HOURS * 3600:
                 f["last_sent"] = ts
                 emit(Outgoing(c.severity, f"Still: {c.title}", c.message), key)
         elif ts - first >= c.min_seconds:
             firing[key] = {"since": ts, "last_sent": ts, "title": c.title, "message": c.message,
-                           "severity": c.severity, "rule": c.rule}
+                           "severity": c.severity, "rule": c.rule, "unsent": not can_send}
             emit(Outgoing(c.severity, c.title, c.message), key)
 
     for key in [k for k in pending if k not in active]:
