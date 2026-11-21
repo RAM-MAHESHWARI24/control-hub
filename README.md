@@ -17,7 +17,12 @@
 
 Most homelab dashboards (Homarr, Homepage, Dashy) are heavy, static bookmark managers packaged in 200MB+ Docker images with continuous Node.js runtime overhead. 
 
-**Control Hub** is an **active server management daemon** built with Python Flask and modular Vanilla ES6. It gives you real-time hardware telemetry, active power control, live container logs, day-to-day node configuration, and an integrated AI copilot while sipping resources on low-power hardware (such as 2-core Haswell mini-PCs or Intel N100s).
+**Control Hub** is an **active server management daemon** built with Python Flask and modular Vanilla ES6. It gives you a calm, 5-view Operations Console (`Overview`, `Apps & Media`, `Backups & Photos`, `TVs`, `System`) with Dark/Light/System themes, real-time hardware telemetry, active power control, searchable container logs, day-to-day node configuration, and an integrated AI copilot—all with zero external CDN requests while sipping resources on low-power hardware (such as 2-core mini-PCs or Intel N100s).
+
+### 🧭 Workspace Views & Themes
+* **5 Focused Hash-Routed Views:** `Overview` (`#/overview` — Quick-Launch App Grid, 4 at-a-glance KPI cards, adaptive Live Activity strip), `Apps & Media` (`#/apps` — Service Matrix with search/custom container toggle + qBittorrent queue), `Backups & Photos` (`#/backups`), `TVs` (`#/tvs`), and `System` (`#/system` — Vitals, Disk I/O, Network & Speedtest, Sleep Guard, Scheduled Automations, Node Administration).
+* **Adaptive Module Visibility:** Optional modules (`Backups`, `TVs`, `Sleep Guard`, `Prowlarr Indexers`) automatically hide their navigation links or display honest not-installed states when absent, and deep links redirect cleanly to `#/overview`.
+* **Dark Default + Theme Switcher:** Ships with a slate-obsidian Dark default, crisp Light mode, and OS-following Auto mode persisted in `localStorage` with zero flash-of-unstyled-content (FOUC), passing WCAG 2.2 AA contrast and >= 44px touch targets across phone, tablet, and desktop.
 
 ![Control Hub Header & Actions](docs/assets/hub_header_settings_ai.png)
 
@@ -27,11 +32,11 @@ Most homelab dashboards (Homarr, Homepage, Dashy) are heavy, static bookmark man
 
 Control Hub is organized into modular Python backend widgets (`widgets/`) and matching ES6 frontend controllers:
 
-### 1. 🛌 Sleep Guard Hero Card (`widgets/sleep_guard.py`)
-* **Real-Time Suspend Telemetry:** Displays tonight's scheduled suspend time (default 00:00 IST) and hardware RTC wake alarm (06:00 IST).
+### 1. 🛌 Sleep Guard Power Automation (`widgets/sleep_guard.py`)
+* **Real-Time Suspend Telemetry:** Displays tonight's configured suspend and RTC wake schedule in the host's local timezone (automatically hidden or marked not installed when Sleep Guard is absent).
 * **1-Click Sleep Inhibition:** Toggle `/run/server-suspend.skip` directly from the UI to prevent sleep tonight without touching SSH.
-* **Dynamic Time Shifting:** Push tonight's sleep time back by **+1 Hour** or **+2 Hours** on the fly via `/run/server-suspend.override`.
-* **Process-Aware Deferral:** Automatically monitors background backup jobs (`immich_backup_gdrive.sh`, `rclone`, `pg_dumpall`) and defers sleep until completion.
+* **Dynamic Time Shifting & Permanent Toggle:** Push tonight's sleep time back by **+1 Hour** or **+2 Hours** via `/run/server-suspend.override`, or disable/edit the recurring schedule in `/etc/server-suspend.conf`.
+* **Process-Aware Deferral:** Automatically defers suspend while backups, restore tests, active LAN SMB shares, active qBittorrent downloads, or active Jellyfin playback are running.
 
 ### 2. ⚡ Live Network Telemetry (`widgets/network_speed.py`)
 * Non-blocking background sampler computing true delta Rx/Tx bandwidth from `/sys/class/net/<active_nic>/statistics`.
@@ -61,16 +66,17 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 * Real-time CPU load, memory utilization, swap headroom, and thermal temperatures.
 * **Universal Hardware Detection:** Dynamically probes host CPU model name, thread count, physical RAM, and storage mount headroom without hardcoded hardware assumptions.
 
-### 6. 💾 Storage Operations & Inodes (`widgets/storage_ops.py`)
-* Visual gauges for primary root storage (NVMe/SSD) and secondary storage pool (HDD/SATA).
-* Real-time read/write I/O throughput with dynamic block device resolution (`/dev/nvme*`, `/dev/sd*`, `/dev/vd*`).
+### 6. 💾 Storage Operations & Hourly Directory Sizes (`widgets/storage_ops.py`, `core/storage_sizes.py`)
+* Per-filesystem visual gauges for OS root storage and secondary media storage pools (deduplicated by filesystem `st_dev`, separating SSD appdata from HDD pools).
+* Real-time read/write I/O throughput with dynamic block device resolution (NVMe, SATA/SAS, LVM/device-mapper, eMMC, virtio, RAID).
+* Optional hourly `homelab-storage-sizes.timer` (root systemd oneshot outside Control Hub's cgroup) writes `0644` atomic JSON sizes for restricted photo directories; standalone mode gracefully surfaces partial-scan warnings when subdirectories are unreadable.
 
 ### 7. ⏰ Scheduled Cron Tasks (`widgets/cron_tasks.py`)
-* Visual inspection of system cron jobs (nightly ML scheduler, daily Recyclarr sync, photo backup, TV auto-updater).
+* Parses real installed schedules from `/etc/cron.d/*`, systemd timers, and Sleep Guard config, automatically hiding uninstalled modules.
 
 ### 8. 📜 Service Matrix & Container Logs (`widgets/service_matrix.py`)
-* Lists only the containers that exist on this host (plus Cockpit when its socket is active), with filter counts built from that list.
-* Restart a container (the service account is in the `docker` group, no sudo) and read its recent logs inline. A Dozzle link appears only when a `dozzle` container exists.
+* Lists installed containers (plus Cockpit when its socket is active) with real Docker healthcheck badges (`Healthy`, `Unhealthy`, `Starting`, `Scheduled Off`), dynamic published ports, client search, and an optional toggle to include non-blueprint Docker containers (`?include_other=true`).
+* Start, stop, or restart containers (direct `docker` group access, no `sudo`, with streaming-aware confirmation prompts for guarded services) and inspect searchable, copyable logs inline. A Dozzle link appears only while a `dozzle` container is running.
 
 ### 9. 📺 Android TV Fleet Preview (`widgets/tv_updater.py`)
 * Status and sync state of background ADB app updates for the TVs in the TV auto-updater profile. The online count and the device list come from the same data.
@@ -102,7 +108,7 @@ Accessible via the header button **⚙️ Settings** (`btn-open-config-center`),
 * Applies the change with an armed revert timer and keeps it only after confirmation from the new address, so you never get locked out over SSH.
 
 ### Tab 5: Setup Wizard Fast Launcher
-* 1-Click button to launch the zero-dependency Onboarding Setup Wizard on port `8000` for full cluster re-provisioning.
+* 1-Click button to launch the zero-dependency Onboarding Setup Wizard on port `8099` for full cluster re-provisioning.
 
 ---
 
@@ -134,11 +140,12 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/system/vitals` | Real-time CPU, RAM, Swap, and disk capacity metrics |
-| `GET` | `/api/network/speed` | True Rx/Tx bandwidth deltas for `ACTIVE_NIC` |
-| `GET` | `/api/storage/ops` | Real-time disk I/O throughput |
-| `GET` | `/api/downloads/status` | Active qBittorrent downloads, speeds, and ETAs |
-| `GET` | `/api/backup/status` | Immich backup and Google Drive sync status |
+| `GET` | `/api/system/vitals` | Real-time CPU, RAM, Swap, and per-filesystem disk capacity metrics |
+| `GET` | `/api/network/speed` | True Rx/Tx bandwidth deltas for the active NIC and cached Speedtest info |
+| `GET` | `/api/storage/operations` | Real-time disk I/O throughput and SMB/Jellyfin client sessions |
+| `GET` | `/api/downloads/active` | Active qBittorrent downloads, speeds, status, and ETAs |
+| `POST` | `/api/torrents/toggle-all` | Pause/Stop or Resume/Start all torrents (qBittorrent 4.x & 5.x compatible) |
+| `GET` | `/api/backup/status` | Photo & media cloud backup status, quota, and restore test telemetry |
 | `GET` | `/api/alerts` | Alert channels, rules, open alerts and recent history |
 | `PUT` | `/api/alerts/config` | Save alert channels, rules and quiet hours |
 | `POST` | `/api/alerts/test` | Send a test message to one channel |
@@ -148,18 +155,20 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/backup/remotes` | rclone remotes on the server and the one in use |
 | `POST` | `/api/backup/remote/test` | Test a remote (answers, space, existing folders) |
 | `PUT` | `/api/backup/remote` | Switch both backups to another remote |
-| `GET` | `/api/services/status` | Health status and container IDs for all services |
-| `GET` | `/api/services/logs/<service>?tail=50` | Direct Docker log stream |
-| `GET` | `/api/tv/status` | Android TV fleet ADB update status |
+| `GET` | `/api/services/status` | Real Docker health, published ports, and container IDs (`?include_other=true` supported) |
+| `POST` | `/api/services/action/<service>` | Start, stop, or restart a Docker container (`{"action": "start\|stop\|restart"}`) |
+| `GET` | `/api/services/logs/<service>?tail=150` | Direct Docker or Cockpit log stream |
+| `GET` | `/api/tv-updater/status` | Android TV fleet ADB update status |
 | `PUT` | `/api/tv-updater/devices/<id>/nickname` | Give a TV a nickname (empty shows the detected model) |
 
 ### Power Management Endpoints
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/power/sleep-status` | Tonight's scheduled suspend and RTC wake status |
-| `POST` | `/api/power/skip-sleep` | Creates `/run/server-suspend.skip` to prevent sleep tonight |
-| `POST` | `/api/power/shift-sleep` | Shifting tonight's suspend time by +1h or +2h |
+| `GET` | `/api/sleep/status` | Tonight's scheduled suspend, disabled/not-installed state, and RTC wake status |
+| `POST` | `/api/sleep/toggle` | Creates/clears `/run/server-suspend.skip` to stay awake tonight |
+| `POST` | `/api/sleep/shift-tonight` | Shifts tonight's suspend time by +1h, +2h, or custom window |
+| `POST` | `/api/sleep/schedule-permanent` | Updates or disables the recurring nightly sleep schedule |
 
 ### Configuration Center Endpoints (`widgets/config_center.py`)
 

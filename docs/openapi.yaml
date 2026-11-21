@@ -196,6 +196,34 @@ paths:
         '200':
           description: Container status matrix
 
+  /api/services/action/{service_id}:
+    post:
+      summary: Start, Stop, or Restart a Container Service
+      description: Executes `docker start`, `docker stop`, or `docker restart` on a catalog or existing Docker container.
+      tags: [Cluster Management]
+      parameters:
+        - name: service_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "jellyfin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [start, stop, restart] }
+      responses:
+        '200':
+          description: Action completed
+        '400':
+          description: Invalid action or container name
+        '404':
+          description: Container not found
+
   /api/services/restart/{service_id}:
     post:
       summary: Restart Container Service
@@ -252,6 +280,15 @@ paths:
       responses:
         '200':
           description: Tonight's schedule updated
+
+  /api/sleep/schedule-permanent:
+    post:
+      summary: Update Permanent Nightly Sleep Schedule
+      description: Updates `/etc/server-suspend.conf` and `/etc/cron.d/server-suspend` (including enabling/disabling nightly sleep).
+      tags: [Power Automation]
+      responses:
+        '200':
+          description: Permanent schedule updated
 
   /api/backup/status:
     get:
