@@ -35,9 +35,11 @@ export const ENDPOINTS = {
   cronStatus: "/api/cron/status",
   cronLog: (id) => `/api/cron/log/${id}`,
   cronRun: (id) => `/api/cron/run/${id}`,
-  servicesStatus: "/api/services/status",
+  servicesStatus: (includeOther = false) =>
+    includeOther ? "/api/services/status?include_other=true" : "/api/services/status",
   serviceRestart: (id) => `/api/services/restart/${id}`,
-  serviceLogs: (id, tail = 100) => `/api/services/logs/${id}?tail=${tail}`,
+  serviceAction: (id) => `/api/services/action/${id}`,
+  serviceLogs: (id, tail = 150) => `/api/services/logs/${id}?tail=${tail}`,
   tvUpdaterStatus: "/api/tv-updater/status",
   tvUpdaterDeploy: "/api/tv-updater/deploy",
   tvUpdaterSyncUpstream: "/api/tv-updater/sync-upstream",
@@ -55,5 +57,7 @@ export const ENDPOINTS = {
   configGenerateSecrets: "/api/config/generate-secrets",
   configAiDiagnostics: "/api/config/ai-diagnostics",
   configNetplanPreview: "/api/config/netplan-preview",
-  configNetplanApply: "/api/config/netplan-apply"
+  configNetplanApply: "/api/config/netplan-apply",
+  configNetplanConfirm: "/api/config/netplan-confirm",
+  configNetplanStatus: "/api/config/netplan-status",
 };

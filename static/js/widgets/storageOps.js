@@ -1,120 +1,128 @@
 /**
- * Widget: Server Read/Write Operations (Disk Throughput & Media Streams)
- * Renders real-time disk I/O rates (SDA / SDB), hardware LEDs,
- * active SMB client shares, and Jellyfin video playback streams.
+ * Widget: Real-Time Disk I/O & Active Sessions
+ * Dynamically renders discovered block devices (avoiding double-counting on
+ * single-disk servers), SMB shares, and honest Jellyfin session telemetry.
  */
 
 import { $, setCardSummary } from "../shared/dom.js";
 import { escapeHtml } from "../shared/formatters.js";
+import { state } from "../state.js";
+import { renderOverview } from "./overview.js";
 
-const storageCollectiveSpeed = $("storage-collective-speed");
 const storageTotalMbps = $("storage-total-mbps");
 const storageOpsList = $("storage-ops-list");
 
+let lastStorageKey = "";
+
 export function renderStorageOps(sto = {}) {
-  const totalIoMbs = sto.collective_mbs !== undefined ? sto.collective_mbs : 0.0;
+  const totalIoMbs = typeof sto.collective_mbs === "number" ? sto.collective_mbs : 0.0;
+  const smb = Array.isArray(sto.smb_clients) ? sto.smb_clients : [];
+  const streams = Array.isArray(sto.jellyfin_streams) ? sto.jellyfin_streams : [];
+
+  state.storageTotalIoMbs = totalIoMbs;
+  state.activeSmbClients = smb.length;
+  state.activeJellyfinStreams = streams.length;
+
   if (storageTotalMbps) storageTotalMbps.textContent = totalIoMbs.toFixed(2);
-  setCardSummary("storage-ops-panel", `Disk I/O: ${totalIoMbs.toFixed(2)} MB/s`);
+  setCardSummary(
+    "storage-ops-panel",
+    `${totalIoMbs.toFixed(2)} MB/s · ${streams.length} Jellyfin · ${smb.length} SMB`
+  );
 
   if (!storageOpsList) return;
 
-  const hdd = sto.hdd || { read_mbs: 0.0, write_mbs: 0.0, name: "Media Storage" };
-  const ssd = sto.ssd || { read_mbs: 0.0, write_mbs: 0.0, name: "OS Root Disk" };
-  const smb = sto.smb_clients || [];
-  const streams = sto.jellyfin_streams || [];
+  let disks = Array.isArray(sto.disks) && sto.disks.length > 0 ? sto.disks : [];
+  if (disks.length === 0) {
+    if (sto.single_disk) {
+      const ssd = sto.ssd || { read_mbs: 0, write_mbs: 0, name: "System & Media Disk", device: null };
+      disks = [{ role: "SYSTEM", ...ssd }];
+    } else {
+      if (sto.hdd) disks.push({ role: "DATA", ...sto.hdd });
+      if (sto.ssd) disks.push({ role: "ROOT", ...sto.ssd });
+    }
+  }
 
-  const hddRead = (hdd.read_mbs !== undefined ? hdd.read_mbs : 0.0);
-  const hddWrite = (hdd.write_mbs !== undefined ? hdd.write_mbs : 0.0);
-  const hddTotal = (hddRead + hddWrite).toFixed(2);
+  const key = JSON.stringify([disks, smb, streams]);
+  if (key === lastStorageKey && storageOpsList.children.length > 0) return;
+  lastStorageKey = key;
 
-  const ssdRead = (ssd.read_mbs !== undefined ? ssd.read_mbs : 0.0);
-  const ssdWrite = (ssd.write_mbs !== undefined ? ssd.write_mbs : 0.0);
-  const ssdTotal = (ssdRead + ssdWrite).toFixed(2);
+  const disksHtml = disks.map((d) => {
+    const r = typeof d.read_mbs === "number" ? d.read_mbs : 0.0;
+    const w = typeof d.write_mbs === "number" ? d.write_mbs : 0.0;
+    const tot = (r + w).toFixed(2);
+    const role = escapeHtml(d.role || "DISK");
+    const isRoot = role === "ROOT" || role === "SYSTEM";
+    const devSub = d.device ? `Block device: ${escapeHtml(d.device)}` : "Block I/O unavailable on this host";
+    return `
+      <div class="storage-metric-row">
+        <div class="storage-disk-info">
+          <div class="disk-badge-icon ${isRoot ? "ssd" : ""}">${role}</div>
+          <div>
+            <div class="disk-label-name">
+              ${escapeHtml(d.name || "Storage Disk")}
+              <span class="disk-leds" aria-hidden="true">
+                <span class="hw-led led-r ${r > 0.05 ? "active" : ""}" title="Read: ${r.toFixed(2)} MB/s"></span>
+                <span class="hw-led led-w ${w > 0.05 ? "active" : ""}" title="Write: ${w.toFixed(2)} MB/s"></span>
+              </span>
+            </div>
+            <div class="disk-label-sub font-mono">${devSub}</div>
+          </div>
+        </div>
+        <div class="storage-rates-group">
+          <div class="storage-rate-val">${tot} MB/s</div>
+          <div class="storage-rate-split font-mono">R: ${r.toFixed(2)} &middot; W: ${w.toFixed(2)} MB/s</div>
+        </div>
+      </div>
+    `;
+  }).join("");
 
   let clientsHtml = "";
   if (smb.length > 0 || streams.length > 0) {
-    clientsHtml += `<div class="storage-section-title">Active Connections & Media Streams</div><div class="active-clients-list">`;
-    smb.forEach(client => {
+    clientsHtml = `<div class="storage-section-title">Active Connections &amp; Media Sessions</div>`;
+    smb.forEach((client) => {
       clientsHtml += `
         <div class="client-item-row">
           <div class="client-meta">
             <span class="client-type-tag">SMB</span>
-            <span class="client-name-txt">${escapeHtml(client.ip)} &bull; Share: [${escapeHtml(client.share)}]</span>
+            <span class="font-mono">${escapeHtml(client.ip)} &middot; Share: ${escapeHtml(client.share)}</span>
           </div>
-          <span class="client-status-txt"><span class="client-dot"></span> Mounted</span>
+          <span class="client-status-txt"><span class="client-dot" aria-hidden="true"></span> Mounted</span>
         </div>
       `;
     });
-    streams.forEach(stream => {
+    streams.forEach((stream) => {
+      const statusText = stream.verified ? (stream.status || "Playing") : "Connected";
       clientsHtml += `
         <div class="client-item-row">
           <div class="client-meta">
             <span class="client-type-tag jellyfin">JELLYFIN</span>
-            <span class="client-name-txt">${escapeHtml(stream.client_ip)} &bull; ${escapeHtml(stream.type)}</span>
+            <span>${escapeHtml(stream.client_ip)}${stream.user ? ` (${escapeHtml(stream.user)})` : ""} &middot; ${escapeHtml(stream.type)}</span>
           </div>
-          <span class="client-status-txt"><span class="client-dot"></span> Streaming Active</span>
+          <span class="client-status-txt"><span class="client-dot" aria-hidden="true"></span> ${escapeHtml(statusText)}</span>
         </div>
       `;
     });
-    clientsHtml += `</div>`;
   } else {
     clientsHtml = `
       <div class="storage-section-title">Active Connections</div>
       <div class="client-item-row">
         <div class="client-meta">
-          <span class="client-type-tag" style="opacity: 0.6;">CLIENTS</span>
-          <span class="client-name-txt" style="color: var(--text-muted);">No external SMB transfers or Jellyfin video streams active</span>
+          <span class="client-type-tag">IDLE</span>
+          <span class="text-muted">No active SMB share sessions or Jellyfin connections</span>
         </div>
-        <span class="client-status-txt" style="color: var(--text-dim);"><span class="client-dot" style="background: var(--text-dim); box-shadow: none;"></span> Ready</span>
+        <span class="client-status-txt text-muted">Ready</span>
       </div>
     `;
   }
 
   storageOpsList.innerHTML = `
     <div class="storage-section-title">
-      <span>Real-Time Disk Throughput</span>
-      <span class="led-legend">Activity: <span class="hw-led led-r active" style="box-shadow:none;"></span> Read <span class="hw-led led-w active" style="box-shadow:none;"></span> Write</span>
+      <span>Block Device Throughput</span>
+      <span class="text-muted">Green = Read &middot; Amber = Write</span>
     </div>
-    <div class="storage-metric-row">
-      <div class="storage-disk-info">
-        <div class="disk-badge-icon">DATA</div>
-        <div>
-          <div class="disk-label-name">
-            ${escapeHtml(hdd.name || 'Data Pool')}
-            <span class="disk-leds">
-              <span class="hw-led led-r ${hddRead > 0.05 ? 'active' : ''}" title="${escapeHtml(hdd.device || 'Storage')} Read: ${hddRead.toFixed(2)} MB/s"></span>
-              <span class="hw-led led-w ${hddWrite > 0.05 ? 'active' : ''}" title="${escapeHtml(hdd.device || 'Storage')} Write: ${hddWrite.toFixed(2)} MB/s"></span>
-            </span>
-          </div>
-          <div class="disk-label-sub">${hdd.device ? `Block Device: ${escapeHtml(hdd.device)} &bull; ` : ''}Active Storage</div>
-        </div>
-      </div>
-      <div class="storage-rates-group">
-        <div class="storage-rate-val">${hddTotal} MB/s</div>
-        <div class="storage-rate-split">R: ${hddRead.toFixed(2)} MB/s &bull; W: ${hddWrite.toFixed(2)} MB/s</div>
-      </div>
-    </div>
-
-    <div class="storage-metric-row">
-      <div class="storage-disk-info">
-        <div class="disk-badge-icon ssd">ROOT</div>
-        <div>
-          <div class="disk-label-name">
-            ${escapeHtml(ssd.name || 'OS Root Disk')}
-            <span class="disk-leds">
-              <span class="hw-led led-r ${ssdRead > 0.05 ? 'active' : ''}" title="${escapeHtml(ssd.device || 'Root')} Read: ${ssdRead.toFixed(2)} MB/s"></span>
-              <span class="hw-led led-w ${ssdWrite > 0.05 ? 'active' : ''}" title="${escapeHtml(ssd.device || 'Root')} Write: ${ssdWrite.toFixed(2)} MB/s"></span>
-            </span>
-          </div>
-          <div class="disk-label-sub">${ssd.device ? `Block Device: ${escapeHtml(ssd.device)} &bull; ` : ''}OS Root</div>
-        </div>
-      </div>
-      <div class="storage-rates-group">
-        <div class="storage-rate-val">${ssdTotal} MB/s</div>
-        <div class="storage-rate-split">R: ${ssdRead.toFixed(2)} MB/s &bull; W: ${ssdWrite.toFixed(2)} MB/s</div>
-      </div>
-    </div>
-
+    ${disksHtml}
     ${clientsHtml}
   `;
+
+  renderOverview();
 }

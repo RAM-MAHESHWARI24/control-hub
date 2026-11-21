@@ -1,12 +1,14 @@
 """
-Phase 1E Playwright Viewport & WCAG 2.2 AA Accessibility Tests (axe-core).
+Pivot Phase B Playwright Viewport, 5-View Router, Theme & WCAG 2.2 AA Accessibility Tests (axe-core).
 
 Verifies:
 - Phone (360x800), Tablet (820x1180), and Desktop (1366x900) render with
-  zero horizontal overflow and zero clipped visible controls.
-- Every visible interactive button/link meets the 44x44px minimum touch target.
-- Modal keyboard flow (Enter opens, Tab stays inside dialog, Esc restores focus).
-- axe-core WCAG 2.2 AA scan passes with zero critical or serious violations.
+  zero horizontal overflow, zero clipped visible controls, and zero external CDN requests.
+- Every visible interactive button/link meets the 44x44px minimum touch target across
+  ALL 5 workspace views (#/overview, #/apps, #/backups, #/tvs, #/system).
+- Both Dark (default) and Light themes pass axe-core WCAG 2.2 AA with zero critical/serious violations.
+- Modals (Config Center, Alerts, Remote Picker, Confirm Action) trap focus, handle Esc, and pass axe.
+- Uninstalled optional modules automatically hide their nav items and redirect deep links safely.
 
 Skips only when playwright/axe are not installed locally unless
 CI_REQUIRE_PLAYWRIGHT=1 is set.
@@ -55,11 +57,14 @@ SAMPLE_SERVICES = [
         "docker_id": "abc123def456",
         "name": "Jellyfin",
         "port": 8096,
+        "has_web_ui": True,
         "description": "Media Streaming",
         "icon": "film",
         "category": "media",
         "state": "running",
-        "status": "Up 2 hours",
+        "health": "healthy",
+        "status": "Up 2 hours (healthy)",
+        "image": "lscr.io/linuxserver/jellyfin:latest",
         "is_up": True,
     },
     {
@@ -67,11 +72,14 @@ SAMPLE_SERVICES = [
         "docker_id": "def456ghi789",
         "name": "qBittorrent",
         "port": 8080,
+        "has_web_ui": True,
         "description": "Torrent Client",
         "icon": "download",
         "category": "ingest",
         "state": "running",
+        "health": "none",
         "status": "Up 2 hours",
+        "image": "lscr.io/linuxserver/qbittorrent:latest",
         "is_up": True,
     },
     {
@@ -79,14 +87,35 @@ SAMPLE_SERVICES = [
         "docker_id": "111222333444",
         "name": "Prowlarr",
         "port": 9696,
+        "has_web_ui": True,
         "description": "Indexer Proxy",
         "icon": "search",
         "category": "ingest",
         "state": "running",
+        "health": "none",
         "status": "Up 2 hours",
+        "image": "lscr.io/linuxserver/prowlarr:latest",
         "is_up": True,
     },
+    {
+        "id": "immich_machine_learning",
+        "docker_id": "999888777666",
+        "name": "Immich ML",
+        "port": None,
+        "has_web_ui": False,
+        "scheduled": True,
+        "description": "Scheduled Face/CLIP Worker",
+        "icon": "cpu",
+        "category": "system",
+        "state": "exited",
+        "health": "none",
+        "status": "Exited (0) 3 hours ago",
+        "image": "ghcr.io/immich-app/immich-machine-learning:release",
+        "is_up": False,
+    },
 ]
+
+ALL_VIEWS = ("overview", "apps", "backups", "tvs", "system")
 
 
 @unittest.skipUnless(
@@ -125,7 +154,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             mock.patch.object(network_speed, "SPEEDTEST_CACHE_FILE", str(root / "speedtest_cache.json")),
             mock.patch.object(system_vitals, "STORAGE_SIZES_CACHE_FILE", str(root / "storage_sizes_cache.json")),
             mock.patch.object(cron_tasks, "BACKUP_LOG_FILE", str(root / "backups" / "backup.log")),
-            mock.patch.object(cron_tasks, "BACKUP_STATUS_FILE", str(root / "backups" / "status.json")),
+            mock.patch.object(cron_tasks, "BACKUP_STATUS_FILE", str(root / "backups" / "backup.json")),
             mock.patch.object(tv_updater, "TV_UPDATER_PY", ""),
             mock.patch.object(tv_updater, "TV_UPDATER_STATE_FILE", ""),
             mock.patch.object(backup_sync, "MEDIA_BACKUP_STATUS_FILE", str(root / "media-backups" / "status.json")),
@@ -138,7 +167,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         for p in cls._patches:
             p.start()
 
-        # A failed pre-flight after one good run: the busiest state of the backup card.
+        # A failed pre-flight after one good run: the busiest state of the backup view.
         backups = root / "backups"
         backups.mkdir(parents=True, exist_ok=True)
         (backups / "status.json").write_text(json.dumps({
@@ -175,23 +204,39 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         auth_password.set_password(cls.password, path=pw_file)
 
         cls.app = server.create_app()
+        cls.mock_tv_installed = True
+        cls.mock_action_calls: list[tuple[str, str]] = []
 
-        # Override /api/services/status in test app so Service Matrix rows render realistically.
+        # Override /api/services/status in test app so Service Matrix & Quick Launch render realistically.
         def mock_services_status():
             from flask import jsonify
             return jsonify({
                 "services": SAMPLE_SERVICES,
+                "other_count": 1,
                 "docker_available": True,
                 "docker_error": None,
                 "dozzle_installed": False,
                 "cockpit_installed": False,
             })
 
+        def mock_service_action(service_id: str):
+            from flask import jsonify, request
+            body = request.get_json(silent=True) or {}
+            action = str(body.get("action", "restart"))
+            cls.mock_action_calls.append((service_id, action))
+            return jsonify({"success": True, "message": f"{service_id} {action}ed."})
+
         cls.app.view_functions["service_matrix.get_services_status"] = mock_services_status
+        cls.app.view_functions["service_matrix.service_action"] = mock_service_action
 
         # Two TVs: one online with a nickname and a detected model, one never seen.
         def mock_tv_status():
             from flask import jsonify
+            if not cls.mock_tv_installed:
+                return jsonify({
+                    "installed": False, "status": "not_installed", "devices": [],
+                    "total_devices": 0, "online_devices": 0,
+                })
             app_row = {"package": "org.smarttube.stable", "name": "SmartTube", "installed_code": 2470,
                        "installed_name": "32.80", "target_code": 2470, "target_name": "32.80", "is_installed": True,
                        "is_up_to_date": True, "status_code": "UP_TO_DATE", "status_text": "Up to date (vCode 2470)",
@@ -227,7 +272,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         cls.app.view_functions["backup_sync.list_backup_remotes"] = mock_remotes
         cls.app.view_functions["backup_sync.test_backup_remote"] = mock_remote_test
 
-        cls.httpd = make_server("127.0.0.1", 0, cls.app)
+        cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -261,16 +306,24 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 os.environ[k] = v
         cls._tmp.cleanup()
 
-    def _new_authenticated_page(self, width: int, height: int):
+    def _new_authenticated_page(self, width: int, height: int, initial_hash: str = "#/overview"):
         context = self.browser.new_context(viewport={"width": width, "height": height})
         page = context.new_page()
 
-        # Keep external font stylesheets from slowing/failing headless offline scans.
-        page.route("https://fonts.googleapis.com/**", lambda route: route.abort())
-        page.route("https://fonts.gstatic.com/**", lambda route: route.abort())
+        external_requests: list[str] = []
 
-        console_errors = []
-        page_errors = []
+        def track_requests(route):
+            url = route.request.url
+            if not url.startswith(self.base_url) and not url.startswith("data:") and not url.startswith("about:"):
+                external_requests.append(url)
+                route.abort()
+                return
+            route.continue_()
+
+        page.route("**/*", track_requests)
+
+        console_errors: list[str] = []
+        page_errors: list[str] = []
         page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
         page.on("pageerror", lambda err: page_errors.append(str(err)))
 
@@ -281,13 +334,18 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         )
         self.assertEqual(login_res.status, 200)
 
-        page.goto(self.base_url, wait_until="domcontentloaded")
-        page.wait_for_selector("#sleep-guard-card")
-        page.wait_for_selector(".service-row", state="attached", timeout=10000)
-        page.wait_for_timeout(400)
-        return context, page, console_errors, page_errors
+        page.goto(f"{self.base_url}/{initial_hash}", wait_until="domcontentloaded")
+        page.wait_for_selector("#hub-header")
+        page.wait_for_selector(".service-row", state="attached", timeout=15000)
+        page.wait_for_timeout(350)
+        return context, page, console_errors, page_errors, external_requests
 
-    def _assert_layout_and_touch_targets(self, page, width: int) -> None:
+    def _navigate_view(self, page, view_id: str) -> None:
+        page.click(f"#nav-item-{view_id}")
+        page.wait_for_selector(f"#view-{view_id}.is-active:not([hidden])", timeout=5000)
+        page.wait_for_timeout(180)
+
+    def _assert_layout_and_touch_targets(self, page, width: int, label: str = "") -> None:
         metrics = page.evaluate(
             """() => {
                 const vw = window.innerWidth;
@@ -323,20 +381,21 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 return { vw, sw, offenders, clipped };
             }"""
         )
+        ctx = f"{label}@{width}px" if label else f"{width}px"
         self.assertLessEqual(
             metrics["sw"],
             metrics["vw"],
-            f"Horizontal overflow at {width}px: scrollWidth={metrics['sw']} > innerWidth={metrics['vw']}",
+            f"Horizontal overflow at {ctx}: scrollWidth={metrics['sw']} > innerWidth={metrics['vw']}",
         )
         self.assertEqual(
             metrics["clipped"],
             [],
-            f"Clipped interactive controls at {width}px: {metrics['clipped']}",
+            f"Clipped interactive controls at {ctx}: {metrics['clipped']}",
         )
         self.assertEqual(
             metrics["offenders"],
             [],
-            f"Interactive controls smaller than 44x44px at {width}px: {metrics['offenders']}",
+            f"Interactive controls smaller than 44x44px at {ctx}: {metrics['offenders']}",
         )
 
     def _assert_axe_wcag_aa(self, page, label: str) -> None:
@@ -360,32 +419,43 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             ]
             self.fail(f"WCAG 2.2 AA violations ({label}):\n" + "\n".join(summary))
 
-    def test_responsive_viewports_touch_targets_and_axe(self) -> None:
+    def test_responsive_all_five_views_both_themes_and_zero_external_requests(self) -> None:
         for width, height in ((360, 800), (820, 1180), (1366, 900)):
-            context, page, console_errors, page_errors = self._new_authenticated_page(width, height)
+            context, page, console_errors, page_errors, ext_reqs = self._new_authenticated_page(width, height)
             try:
-                if width <= 599:
-                    # Expand Service Matrix so rows and buttons inside it are also verified on mobile.
-                    svc_btn = page.locator("#services-matrix .card-collapse-btn")
-                    svc_btn.click()
-                    page.wait_for_selector("#services-matrix:not(.is-collapsed) .service-row", timeout=5000)
+                # Default theme must be Dark
+                self.assertEqual(page.evaluate("() => document.documentElement.dataset.theme"), "dark")
 
-                page.evaluate("() => { const d = document.getElementById('backup-history-wrap'); if (d) d.open = true; }")
-                self._assert_layout_and_touch_targets(page, width)
-                self._assert_axe_wcag_aa(page, f"dashboard@{width}x{height}")
+                # Quick Launch should only show launchable web UIs (3 of 4 sample services; Immich ML has no web UI)
+                self.assertEqual(page.locator("#overview-apps-grid .quick-app-tile").count(), 3)
 
+                for view_id in ALL_VIEWS:
+                    self._navigate_view(page, view_id)
+                    if view_id == "backups":
+                        page.evaluate("() => { const d = document.getElementById('backup-history-wrap'); if (d) d.open = true; }")
+                    self._assert_layout_and_touch_targets(page, width, f"dark:{view_id}")
+                    self._assert_axe_wcag_aa(page, f"dark:{view_id}@{width}x{height}")
+
+                # Toggle to Light theme and re-verify WCAG 2.2 AA contrast on Desktop & Phone
+                if width in (360, 1366):
+                    page.click("#btn-theme-toggle")
+                    self.assertEqual(page.evaluate("() => document.documentElement.dataset.theme"), "light")
+                    for view_id in ALL_VIEWS:
+                        self._navigate_view(page, view_id)
+                        self._assert_layout_and_touch_targets(page, width, f"light:{view_id}")
+                        self._assert_axe_wcag_aa(page, f"light:{view_id}@{width}x{height}")
+
+                self.assertEqual(ext_reqs, [], f"Control Hub must make zero external CDN requests, got: {ext_reqs}")
                 self.assertEqual(page_errors, [], f"Page errors at {width}px: {page_errors}")
-                unexpected_console = [e for e in console_errors if "fonts.googleapis" not in e and "ERR_FAILED" not in e]
-                self.assertEqual(unexpected_console, [], f"Console errors at {width}px: {unexpected_console}")
+                self.assertEqual(console_errors, [], f"Console errors at {width}px: {console_errors}")
             finally:
                 context.close()
 
     def test_backup_card_shows_failed_preflight_history_and_retention(self) -> None:
-        context, page, _, page_errors = self._new_authenticated_page(360, 800)
+        context, page, _, page_errors, _ = self._new_authenticated_page(360, 800)
         try:
+            self._navigate_view(page, "backups")
             page.wait_for_function("() => document.getElementById('backup-history').children.length === 2", timeout=10000)
-            if "is-collapsed" in (page.get_attribute("#backup-section", "class") or ""):
-                page.click("#backup-section .card-collapse-btn")
             self.assertEqual(page.get_attribute("#backup-health", "data-state"), "error")
             self.assertIn("did not answer", page.inner_text("#backup-health-title"))
             self.assertIn("Last good backup", page.inner_text("#backup-health-detail"))
@@ -406,17 +476,16 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertIn("passed 2026-11-01 11:07", page.inner_text("#restore-test-text"))
             self.assertIn("35,765 photos and videos", page.inner_text("#restore-test-text"))
             self.assertTrue(page.is_visible("#btn-restore-test-run"))
-            self._assert_layout_and_touch_targets(page, 360)
-            self._assert_axe_wcag_aa(page, "backup-card@360x800")
+            self._assert_layout_and_touch_targets(page, 360, "backups-detail")
+            self._assert_axe_wcag_aa(page, "backup-view@360x800")
             self.assertEqual(page_errors, [])
         finally:
             context.close()
 
     def test_remote_dialog_requires_a_test_before_saving(self) -> None:
-        context, page, _, page_errors = self._new_authenticated_page(360, 800)
+        context, page, _, page_errors, _ = self._new_authenticated_page(360, 800)
         try:
-            if "is-collapsed" in (page.get_attribute("#backup-section", "class") or ""):
-                page.click("#backup-section .card-collapse-btn")
+            self._navigate_view(page, "backups")
             page.wait_for_selector("#btn-change-remote", state="visible", timeout=10000)
             page.click("#btn-change-remote")
             page.wait_for_selector("#remote-select option[value='b2']", state="attached")
@@ -431,18 +500,18 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertIn("uploads the whole photo library", text)
             page.fill("#remote-folder", "other")  # changing the value needs a new test
             self.assertTrue(page.is_disabled("#remote-save"))
-            self._assert_layout_and_touch_targets(page, 360)
+            self._assert_layout_and_touch_targets(page, 360, "remote-dialog")
             self._assert_axe_wcag_aa(page, "remote-dialog@360x800")
             self.assertEqual(page_errors, [])
         finally:
             context.close()
 
     def test_alerts_dialog_phone_layout_keyboard_and_axe(self) -> None:
-        context, page, _, page_errors = self._new_authenticated_page(360, 800)
+        context, page, _, page_errors, _ = self._new_authenticated_page(360, 800)
         try:
+            # Alerts bell is always visible in header even on phone.
+            self.assertTrue(page.is_visible("#btn-open-alerts"))
             self.assertEqual(page.inner_text("#alerts-count"), "off")
-            if not page.is_visible("#btn-open-alerts"):
-                page.click("#btn-header-menu")
             page.click("#btn-open-alerts")
             modal = page.locator("#alerts-modal")
             modal.wait_for(state="visible", timeout=5000)
@@ -455,7 +524,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 page.keyboard.press("Tab")
                 inside = page.evaluate("() => document.getElementById('alerts-modal').contains(document.activeElement)")
                 self.assertTrue(inside, "Focus escaped the alerts dialog")
-            self._assert_layout_and_touch_targets(page, 360)
+            self._assert_layout_and_touch_targets(page, 360, "alerts-modal")
             self._assert_axe_wcag_aa(page, "alerts-modal@360x800")
             page.keyboard.press("Escape")
             modal.wait_for(state="hidden", timeout=5000)
@@ -464,11 +533,10 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             context.close()
 
     def test_tv_name_shows_details_on_hover_and_click(self) -> None:
-        context, page, _, page_errors = self._new_authenticated_page(360, 800)
+        context, page, _, page_errors, _ = self._new_authenticated_page(360, 800)
         try:
-            page.wait_for_selector("#tv-fleet-preview .tv-name-btn", state="attached", timeout=10000)
-            if "is-collapsed" in (page.get_attribute("#tv-updater-section", "class") or ""):
-                page.click("#tv-updater-section .card-collapse-btn")
+            self._navigate_view(page, "tvs")
+            page.wait_for_selector("#tv-fleet-preview .tv-name-btn", state="visible", timeout=10000)
             btn = page.locator("#tv-fleet-preview .tv-name-btn").first
             self.assertEqual(btn.inner_text(), "Living room")
             self.assertIn("Xiaomi MIBOX4 · Android 9 · 192.168.1.34:5555 · online", btn.get_attribute("title"))
@@ -484,7 +552,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertEqual(page.input_value("#tv-nick-card-living_room_tv"), "Living room")
             never = page.locator("#tv-fleet-preview .tv-name-btn").nth(1)
             self.assertIn("Model not detected yet", never.get_attribute("title"))
-            self._assert_layout_and_touch_targets(page, 360)
+            self._assert_layout_and_touch_targets(page, 360, "tv-names")
             self._assert_axe_wcag_aa(page, "tv-names@360x800")
             # A refresh re-renders the card (same path as the 15 s poll); the panel stays open.
             with page.expect_response(lambda r: "/api/tv-updater/status" in r.url):
@@ -495,8 +563,47 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         finally:
             context.close()
 
+    def test_guarded_container_restart_opens_confirm_modal(self) -> None:
+        self.__class__.mock_action_calls.clear()
+        context, page, _, page_errors, _ = self._new_authenticated_page(1366, 900)
+        try:
+            self._navigate_view(page, "apps")
+            page.click("#btn-restart-jellyfin")
+            confirm = page.locator("#confirm-action-modal")
+            confirm.wait_for(state="visible", timeout=5000)
+            self.assertIn("Restart Jellyfin?", page.inner_text("#confirm-modal-title"))
+            self._assert_axe_wcag_aa(page, "confirm-modal@1366x900")
+            page.click("#confirm-modal-cancel")
+            confirm.wait_for(state="hidden", timeout=5000)
+            self.assertEqual(self.__class__.mock_action_calls, [])
+
+            # Now confirm and verify POST /api/services/action/jellyfin fires
+            page.click("#btn-restart-jellyfin")
+            confirm.wait_for(state="visible", timeout=5000)
+            page.click("#confirm-modal-ok")
+            confirm.wait_for(state="hidden", timeout=5000)
+            page.wait_for_timeout(250)
+            self.assertEqual(self.__class__.mock_action_calls, [("jellyfin", "restart")])
+            self.assertEqual(page_errors, [])
+        finally:
+            context.close()
+
+    def test_uninstalled_optional_module_hides_nav_and_redirects_deep_link(self) -> None:
+        self.__class__.mock_tv_installed = False
+        try:
+            context, page, _, page_errors, _ = self._new_authenticated_page(1366, 900, initial_hash="#/tvs")
+            try:
+                page.wait_for_function("() => document.getElementById('nav-item-tvs').hidden === true", timeout=5000)
+                self.assertEqual(page.evaluate("() => window.location.hash"), "#/overview")
+                self.assertTrue(page.is_visible("#view-overview"))
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+        finally:
+            self.__class__.mock_tv_installed = True
+
     def test_modal_keyboard_focus_trap_escape_and_axe(self) -> None:
-        context, page, _, page_errors = self._new_authenticated_page(1366, 900)
+        context, page, _, page_errors, _ = self._new_authenticated_page(1366, 900)
         try:
             open_btn = page.locator("#btn-open-config-center")
             open_btn.focus()

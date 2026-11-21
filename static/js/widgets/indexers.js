@@ -1,7 +1,7 @@
 /**
  * Widget: Indexer picker (Prowlarr)
  * Shows a one-time "Pick indexers" banner while Prowlarr has no indexers,
- * and an accessible modal listing Prowlarr's own definitions.
+ * syncs desktop & dropdown Indexers button, and renders an accessible modal.
  */
 
 import { $ } from "../shared/dom.js";
@@ -9,6 +9,7 @@ import { ENDPOINTS } from "../config.js";
 import { escapeHtml } from "../shared/formatters.js";
 import { closeModal, openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
+import { state } from "../state.js";
 
 const DISMISS_KEY = "homelab_indexer_banner_dismissed";
 
@@ -16,6 +17,7 @@ const banner = $("indexer-banner");
 const bannerOpen = $("btn-indexer-banner-open");
 const bannerSkip = $("btn-indexer-banner-skip");
 const headerBtn = $("btn-open-indexers");
+const menuItemBtn = $("menu-item-indexers");
 
 const modal = $("indexer-modal");
 const modalClose = $("indexer-modal-close");
@@ -38,18 +40,24 @@ function dismissed() {
 }
 
 export async function fetchIndexerStatus() {
-  if (!banner && !headerBtn) return;
+  if (!banner && !headerBtn && !menuItemBtn) return true;
   try {
     const res = await fetch(ENDPOINTS.indexersStatus);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const data = await res.json();
     const installed = Boolean(data.installed);
+    state.modules.indexers = installed;
     if (headerBtn) headerBtn.style.display = installed ? "" : "none";
+    if (menuItemBtn) menuItemBtn.style.display = installed ? "" : "none";
     if (banner) {
       const show = installed && data.reachable && data.configured === 0 && !dismissed();
-      banner.style.display = show ? "" : "none";
+      state.indexersNeedsSetup = show;
+      banner.style.display = show ? "flex" : "none";
     }
-  } catch (_) { /* dashboard keeps working without the picker */ }
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function renderList() {
@@ -63,7 +71,7 @@ function renderList() {
     (priv === "all" || ix.privacy === priv)
   );
   if (!rows.length) {
-    list.innerHTML = '<div class="indexer-empty">No indexers match this search.</div>';
+    list.innerHTML = '<div class="empty-state">No indexers match this search.</div>';
     updateSummary();
     return;
   }
@@ -82,13 +90,13 @@ function renderList() {
           <span class="indexer-name">${escapeHtml(ix.name)}</span>
           <span class="indexer-badge badge-${escapeHtml(ix.protocol || "torrent")}">${escapeHtml(ix.protocol || "")}</span>
           <span class="indexer-badge badge-${escapeHtml(ix.privacy || "public")}">${escapeHtml(ix.privacy || "")}</span>
-          ${ix.language ? `<span class="indexer-lang">${escapeHtml(ix.language)}</span>` : ""}
-          ${isDone ? '<span class="indexer-badge badge-done">configured</span>' : ""}
+          ${ix.language ? `<span class="text-muted">${escapeHtml(ix.language)}</span>` : ""}
+          ${isDone ? '<span class="badge-status-synced">configured</span>' : ""}
         </label>
         ${ix.description ? `<div class="indexer-desc">${escapeHtml(ix.description)}</div>` : ""}
         ${isSel && fields ? `<div class="indexer-fields">${fields}</div>` : ""}
       </div>`;
-  }).join("") + (rows.length > 400 ? `<div class="indexer-empty">Showing 400 of ${rows.length}; refine the search.</div>` : "");
+  }).join("") + (rows.length > 400 ? `<div class="empty-state">Showing 400 of ${rows.length}; refine the search.</div>` : "");
   updateSummary();
 }
 
@@ -101,7 +109,7 @@ async function openIndexerModal(triggerEl = null) {
   if (!modal) return;
   openModal(modal, triggerEl);
   if (resultBox) resultBox.innerHTML = "";
-  if (list) list.innerHTML = '<div class="indexer-empty">Loading Prowlarr’s indexer definitions…</div>';
+  if (list) list.innerHTML = '<div class="empty-state">Loading Prowlarr’s indexer definitions…</div>';
   try {
     const res = await fetch(ENDPOINTS.indexersAvailable);
     const data = await res.json();
@@ -110,7 +118,7 @@ async function openIndexerModal(triggerEl = null) {
     configured = new Set(data.configured || []);
     renderList();
   } catch (err) {
-    if (list) list.innerHTML = `<div class="indexer-empty">Could not load the list: ${escapeHtml(err.message)}</div>`;
+    if (list) list.innerHTML = `<div class="empty-state">Could not load the list: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -140,7 +148,7 @@ async function addSelected() {
     });
     renderList();
     if (data.added > 0) {
-      showToast("Indexers added", `${data.added} indexer(s) added to Prowlarr and synced to Radarr/Sonarr.`, "🔎");
+      showToast("Indexers added", `${data.added} indexer(s) added to Prowlarr and synced to Radarr/Sonarr.`, "success");
       try { localStorage.setItem(DISMISS_KEY, "1"); } catch (_) { /* ignore */ }
       fetchIndexerStatus();
     }
@@ -161,7 +169,7 @@ export function setupIndexers() {
     bannerSkip.addEventListener("click", () => {
       try { localStorage.setItem(DISMISS_KEY, "1"); } catch (_) { /* ignore */ }
       if (banner) banner.style.display = "none";
-      showToast("Skipped for now", "Add indexers any time from the Indexers button in the menu.", "⏭");
+      showToast("Skipped for now", "Add indexers any time from Indexers in the header or menu.", "info");
     });
   }
   if (modalAdd) modalAdd.addEventListener("click", addSelected);

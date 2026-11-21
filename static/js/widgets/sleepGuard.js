@@ -1,7 +1,7 @@
 /**
- * Widget: Sleep Guard Hero Command Module
- * Handles S3 RAM Suspend status, overnight toggle, quick shifts (+1h/+2h),
- * 24h timeline window zone, and accessible scheduler modal.
+ * Widget: Sleep Guard Power Automation Controller
+ * Handles installed / not_installed / disabled / skip / override / default states,
+ * dual midnight-wrapping 24h timeline segments, quick shifts, and scheduler modal.
  */
 
 import { $, setCardSummary } from "../shared/dom.js";
@@ -9,6 +9,7 @@ import { state } from "../state.js";
 import { ENDPOINTS } from "../config.js";
 import { closeModal, openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
+import { renderOverview } from "./overview.js";
 
 const sleepCard = $("sleep-guard-card");
 const sleepIcon = $("sleep-icon");
@@ -19,6 +20,8 @@ const sleepToggleBtn = $("sleep-toggle-btn");
 const sleepBtnText = $("sleep-btn-text");
 const sleepBtnSpinner = $("sleep-btn-spinner");
 const sleepWindowZone = $("sleep-window-zone");
+const sleepWindowZoneWrap = $("sleep-window-zone-wrap");
+const sleepTimeline = $("sleep-timeline-container");
 const sleepOverridePill = $("sleep-override-pill");
 const sleepOverrideText = $("sleep-override-text");
 const btnClearHeroOverride = $("btn-clear-hero-override");
@@ -62,6 +65,12 @@ function tzLabel() {
   return state.tzAbbr || state.timezone || "local";
 }
 
+function setSleepIcon(iconName) {
+  if (!sleepIcon) return;
+  const useEl = sleepIcon.querySelector("use");
+  if (useEl) useEl.setAttribute("href", `/img/icons/ui-sprite.svg#icon-${iconName}`);
+}
+
 function updateTzBadges() {
   const abbr = tzLabel();
   document.querySelectorAll(".tz-badge").forEach((el) => {
@@ -91,7 +100,7 @@ function updateTonightPreview() {
   const tz = tzLabel();
 
   if (tonightDurationBadge) tonightDurationBadge.textContent = `${dur.hours} hrs`;
-  if (tonightPreviewText) tonightPreviewText.textContent = `Sleep at ${sVal} ${tz} • Wake at ${wVal} ${tz}`;
+  if (tonightPreviewText) tonightPreviewText.textContent = `Sleep at ${sVal} ${tz} · Wake at ${wVal} ${tz}`;
 }
 
 function updatePermanentPreview() {
@@ -120,46 +129,26 @@ function switchTab(tabId) {
     tabBtnPermanent.classList.toggle("active", !isTonight);
     tabBtnPermanent.setAttribute("aria-selected", !isTonight ? "true" : "false");
   }
-  if (tabPaneTonight) tabPaneTonight.style.display = isTonight ? "flex" : "none";
-  if (tabPanePermanent) tabPanePermanent.style.display = isTonight ? "none" : "flex";
-  if (saveModalText) saveModalText.textContent = isTonight ? "Apply for Tonight Only" : "Save as Default Schedule";
+  if (tabPaneTonight) tabPaneTonight.classList.toggle("active", isTonight);
+  if (tabPanePermanent) tabPanePermanent.classList.toggle("active", !isTonight);
+  if (saveModalText) saveModalText.textContent = isTonight ? "Apply for Tonight Only" : "Save Default Schedule";
   if (modalFooterHint) {
     modalFooterHint.textContent = isTonight
-      ? "Mode: Tonight's One-Off Shift (Resets to default after wake)"
-      : "Mode: Permanent Schedule (Updates cron & config)";
-  }
-}
-
-function updatePresetLabels() {
-  const baseSleep = permanentConfig.sleep_time || "00:00";
-  const sParts = baseSleep.split(":");
-  const bHour = parseInt(sParts[0], 10);
-  const bMin = sParts[1] || "00";
-  const durHours = parseFloat(permanentConfig.duration_hours) || 6.0;
-
-  for (let delay = 1; delay <= 4; delay++) {
-    const calcEl = $(`preset-calc-${delay}`);
-    if (calcEl) {
-      const sH = (bHour + delay) % 24;
-      const sStr = `${String(sH).padStart(2, "0")}:${String(bMin).padStart(2, "0")}`;
-      const wH = Math.round((sH + durHours) % 24);
-      const wStr = `${String(wH).padStart(2, "0")}:${String(bMin).padStart(2, "0")}`;
-      calcEl.textContent = `${sStr} → ${wStr}`;
-    }
+      ? "One-off shift (reverts to default after wake)"
+      : "Permanent schedule (updates cron & /etc/server-suspend.conf)";
   }
 }
 
 export function openSleepModal(initialTab = "tab-tonight", triggerEl = null) {
   if (!sleepModal) return;
   switchTab(initialTab);
-  updatePresetLabels();
   updateTzBadges();
 
   if (tonightOverride && tonightOverride.active) {
     if (tonightActiveBanner) tonightActiveBanner.style.display = "flex";
     if (tonightActiveText) {
       const tz = tzLabel();
-      tonightActiveText.textContent = `Active Override: Sleep shifted to ${tonightOverride.sleep_time} ${tz} (wakes at ${tonightOverride.wake_time} ${tz})`;
+      tonightActiveText.textContent = `Active Override: ${tonightOverride.sleep_time} → ${tonightOverride.wake_time} ${tz}`;
     }
     if (tonightSleepInput) tonightSleepInput.value = tonightOverride.sleep_time || "01:00";
     if (tonightWakeInput) tonightWakeInput.value = tonightOverride.wake_time || "07:00";
@@ -195,14 +184,14 @@ export async function sendShiftTonight(payload) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(payload.clear ? "Schedule Restored" : "Tonight's Sleep Shifted", data.message, payload.clear ? "🔁" : "🌙");
+      showToast(payload.clear ? "Schedule Restored" : "Tonight's Sleep Shifted", data.message, "success");
       await fetchSleepStatus();
       return true;
     }
-    showToast("Shift Failed", data.error || "Could not apply tonight's sleep shift", "❌");
+    showToast("Shift Failed", data.error || "Could not apply tonight's sleep shift", "danger");
     return false;
   } catch (_) {
-    showToast("Network Error", "Could not reach sleep guard API", "❌");
+    showToast("Network Error", "Could not reach sleep guard API", "danger");
     return false;
   }
 }
@@ -216,78 +205,144 @@ export async function sendSchedulePermanent(payload) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast("Permanent Schedule Saved", data.message, "💾");
+      showToast("Permanent Schedule Saved", data.message, "success");
       await fetchSleepStatus();
       return true;
     }
-    showToast("Schedule Failed", data.error || "Could not save permanent schedule", "❌");
+    showToast("Schedule Failed", data.error || "Could not save permanent schedule", "danger");
     return false;
   } catch (_) {
-    showToast("Network Error", "Could not reach sleep guard API", "❌");
+    showToast("Network Error", "Could not reach sleep guard API", "danger");
     return false;
+  }
+}
+
+function renderTimelineSegments(data) {
+  if (!sleepWindowZone) return;
+  const segs = Array.isArray(data.window_segments) && data.window_segments.length
+    ? data.window_segments
+    : (typeof data.window_left_pct === "number"
+      ? [{ left_pct: data.window_left_pct, width_pct: data.window_width_pct }]
+      : []);
+
+  const title = `Sleep Window (${data.effective_sleep_time} - ${data.effective_wake_time})`;
+  if (segs[0]) {
+    sleepWindowZone.hidden = false;
+    sleepWindowZone.style.left = `${segs[0].left_pct}%`;
+    sleepWindowZone.style.width = `${segs[0].width_pct}%`;
+    sleepWindowZone.setAttribute("title", title);
+  } else {
+    sleepWindowZone.hidden = true;
+  }
+
+  if (sleepWindowZoneWrap) {
+    if (segs[1]) {
+      sleepWindowZoneWrap.hidden = false;
+      sleepWindowZoneWrap.style.left = `${segs[1].left_pct}%`;
+      sleepWindowZoneWrap.style.width = `${segs[1].width_pct}%`;
+      sleepWindowZoneWrap.setAttribute("title", title);
+    } else {
+      sleepWindowZoneWrap.hidden = true;
+    }
   }
 }
 
 export async function fetchSleepStatus() {
   try {
     const res = await fetch(ENDPOINTS.sleepStatus);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const data = await res.json();
 
     if (data.timezone) state.timezone = data.timezone;
     if (data.tz_abbr) state.tzAbbr = data.tz_abbr;
     updateTzBadges();
 
-    state.sleepSkipActive = data.skip_active;
+    const installed = data.installed !== false;
+    const mode = data.state_mode || (installed ? "default" : "not_installed");
+    state.sleepInstalled = installed;
+    state.modules.sleepGuard = installed;
+    state.sleepEnabled = data.enabled !== false;
+    state.sleepSkipActive = Boolean(data.skip_active);
+    state.sleepStateMode = mode;
     state.sleepSecondsRemaining = data.seconds_until_sleep || 0;
-    if (data.permanent_config) permanentConfig = data.permanent_config;
-    tonightOverride = data.tonight_override;
 
-    if (sleepWindowZone && typeof data.window_left_pct === "number") {
-      sleepWindowZone.style.left = `${data.window_left_pct}%`;
-      sleepWindowZone.style.width = `${data.window_width_pct}%`;
-      sleepWindowZone.setAttribute("title", `Sleep Window (${data.effective_sleep_time} - ${data.effective_wake_time})`);
-    }
+    if (data.permanent_config) permanentConfig = data.permanent_config;
+    tonightOverride = data.tonight_override || null;
+
+    renderTimelineSegments(data);
 
     const tz = tzLabel();
-    if (sleepCard) {
-      if (state.sleepSkipActive) {
-        sleepCard.classList.add("skip-active");
-        if (sleepIcon) sleepIcon.textContent = "☀️";
-        if (sleepStatusTitle) sleepStatusTitle.textContent = "Sleep Disabled Tonight";
-        if (sleepCountdown) sleepCountdown.textContent = "Awake all night (Skip active)";
-        if (sleepSubtext) sleepSubtext.textContent = "Server staying awake all night. Resumes normal schedule tomorrow.";
-        if (sleepBtnText) sleepBtnText.textContent = "Re-arm Sleep Tonight";
-        if (sleepOverridePill) sleepOverridePill.style.display = "none";
-        setCardSummary("sleep-guard-card", "Sleep: Disabled tonight");
-      } else if (tonightOverride && tonightOverride.active) {
-        sleepCard.classList.remove("skip-active");
-        if (sleepIcon) sleepIcon.textContent = "🌙";
-        if (sleepStatusTitle) sleepStatusTitle.textContent = "Sleep Shifted Tonight";
-        if (sleepSubtext) {
-          sleepSubtext.textContent = `Override armed: suspends at ${tonightOverride.sleep_time} ${tz} for ${tonightOverride.duration_hours}h (wakes at ${tonightOverride.wake_time} ${tz})`;
-        }
-        if (sleepBtnText) sleepBtnText.textContent = "Prevent Sleep Tonight";
-        if (sleepOverridePill) {
-          sleepOverridePill.style.display = "inline-flex";
-          if (sleepOverrideText) sleepOverrideText.textContent = `Shifted: ${tonightOverride.sleep_time} → ${tonightOverride.wake_time}`;
-        }
-        setCardSummary("sleep-guard-card", `Sleep: Shifted ${tonightOverride.sleep_time} → ${tonightOverride.wake_time}`);
-      } else {
-        sleepCard.classList.remove("skip-active");
-        if (sleepIcon) sleepIcon.textContent = "🌙";
-        if (sleepStatusTitle) sleepStatusTitle.textContent = "Sleep Armed";
-        const dur = permanentConfig.duration_hours || 6;
-        if (sleepSubtext) {
-          sleepSubtext.textContent = `Automatic suspend armed at ${permanentConfig.sleep_time} ${tz} for ${dur} hours (wakes at ${permanentConfig.wake_time} ${tz})`;
-        }
-        if (sleepBtnText) sleepBtnText.textContent = "Prevent Sleep Tonight";
-        if (sleepOverridePill) sleepOverridePill.style.display = "none";
-        setCardSummary("sleep-guard-card", `Sleep: Armed ${permanentConfig.sleep_time} → ${permanentConfig.wake_time} ${tz}`);
+    const controls = [btnShift1h, btnShift2h, btnOpenSleepModal, sleepToggleBtn];
+
+    if (!installed || mode === "not_installed") {
+      setSleepIcon("sun");
+      if (sleepStatusTitle) sleepStatusTitle.textContent = "Sleep Guard Not Installed";
+      if (sleepSubtext) sleepSubtext.textContent = "Automated S3 suspend is not enabled on this server (install sleep_guard module to configure).";
+      if (sleepCountdown) sleepCountdown.textContent = "Always On";
+      if (sleepOverridePill) sleepOverridePill.style.display = "none";
+      if (sleepTimeline) sleepTimeline.hidden = true;
+      controls.forEach((b) => { if (b) b.hidden = true; });
+      state.sleepLabel = "Not Installed";
+      setCardSummary("sleep-guard-card", "Sleep Guard not installed");
+    } else if (mode === "disabled") {
+      setSleepIcon("sun");
+      if (sleepTimeline) sleepTimeline.hidden = false;
+      if (sleepStatusTitle) sleepStatusTitle.textContent = "Auto-Sleep Disabled";
+      if (sleepSubtext) sleepSubtext.textContent = `Permanent nightly suspend is turned off (saved rule: ${permanentConfig.sleep_time} → ${permanentConfig.wake_time} ${tz}).`;
+      if (sleepCountdown) sleepCountdown.textContent = "Schedule Off";
+      if (sleepOverridePill) sleepOverridePill.style.display = "none";
+      if (btnShift1h) btnShift1h.hidden = true;
+      if (btnShift2h) btnShift2h.hidden = true;
+      if (btnOpenSleepModal) btnOpenSleepModal.hidden = false;
+      if (sleepToggleBtn) sleepToggleBtn.hidden = true;
+      state.sleepLabel = "Disabled";
+      setCardSummary("sleep-guard-card", "Auto-Sleep Disabled");
+    } else if (mode === "skip" || state.sleepSkipActive) {
+      setSleepIcon("sun");
+      if (sleepTimeline) sleepTimeline.hidden = false;
+      controls.forEach((b) => { if (b) b.hidden = false; });
+      if (sleepStatusTitle) sleepStatusTitle.textContent = "Staying Awake Tonight";
+      if (sleepCountdown) sleepCountdown.textContent = "Skip Active";
+      if (sleepSubtext) sleepSubtext.textContent = "Server staying awake all night. Resumes normal schedule tomorrow.";
+      if (sleepBtnText) sleepBtnText.textContent = "Re-arm Sleep Tonight";
+      if (sleepOverridePill) sleepOverridePill.style.display = "none";
+      state.sleepLabel = "Skip Tonight";
+      setCardSummary("sleep-guard-card", "Staying awake tonight (Skip active)");
+    } else if (mode === "override" && tonightOverride) {
+      setSleepIcon("moon");
+      if (sleepTimeline) sleepTimeline.hidden = false;
+      controls.forEach((b) => { if (b) b.hidden = false; });
+      if (sleepStatusTitle) sleepStatusTitle.textContent = "Sleep Shifted Tonight";
+      if (sleepSubtext) {
+        sleepSubtext.textContent = `Override armed: suspends at ${tonightOverride.sleep_time} ${tz} for ${tonightOverride.duration_hours}h (wakes at ${tonightOverride.wake_time} ${tz})`;
       }
+      if (sleepBtnText) sleepBtnText.textContent = "Prevent Sleep Tonight";
+      if (sleepOverridePill) {
+        sleepOverridePill.style.display = "inline-flex";
+        if (sleepOverrideText) sleepOverrideText.textContent = `Shifted: ${tonightOverride.sleep_time} → ${tonightOverride.wake_time}`;
+      }
+      state.sleepLabel = `Shifted ${tonightOverride.sleep_time}`;
+      setCardSummary("sleep-guard-card", `Shifted ${tonightOverride.sleep_time} → ${tonightOverride.wake_time} ${tz}`);
+    } else {
+      setSleepIcon("moon");
+      if (sleepTimeline) sleepTimeline.hidden = false;
+      controls.forEach((b) => { if (b) b.hidden = false; });
+      if (sleepStatusTitle) sleepStatusTitle.textContent = "Sleep Armed";
+      const dur = permanentConfig.duration_hours || 6;
+      if (sleepSubtext) {
+        sleepSubtext.textContent = `Automatic suspend armed at ${permanentConfig.sleep_time} ${tz} for ${dur}h (wakes at ${permanentConfig.wake_time} ${tz})`;
+      }
+      if (sleepBtnText) sleepBtnText.textContent = "Prevent Sleep Tonight";
+      if (sleepOverridePill) sleepOverridePill.style.display = "none";
+      state.sleepLabel = `Armed ${permanentConfig.sleep_time} ${tz}`;
+      setCardSummary("sleep-guard-card", `Armed ${permanentConfig.sleep_time} → ${permanentConfig.wake_time} ${tz}`);
     }
+
+    renderOverview();
+    return true;
   } catch (err) {
     console.error("Error fetching sleep status:", err);
+    return false;
   }
 }
 
@@ -300,13 +355,13 @@ export async function toggleSleepMode() {
     const res = await fetch(ENDPOINTS.sleepToggle, { method: "POST" });
     const data = await res.json();
     if (data.success) {
-      showToast(data.skip_active ? "Sleep Guard Disabled" : "Sleep Guard Re-armed", data.message, data.skip_active ? "☀️" : "🌙");
+      showToast(data.skip_active ? "Sleep Skipped Tonight" : "Sleep Guard Re-armed", data.message, "success");
       await fetchSleepStatus();
     } else {
-      showToast("Error", data.error || "Failed to toggle sleep mode", "❌");
+      showToast("Error", data.error || "Failed to toggle sleep mode", "danger");
     }
   } catch (_) {
-    showToast("Network Error", "Could not communicate with Sleep Guard API", "❌");
+    showToast("Network Error", "Could not communicate with Sleep Guard API", "danger");
   } finally {
     sleepToggleBtn.disabled = false;
     if (sleepBtnSpinner) sleepBtnSpinner.style.display = "none";
@@ -341,7 +396,7 @@ export function setupSleepGuard() {
     });
   }
 
-  if (btnOpenSleepModal) btnOpenSleepModal.addEventListener("click", () => openSleepModal("tab-tonight", btnOpenSleepModal));
+  if (btnOpenSleepModal) btnOpenSleepModal.addEventListener("click", () => openSleepModal(state.sleepStateMode === "disabled" ? "tab-permanent" : "tab-tonight", btnOpenSleepModal));
   if (tabBtnTonight) tabBtnTonight.addEventListener("click", () => switchTab("tab-tonight"));
   if (tabBtnPermanent) tabBtnPermanent.addEventListener("click", () => switchTab("tab-permanent"));
 

@@ -1,14 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Control Hub — Home Server Command Center</title>
-  <meta name="description" content="Home server command center for media stack monitoring, Sleep Guard, backup sync, TV fleet updates, and host configuration." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css?v=26" />
+  <meta name="description" content="Home server command center for app launcher, hardware telemetry, backups, TV fleet updates, Sleep Guard, and host configuration." />
+  <script>
+    (function () {
+      try {
+        var pref = localStorage.getItem("hub_theme") || "dark";
+        var resolved = pref === "system"
+          ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+          : (pref === "light" ? "light" : "dark");
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.dataset.themePref = pref;
+      } catch (_) {
+        document.documentElement.dataset.theme = "dark";
+        document.documentElement.dataset.themePref = "dark";
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/style.css?v=30" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -20,517 +32,544 @@
     <span id="pull-refresh-text">Pull down to refresh</span>
   </div>
 
-  <!-- Top Header -->
+  <!-- Slim Top Bar -->
   <header class="hub-header" id="hub-header">
-    <div class="header-primary-row">
-      <div class="header-brand">
+    <div class="header-left">
+      <a href="#/overview" class="header-brand" aria-label="Control Hub overview">
         <div class="brand-emblem" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="3" width="20" height="8" rx="2"></rect>
-            <rect x="2" y="13" width="20" height="8" rx="2"></rect>
-            <line x1="6" y1="7" x2="6.01" y2="7"></line>
-            <line x1="6" y1="17" x2="6.01" y2="17"></line>
-          </svg>
+          <svg class="ui-icon"><use href="/img/icons/ui-sprite.svg#icon-server"></use></svg>
         </div>
         <div class="brand-titles">
           <h1>Control Hub</h1>
-          <p class="subtitle">Home Server Command Center</p>
+          <span class="host-pill font-mono" id="hub-hostname" hidden></span>
         </div>
-      </div>
+      </a>
 
-      <div class="header-mobile-controls">
-        <button type="button" id="btn-status-strip-toggle" class="header-icon-btn" aria-expanded="false" aria-controls="hud-chips-strip" aria-label="Toggle live host status strip">
-          <span aria-hidden="true">⏱</span>
-          <span>Status</span>
-        </button>
-        <button type="button" id="btn-header-menu" class="header-icon-btn" aria-expanded="false" aria-controls="header-actions-menu" aria-label="Toggle server tools menu">
-          <span aria-hidden="true">☰</span>
-          <span>Menu</span>
-        </button>
+      <button type="button" id="connection-pill" class="conn-pill is-live" aria-label="Connection status: Live. Click to refresh.">
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span id="connection-pill-text">Live</span>
+      </button>
+
+      <div class="header-meta-desktop" aria-label="Server clock and uptime">
+        <span id="live-clock" class="meta-mono font-mono">--:--:--</span>
+        <span class="meta-sep" aria-hidden="true">&middot;</span>
+        <span id="system-uptime" class="meta-mono font-mono">Uptime: --</span>
       </div>
     </div>
 
-    <div id="hud-chips-strip" class="header-status-strip" aria-label="Server clock and uptime">
-      <div class="telemetry-chip chip-live">
-        <span class="pulsing-dot" aria-hidden="true"></span>
-        <span>Live Polling</span>
-      </div>
-      <div class="telemetry-chip">
-        <span class="chip-label">Clock</span>
-        <span id="live-clock" class="font-mono">--:--:--</span>
-      </div>
-      <div class="telemetry-chip">
-        <span id="system-uptime" class="font-mono">Uptime: --</span>
-      </div>
-    </div>
-
-    <div id="header-actions-menu" class="header-actions-menu" aria-label="Control Hub actions">
-      <button type="button" id="btn-refresh-now" class="action-pill-btn" aria-label="Refresh dashboard telemetry">
-        <span aria-hidden="true">↻</span>
-        <span>Refresh</span>
-      </button>
-      <button type="button" id="btn-open-config-center" class="action-pill-btn" aria-label="Open server configuration settings">
-        <span aria-hidden="true">⚙️</span>
-        <span>Config</span>
-      </button>
-      <button type="button" id="btn-open-indexers" class="action-pill-btn action-pill-cyan" style="display: none;" aria-label="Pick Prowlarr indexers">
-        <span aria-hidden="true">🔎</span>
-        <span>Indexers</span>
-      </button>
-      <button type="button" id="btn-open-ai-copilot" class="action-pill-btn" aria-label="Open AI Diagnostics prompt exporter">
-        <span aria-hidden="true">🤖</span>
-        <span>AI Copilot</span>
-      </button>
-      <button type="button" id="btn-open-alerts" class="action-pill-btn" aria-label="Alerts">
-        <span aria-hidden="true">🔔</span>
-        <span>Alerts</span>
+    <div class="header-right">
+      <button type="button" id="btn-open-alerts" class="header-btn header-alerts-btn" aria-label="Alerts">
+        <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-bell"></use></svg>
+        <span class="header-btn-label">Alerts</span>
         <span class="alerts-count" id="alerts-count" hidden></span>
       </button>
-      <button type="button" id="btn-open-account" class="action-pill-btn" aria-label="Manage sign-in password and session">
-        <span aria-hidden="true">👤</span>
-        <span>Account</span>
+
+      <button type="button" id="btn-theme-toggle" class="header-btn header-icon-only" aria-label="Switch theme (currently dark)" title="Switch theme (Dark / Light / System)">
+        <svg class="ui-icon" id="theme-toggle-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-moon"></use></svg>
       </button>
-      <button type="button" id="btn-kiosk-toggle" class="action-pill-btn" aria-label="Toggle fullscreen mode">
-        <span aria-hidden="true">⛶</span>
-        <span>Kiosk</span>
+
+      <button type="button" id="btn-refresh-now" class="header-btn header-icon-only" aria-label="Refresh dashboard telemetry" title="Refresh telemetry">
+        <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-refresh"></use></svg>
       </button>
+
+      <button type="button" id="btn-open-config-center" class="header-btn header-desktop-only" aria-label="Open server configuration settings">
+        <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-settings"></use></svg>
+        <span>Config</span>
+      </button>
+
+      <button type="button" id="btn-open-indexers" class="header-btn header-accent-btn header-desktop-only" style="display: none;" aria-label="Pick Prowlarr indexers">
+        <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-search"></use></svg>
+        <span>Indexers</span>
+      </button>
+
+      <button type="button" id="btn-open-ai-copilot" class="header-btn header-desktop-only" aria-label="Open AI Diagnostics prompt exporter">
+        <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-sparkles"></use></svg>
+        <span>AI Copilot</span>
+      </button>
+
+      <div class="header-menu-wrap">
+        <button type="button" id="btn-header-menu" class="header-btn header-icon-only" aria-expanded="false" aria-controls="header-actions-menu" aria-label="More tools and settings" title="More tools">
+          <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-menu"></use></svg>
+        </button>
+
+        <div id="header-actions-menu" class="header-dropdown" aria-label="Control Hub tools menu">
+          <div class="dropdown-meta-mobile">
+            <span class="font-mono" id="live-clock-mobile">--:--:--</span>
+            <span class="font-mono text-muted" id="system-uptime-mobile">Uptime: --</span>
+          </div>
+
+          <div class="dropdown-section-label">Appearance</div>
+          <div class="theme-segmented" role="group" aria-label="Theme preference">
+            <button type="button" class="theme-opt-btn" data-theme-choice="dark" aria-pressed="true">Dark</button>
+            <button type="button" class="theme-opt-btn" data-theme-choice="light" aria-pressed="false">Light</button>
+            <button type="button" class="theme-opt-btn" data-theme-choice="system" aria-pressed="false">Auto</button>
+          </div>
+
+          <div class="dropdown-section-label">Tools</div>
+          <button type="button" class="dropdown-item" data-proxy-click="btn-open-config-center">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-settings"></use></svg>
+            <span>Server Config &amp; Netplan</span>
+          </button>
+          <button type="button" class="dropdown-item" id="menu-item-indexers" data-proxy-click="btn-open-indexers" style="display: none;">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-search"></use></svg>
+            <span>Prowlarr Indexers</span>
+          </button>
+          <button type="button" class="dropdown-item" data-proxy-click="btn-open-ai-copilot">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-sparkles"></use></svg>
+            <span>AI Copilot Diagnostics</span>
+          </button>
+          <button type="button" id="btn-open-account" class="dropdown-item" data-open-account="true">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-user"></use></svg>
+            <span>Account &amp; Password</span>
+          </button>
+          <button type="button" id="btn-kiosk-toggle" class="dropdown-item">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-maximize"></use></svg>
+            <span>Toggle Fullscreen</span>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
   <div class="hub-shell">
-    <!-- Primary Navigation: Bottom Bar (<=599px) / Left Rail (>=600px) -->
-    <nav id="hub-nav" class="hub-nav" aria-label="Dashboard sections">
-      <a href="#sleep-guard-card" class="hub-nav-item is-active" data-nav-target="sleep-guard-card" aria-current="location">
-        <span class="nav-icon" aria-hidden="true">🏠</span>
-        <span class="nav-label">Home</span>
+    <!-- 5 Focused Workspace Views: Bottom Bar (<=599px) / Rail (600..1023px) / Sidebar (>=1024px) -->
+    <nav id="hub-nav" class="hub-nav" aria-label="Workspace navigation">
+      <a href="#/overview" class="hub-nav-item is-active" id="nav-item-overview" data-view-link="overview" aria-current="page">
+        <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-overview"></use></svg>
+        <span class="nav-label">Overview</span>
       </a>
-      <a href="#active-ops-section" class="hub-nav-item" data-nav-target="torrent-downloads-panel">
-        <span class="nav-icon" aria-hidden="true">🎬</span>
-        <span class="nav-label">Media</span>
+      <a href="#/apps" class="hub-nav-item" id="nav-item-apps" data-view-link="apps">
+        <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-apps"></use></svg>
+        <span class="nav-label">Apps</span>
       </a>
-      <a href="#backup-section" class="hub-nav-item" data-nav-target="backup-section">
-        <span class="nav-icon" aria-hidden="true">📸</span>
-        <span class="nav-label">Photos</span>
+      <a href="#/backups" class="hub-nav-item" id="nav-item-backups" data-view-link="backups">
+        <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cloud"></use></svg>
+        <span class="nav-label">Backups</span>
       </a>
-      <a href="#tv-updater-section" class="hub-nav-item" id="nav-item-tvs" data-nav-target="tv-updater-section">
-        <span class="nav-icon" aria-hidden="true">📺</span>
+      <a href="#/tvs" class="hub-nav-item" id="nav-item-tvs" data-view-link="tvs">
+        <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
         <span class="nav-label">TVs</span>
       </a>
-      <a href="#vitals-section" class="hub-nav-item" data-nav-target="vitals-section">
-        <span class="nav-icon" aria-hidden="true">🖥️</span>
+      <a href="#/system" class="hub-nav-item" id="nav-item-system" data-view-link="system">
+        <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cpu"></use></svg>
         <span class="nav-label">System</span>
       </a>
     </nav>
 
     <main id="main-content" class="dashboard-main" tabindex="-1">
-      <!-- One-time Prowlarr indexer picker prompt (shown while Prowlarr has 0 indexers) -->
-      <div id="indexer-banner" class="indexer-banner" role="region" aria-label="Prowlarr indexer setup notice" style="display: none;">
-        <div class="indexer-banner-text">
-          <strong>Your Prowlarr has no indexers yet.</strong>
-          <span>Pick from Prowlarr’s built-in definitions to enable automated media search.</span>
-        </div>
-        <div class="indexer-banner-actions">
-          <button type="button" id="btn-indexer-banner-open" class="btn-tile-logs">Pick indexers</button>
-          <button type="button" id="btn-indexer-banner-skip" class="btn-tile-restart">Skip for now</button>
-        </div>
-      </div>
-
-      <!-- Critical HDD Headroom Warning Banner -->
-      <div id="hdd-alert-banner" class="alert-banner" role="alert" style="display: none;">
-        <div class="alert-icon" aria-hidden="true">⚠️</div>
-        <div class="alert-body">
-          <strong>Storage Pool Critical Capacity:</strong> Media Storage is <span id="hdd-alert-pct">90%</span> full (<span id="hdd-alert-free">--</span> left). Move or remove large files to preserve download headroom.
-        </div>
-      </div>
-
-      <!-- 1. Hero Sleep Guard Card -->
-      <section class="dashboard-card hero-card" id="sleep-guard-card" data-collapsible="true">
-        <div class="card-header-bar">
-          <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="sleep-guard-body">
-            <span class="card-title-row">
-              <span class="hero-icon-inline" id="sleep-icon" aria-hidden="true">🌙</span>
-              <span class="card-title-text" id="sleep-status-title">Sleep Armed</span>
-            </span>
-            <span class="card-summary">Sleep schedule telemetry loading...</span>
-          </button></h2>
-
-          <div class="card-header-actions">
-            <div class="sleep-countdown-pill" id="sleep-countdown-pill">
-              <span id="sleep-countdown">Measuring...</span>
-            </div>
-            <div class="sleep-override-pill" id="sleep-override-pill" style="display: none;">
-              <span id="sleep-override-text">Override Active</span>
-              <button type="button" id="btn-clear-hero-override" class="btn-clear-override" aria-label="Clear tonight's sleep override">&times;</button>
-            </div>
+      <!-- Global Conditional Attention Strip (hidden when everything is healthy) -->
+      <section id="attention-strip" class="attention-strip" aria-label="Server attention notices">
+        <!-- Netplan Pending 120s Confirmation Banner -->
+        <div id="netplan-pending-banner" class="notice-banner notice-warning" role="alert" hidden>
+          <div class="notice-icon" aria-hidden="true">
+            <svg class="ui-icon"><use href="/img/icons/ui-sprite.svg#icon-alert"></use></svg>
+          </div>
+          <div class="notice-body">
+            <strong>Confirm new static IP (<span id="netplan-banner-ip" class="font-mono">--</span>)</strong>
+            <span id="netplan-banner-msg">Reverts automatically in <strong id="netplan-banner-countdown" class="font-mono">120s</strong> unless confirmed.</span>
+          </div>
+          <div class="notice-actions">
+            <button type="button" id="btn-netplan-banner-confirm" class="btn-primary">Confirm &amp; Keep IP</button>
           </div>
         </div>
 
-        <div class="card-body-collapse" id="sleep-guard-body">
-          <p class="hero-subtitle" id="sleep-subtext">Checking automatic suspend schedule...</p>
+        <!-- Firing Alerts Banner -->
+        <div id="alerts-firing-banner" class="notice-banner notice-danger" role="alert" hidden>
+          <div class="notice-icon" aria-hidden="true">
+            <svg class="ui-icon"><use href="/img/icons/ui-sprite.svg#icon-bell"></use></svg>
+          </div>
+          <div class="notice-body">
+            <strong id="alerts-banner-title">Active alerts need attention</strong>
+            <span id="alerts-banner-detail"></span>
+          </div>
+          <div class="notice-actions">
+            <button type="button" id="btn-alerts-banner-open" class="btn-secondary">Inspect Alerts</button>
+          </div>
+        </div>
 
-          <div class="hero-controls-row">
-            <div class="sleep-timeline-container" id="sleep-timeline-container" aria-hidden="true">
-              <div class="timeline-track">
-                <div class="timeline-sleep-zone" id="sleep-window-zone"></div>
-                <div class="timeline-current-needle" id="sleep-current-needle"></div>
-              </div>
-              <div class="timeline-labels">
-                <span>00:00</span>
-                <span>06:00</span>
-                <span>12:00</span>
-                <span>18:00</span>
-                <span>24:00</span>
-              </div>
-            </div>
+        <!-- Critical Storage Pool Banner -->
+        <div id="hdd-alert-banner" class="notice-banner notice-danger" role="alert" style="display: none;">
+          <div class="notice-icon" aria-hidden="true">
+            <svg class="ui-icon"><use href="/img/icons/ui-sprite.svg#icon-hard-drive"></use></svg>
+          </div>
+          <div class="notice-body">
+            <strong>Storage Pool Critical Capacity:</strong>
+            <span>Media Storage is <strong id="hdd-alert-pct" class="font-mono">95%</strong> full (<span id="hdd-alert-free" class="font-mono">--</span> free). Free space to protect downloads and backups.</span>
+          </div>
+          <div class="notice-actions">
+            <a href="#/system" class="btn-secondary">Inspect Storage</a>
+          </div>
+        </div>
 
-            <div class="sleep-action-cluster">
-              <button type="button" id="btn-shift-1h" class="btn-sleep-quick" aria-label="Delay sleep tonight by 1 hour">+1h</button>
-              <button type="button" id="btn-shift-2h" class="btn-sleep-quick" aria-label="Delay sleep tonight by 2 hours">+2h</button>
-              <button type="button" id="btn-open-sleep-modal" class="btn-sleep-quick btn-sleep-sched" aria-label="Configure sleep schedule">Schedule</button>
-              <button type="button" id="sleep-toggle-btn" class="hero-toggle-btn">
-                <span class="btn-spinner" id="sleep-btn-spinner" style="display: none;" aria-hidden="true"></span>
-                <span id="sleep-btn-text">Prevent Sleep Tonight</span>
-              </button>
-            </div>
+        <!-- One-time Prowlarr Indexer Setup Prompt -->
+        <div id="indexer-banner" class="notice-banner notice-info" role="region" aria-label="Prowlarr indexer setup notice" style="display: none;">
+          <div class="notice-icon" aria-hidden="true">
+            <svg class="ui-icon"><use href="/img/icons/ui-sprite.svg#icon-search"></use></svg>
+          </div>
+          <div class="notice-body">
+            <strong>Prowlarr has no indexers configured yet.</strong>
+            <span>Choose from Prowlarr&rsquo;s built-in definitions to enable automated media search.</span>
+          </div>
+          <div class="notice-actions">
+            <button type="button" id="btn-indexer-banner-open" class="btn-primary">Pick indexers</button>
+            <button type="button" id="btn-indexer-banner-skip" class="btn-ghost">Skip for now</button>
           </div>
         </div>
       </section>
 
-      <!-- 2. Real-Time Speedometers -->
-      <section class="dashboard-card" id="speedometers" data-collapsible="true">
-        <div class="card-header-bar">
-          <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="speedometers-body">
-            <span class="card-title-row">
-              <span class="card-title-text">Network &amp; Transfer Speeds</span>
-            </span>
-            <span class="card-summary">Network: Measuring live WAN &amp; LAN rates...</span>
-          </button></h2>
-
-          <div class="card-header-actions">
-            <div class="unit-toggle-group" role="group" aria-label="Bandwidth speed unit">
-              <button type="button" class="unit-pill-btn active" id="btn-unit-mbs" aria-pressed="true">MB/s</button>
-              <button type="button" class="unit-pill-btn" id="btn-unit-mbps" aria-pressed="false">Mbps</button>
+      <!-- =================================================================== -->
+      <!-- VIEW 1: OVERVIEW (Default — App Launcher, KPI Row, Adaptive Activity) -->
+      <!-- =================================================================== -->
+      <div class="hub-view is-active" id="view-overview" data-view="overview">
+        <!-- Quick-Launch Installed Apps -->
+        <section class="panel-card" id="overview-apps-card" aria-labelledby="overview-apps-heading">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2 id="overview-apps-heading">Quick Launch</h2>
+              <span class="panel-subtitle" id="overview-apps-subtitle">Discovering installed apps...</span>
+            </div>
+            <div class="panel-actions">
+              <a href="#/apps" class="btn-ghost">
+                <span>All Apps</span>
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-chevron-right"></use></svg>
+              </a>
             </div>
           </div>
-        </div>
+          <div class="quick-apps-grid" id="overview-apps-grid">
+            <div class="empty-state">Checking installed Docker services...</div>
+          </div>
+        </section>
 
-        <div class="card-body-collapse" id="speedometers-body">
-          <div class="speedo-grid">
-            <!-- WAN Card -->
-            <div class="speedo-card">
-              <div class="speedo-top-row">
-                <div>
-                  <h3>Internet Speed (WAN)</h3>
-                  <p class="speedo-sub" id="wan-tested-time">Run speedtest to measure line</p>
-                </div>
-                <span class="badge-isp" id="internet-isp-name">Not tested yet</span>
-              </div>
-
-              <div class="speedo-main-value">
-                <span class="speedo-number font-mono" id="wan-total-mbps">--</span>
-                <span class="speedo-unit" id="wan-unit-label">MB/s</span>
-              </div>
-
-              <div class="speedo-metrics-row">
-                <span>DL: <strong class="font-mono" id="wan-dl-val">Not tested</strong></span>
-                <span>UL: <strong class="font-mono" id="wan-up-val">Not tested</strong></span>
-                <span>Peak: <strong class="font-mono" id="wan-peak-val">--</strong></span>
-              </div>
-
-              <div class="sparkline-wrap">
-                <canvas id="wan-sparkline-canvas" width="320" height="58" aria-label="WAN throughput sparkline chart"></canvas>
-                <div class="sparkline-scale" aria-hidden="true">
-                  <span id="wan-scale-0">0</span>
-                  <span id="wan-scale-1">3</span>
-                  <span id="wan-scale-2">6</span>
-                  <span id="wan-scale-3">9</span>
-                  <span id="wan-scale-4">12</span>
-                </div>
-              </div>
-
-              <div class="speedo-footer">
-                <button type="button" id="btn-run-speedtest" class="btn-speedo-action">
-                  <span class="btn-spinner" id="speedtest-spinner" style="display: none;" aria-hidden="true"></span>
-                  <span id="speedtest-icon" aria-hidden="true">⚡</span>
-                  <span id="speedtest-btn-label">Run Speedtest</span>
-                </button>
-              </div>
+        <!-- 4 At-a-Glance Vitals KPI Cards -->
+        <section class="kpi-grid" aria-label="At-a-glance server metrics">
+          <a href="#/system" class="kpi-card" id="kpi-compute">
+            <div class="kpi-head">
+              <span class="kpi-label">Compute</span>
+              <svg class="ui-icon kpi-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cpu"></use></svg>
             </div>
+            <div class="kpi-primary font-mono" id="kpi-cpu-val">--%</div>
+            <div class="kpi-secondary" id="kpi-ram-sub">RAM: -- / -- GiB</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill fill-accent" id="kpi-cpu-bar" style="width: 0%;"></div></div>
+          </a>
 
-            <!-- LAN Card -->
-            <div class="speedo-card">
-              <div class="speedo-top-row">
-                <div>
-                  <h3>Server Interface (LAN)</h3>
-                  <p class="speedo-sub" id="lan-total-sub">Ethernet Traffic</p>
-                </div>
-                <div class="nic-meta">
-                  <span class="badge-isp" id="lan-nic-name">Detecting NIC...</span>
-                  <span class="nic-spec" id="lan-nic-spec">Measuring...</span>
-                </div>
-              </div>
+          <a href="#/system" class="kpi-card" id="kpi-storage">
+            <div class="kpi-head">
+              <span class="kpi-label">Storage</span>
+              <svg class="ui-icon kpi-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-hard-drive"></use></svg>
+            </div>
+            <div class="kpi-primary font-mono" id="kpi-storage-val">-- GB free</div>
+            <div class="kpi-secondary" id="kpi-storage-sub">OS Root: --%</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill fill-success" id="kpi-storage-bar" style="width: 0%;"></div></div>
+          </a>
 
-              <div class="speedo-main-value">
-                <span class="speedo-number font-mono" id="lan-total-mbps">0.00</span>
-                <span class="speedo-unit" id="lan-unit-label">MB/s</span>
-              </div>
+          <a href="#/system" class="kpi-card" id="kpi-network">
+            <div class="kpi-head">
+              <span class="kpi-label">Network</span>
+              <svg class="ui-icon kpi-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-activity"></use></svg>
+            </div>
+            <div class="kpi-primary font-mono" id="kpi-net-val">0.00 MB/s</div>
+            <div class="kpi-secondary" id="kpi-net-sub">Detecting NIC...</div>
+          </a>
 
-              <div class="speedo-metrics-row">
-                <span>RX: <strong class="font-mono" id="lan-rx-val">0.00 MB/s</strong></span>
-                <span>TX: <strong class="font-mono" id="lan-tx-val">0.00 MB/s</strong></span>
-                <span>Peak: <strong class="font-mono" id="lan-peak-val">0.00 MB/s</strong></span>
-              </div>
+          <a href="#/backups" class="kpi-card" id="kpi-backup-power">
+            <div class="kpi-head">
+              <span class="kpi-label" id="kpi-bp-label">Backups &amp; Power</span>
+              <svg class="ui-icon kpi-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-shield"></use></svg>
+            </div>
+            <div class="kpi-primary" id="kpi-bp-val">Checking...</div>
+            <div class="kpi-secondary" id="kpi-bp-sub">Sleep Guard: Checking...</div>
+          </a>
+        </section>
 
-              <div class="sparkline-wrap">
-                <canvas id="lan-sparkline-canvas" width="320" height="58" aria-label="LAN throughput sparkline chart"></canvas>
-                <div class="sparkline-scale" aria-hidden="true">
-                  <span id="lan-scale-0">0</span>
-                  <span id="lan-scale-1">3</span>
-                  <span id="lan-scale-2">6</span>
-                  <span id="lan-scale-3">9</span>
-                  <span id="lan-scale-4">12</span>
-                </div>
-              </div>
-
-              <div class="speedo-footer">
-                <button type="button" id="btn-refresh-lan" class="btn-speedo-action btn-secondary-action" aria-label="Refresh LAN throughput sample">
-                  <span class="btn-spinner" id="lan-refresh-spinner" style="display: none;" aria-hidden="true"></span>
-                  <span id="lan-refresh-icon" aria-hidden="true">↻</span>
-                  <span>Sample LAN</span>
-                </button>
-              </div>
+        <!-- Adaptive Live Activity Strip -->
+        <section class="panel-card" id="overview-activity-card" aria-labelledby="overview-activity-heading">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2 id="overview-activity-heading">Live Activity</h2>
+              <span class="panel-subtitle" id="overview-activity-subtitle">Downloads, streams, backups &amp; disk I/O</span>
+            </div>
+            <div class="panel-actions">
+              <a href="#/apps" class="btn-ghost" id="overview-activity-link">Downloads &amp; Apps</a>
             </div>
           </div>
-        </div>
-      </section>
+          <div id="overview-activity-body" class="activity-strip-body">
+            <div class="activity-quiet">
+              <span class="status-dot is-ok" aria-hidden="true"></span>
+              <span>Checking active downloads, streams, and background jobs...</span>
+            </div>
+          </div>
+        </section>
+      </div>
 
-      <!-- 3. Active Operations (Downloads & Disk/Stream I/O) -->
-      <div id="active-ops-section" class="dashboard-two-col">
-        <section class="dashboard-card" id="torrent-downloads-panel" data-collapsible="true">
-          <div class="card-header-bar">
-            <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="torrent-downloads-body">
-              <span class="card-title-row">
-                <span class="card-title-text">Current Downloads</span>
-              </span>
-              <span class="card-summary">Downloads: Checking queue...</span>
-            </button></h2>
+      <!-- =================================================================== -->
+      <!-- VIEW 2: APPS & MEDIA (Services Matrix + Active Downloads)           -->
+      <!-- =================================================================== -->
+      <div class="hub-view" id="view-apps" data-view="apps" hidden>
+        <section class="panel-card" id="services-matrix">
+          <div class="panel-header panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Installed Services</h2>
+              <span class="panel-subtitle card-summary">Discovering installed containers...</span>
+            </div>
+            <div class="panel-actions">
+              <a id="open-dozzle-full-btn" href="#/apps" target="_blank" rel="noopener" class="btn-secondary" style="display: none;">
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-terminal"></use></svg>
+                <span>Open Dozzle</span>
+              </a>
+            </div>
+          </div>
 
-            <div class="card-header-actions">
-              <div class="ops-speed-summary" id="torrent-collective-speed">
-                <span>&darr; <strong class="font-mono" id="torrent-total-dl">0.00</strong></span>
-                <span>&uarr; <strong class="font-mono" id="torrent-total-up">0.00</strong> MB/s</span>
+          <div class="services-toolbar">
+            <div class="service-filter-group" id="service-filter-group" role="group" aria-label="Filter services by category">
+              <button type="button" class="pill-btn active" data-filter="all" aria-pressed="true">All (0)</button>
+              <button type="button" class="pill-btn" data-filter="media" aria-pressed="false">Media (0)</button>
+              <button type="button" class="pill-btn" data-filter="ingest" aria-pressed="false">Ingest (0)</button>
+              <button type="button" class="pill-btn" data-filter="system" aria-pressed="false">System (0)</button>
+              <button type="button" class="pill-btn" data-filter="other" id="btn-filter-other" aria-pressed="false" hidden>Other (0)</button>
+            </div>
+
+            <div class="services-toolbar-right">
+              <div class="search-input-wrap">
+                <svg class="ui-icon search-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-search"></use></svg>
+                <label for="service-search-input" class="sr-only">Filter services by name</label>
+                <input type="search" id="service-search-input" class="form-input search-input" placeholder="Filter services..." autocomplete="off" />
               </div>
-              <button type="button" id="btn-pause-torrents" class="btn-tile-logs">
+              <label class="toggle-chip" id="include-other-wrap" hidden>
+                <input type="checkbox" id="chk-include-other" />
+                <span id="include-other-label">Show other containers</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="services-grid" id="services-grid">
+            <div class="empty-state">Probing installed Docker services...</div>
+          </div>
+        </section>
+
+        <section class="panel-card" id="torrent-downloads-panel">
+          <div class="panel-header panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Current Downloads</h2>
+              <span class="panel-subtitle card-summary">Checking qBittorrent queue...</span>
+            </div>
+            <div class="panel-actions">
+              <div class="speed-chip font-mono" id="torrent-collective-speed">
+                <span>&darr; <strong id="torrent-total-dl">0.00</strong></span>
+                <span>&uarr; <strong id="torrent-total-up">0.00</strong> MB/s</span>
+              </div>
+              <button type="button" id="btn-pause-torrents" class="btn-secondary">
                 <span id="torrent-btn-label">Pause All</span>
               </button>
             </div>
           </div>
 
-          <div class="card-body-collapse" id="torrent-downloads-body">
-            <div id="torrent-downloads-list" class="ops-list-container">
-              <div class="ops-empty-state">Checking qBittorrent download queue...</div>
-            </div>
-          </div>
-        </section>
+          <div id="torrent-status-banner" class="inline-callout is-warning" hidden></div>
 
-        <section class="dashboard-card" id="storage-ops-panel" data-collapsible="true">
-          <div class="card-header-bar">
-            <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="storage-ops-body">
-              <span class="card-title-row">
-                <span class="card-title-text">Disk &amp; Media Streams</span>
-              </span>
-              <span class="card-summary">Disk I/O: Measuring throughput...</span>
-            </button></h2>
-
-            <div class="card-header-actions">
-              <div class="ops-speed-summary" id="storage-collective-speed">
-                <strong class="font-mono" id="storage-total-mbps">0.00</strong> MB/s Total
-              </div>
-            </div>
-          </div>
-
-          <div class="card-body-collapse" id="storage-ops-body">
-            <div id="storage-ops-list" class="ops-list-container">
-              <div class="ops-empty-state">Sampling block device I/O and active sessions...</div>
-            </div>
+          <div id="torrent-downloads-list" class="ops-list-container">
+            <div class="empty-state">Checking qBittorrent download queue...</div>
           </div>
         </section>
       </div>
 
-      <!-- 4. Photo Cloud Backup & Android TV Cluster -->
-      <div class="dashboard-two-col">
-        <section class="dashboard-card" id="backup-section" data-collapsible="true">
-          <div class="card-header-bar">
-            <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="backup-section-body">
-              <span class="card-title-row">
-                <span class="card-title-text">Cloud Backup &amp; Gallery</span>
-              </span>
-              <span class="card-summary">Backup: Checking cloud sync state...</span>
-            </button></h2>
-
-            <div class="card-header-actions">
-              <span class="badge-status-unknown" id="backup-status-badge">Unknown</span>
-              <button type="button" id="btn-view-backup-log" class="btn-tile-logs">Log</button>
-              <button type="button" id="btn-sync-card" class="btn-sync-primary">
-                <span class="btn-spinner" id="card-sync-spinner" style="display: none;" aria-hidden="true"></span>
-                <span id="card-sync-icon" aria-hidden="true">☁️</span>
-                <span id="card-sync-label">Run backup now</span>
-              </button>
+      <!-- =================================================================== -->
+      <!-- VIEW 3: BACKUPS & PHOTOS (Clean 3-Panel Layout)                     -->
+      <!-- =================================================================== -->
+      <div class="hub-view" id="view-backups" data-view="backups" hidden>
+        <div class="view-grid-backups">
+          <!-- Panel 1: Photo Cloud Backup Health & History -->
+          <section class="panel-card" id="backup-section">
+            <div class="panel-header panel-header-wrap">
+              <div class="panel-title-group">
+                <h2>Photo Cloud Backup</h2>
+                <span class="panel-subtitle card-summary">Checking cloud backup state...</span>
+              </div>
+              <div class="panel-actions">
+                <span class="badge badge-neutral" id="backup-status-badge">Unknown</span>
+                <button type="button" id="btn-view-backup-log" class="btn-secondary">Log</button>
+                <button type="button" id="btn-sync-card" class="btn-primary">
+                  <span class="btn-spinner" id="card-sync-spinner" style="display: none;" aria-hidden="true"></span>
+                  <svg class="ui-icon" id="card-sync-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cloud"></use></svg>
+                  <span id="card-sync-label">Run backup now</span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div class="card-body-collapse" id="backup-section-body">
             <div class="backup-health" id="backup-health" data-state="unknown">
               <p class="backup-health-title" id="backup-health-title">Checking the last backup...</p>
               <p class="backup-health-detail" id="backup-health-detail"></p>
             </div>
 
             <div class="meta-pills-row">
-              <span class="meta-pill">Last good: <strong id="backup-last-time">No run yet</strong></span>
-              <span class="meta-pill">Next run: <strong id="backup-next-run">Not scheduled</strong></span>
-              <span class="meta-pill">DB dump: <strong id="backup-db-size">No dump yet</strong></span>
-              <span class="meta-pill">Remote: <strong id="backup-remote-mirror">Not configured</strong></span>
-              <button type="button" class="btn-tile-logs" id="btn-change-remote" hidden>Change remote</button>
+              <span class="meta-pill">Last good: <strong id="backup-last-time" class="font-mono">No run yet</strong></span>
+              <span class="meta-pill">Next run: <strong id="backup-next-run" class="font-mono">Not scheduled</strong></span>
+              <span class="meta-pill">DB dump: <strong id="backup-db-size" class="font-mono">No dump yet</strong></span>
+              <span class="meta-pill">Remote: <strong id="backup-remote-mirror" class="font-mono">Not configured</strong></span>
+              <button type="button" class="btn-secondary" id="btn-change-remote" hidden>Change remote</button>
             </div>
 
-            <button type="button" class="backup-library-strip" id="btn-open-library-details" aria-label="Open Noodle Gallery photo library and Google Drive quota breakdown">
-              <span class="lib-stat-cell">
-                <span class="lib-stat-label">Photo Store</span>
-                <span class="lib-stat-value font-mono" id="lib-val-disk">Measuring...</span>
-              </span>
-              <span class="lib-stat-cell">
-                <span class="lib-stat-label">Drive Mirror</span>
-                <span class="lib-stat-value font-mono" id="lib-val-gdrive">Unknown</span>
-              </span>
-              <span class="lib-stat-cell">
-                <span class="lib-stat-label">Assets</span>
-                <span class="lib-stat-value font-mono" id="lib-val-assets">Unknown</span>
-              </span>
-              <span class="lib-stat-cell">
-                <span class="lib-stat-label">Face Tags</span>
-                <span class="lib-stat-value font-mono" id="lib-val-faces">Unknown</span>
-              </span>
-            </button>
-
-            <div class="pipeline-stepper" id="sync-stepper">
+            <div class="pipeline-stepper" id="sync-stepper" aria-label="Backup pipeline progress">
               <div class="step-item" id="step-face"><div class="step-circle">1</div><span class="step-label">Face XMP</span></div>
               <div class="step-connector" id="step-conn-1"></div>
               <div class="step-item" id="step-dump"><div class="step-circle">2</div><span class="step-label">PG Dump</span></div>
               <div class="step-connector" id="step-conn-2"></div>
-              <div class="step-item" id="step-rclone"><div class="step-circle">3</div><span class="step-label">GDrive Sync</span></div>
+              <div class="step-item" id="step-rclone"><div class="step-circle">3</div><span class="step-label">Cloud Sync</span></div>
               <div class="step-connector" id="step-conn-3"></div>
               <div class="step-item" id="step-verify"><div class="step-circle">4</div><span class="step-label">Verified</span></div>
             </div>
 
-            <p class="status-note-text" id="backup-status-msg">Checking backup script state and status.json...</p>
+            <p class="status-note-text" id="backup-status-msg" hidden>Checking backup script state...</p>
             <ul class="backup-preflight" id="backup-preflight" aria-label="Pre-flight checks of the last run" hidden></ul>
 
             <details class="backup-history-wrap" id="backup-history-wrap">
-              <summary class="backup-history-summary">Recent runs <span class="text-dim" id="backup-history-count"></span></summary>
+              <summary class="backup-history-summary">Recent runs <span class="text-muted" id="backup-history-count"></span></summary>
               <ol class="backup-history" id="backup-history" aria-label="Recent backup runs, newest first"></ol>
               <p class="status-note-text" id="backup-retention"></p>
             </details>
+          </section>
 
-            <div class="restore-test" id="restore-test" hidden>
-              <p class="restore-test-line"><strong>Restore test:</strong> <span id="restore-test-text">Not run yet</span></p>
-              <button type="button" class="btn-tile-logs" id="btn-restore-test-run">Run restore test now</button>
-            </div>
+          <div class="backups-side-stack">
+            <!-- Panel 2: Photo Library & Restore Test -->
+            <section class="panel-card" id="backup-library-panel">
+              <div class="panel-header">
+                <div class="panel-title-group">
+                  <h2>Photo Library &amp; Verification</h2>
+                  <span class="panel-subtitle">Storage footprint, remote quota &amp; restore checks</span>
+                </div>
+              </div>
 
-            <div class="media-backup" id="media-backup" hidden>
-              <div class="media-backup-head">
-                <h3 class="media-backup-title">Media app settings</h3>
-                <span class="badge-status-unknown" id="media-backup-badge">Not run yet</span>
+              <button type="button" class="library-stats-grid" id="btn-open-library-details" aria-label="Open photo library and cloud quota breakdown">
+                <span class="lib-stat-cell">
+                  <span class="lib-stat-label">Photo Store</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-disk">Measuring...</span>
+                </span>
+                <span class="lib-stat-cell">
+                  <span class="lib-stat-label">Cloud Mirror</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-gdrive">Unknown</span>
+                </span>
+                <span class="lib-stat-cell">
+                  <span class="lib-stat-label">Assets</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-assets">Unknown</span>
+                </span>
+                <span class="lib-stat-cell">
+                  <span class="lib-stat-label">Face Tags</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-faces">Unknown</span>
+                </span>
+              </button>
+
+              <p class="inline-callout is-warning" id="lib-partial-warning" hidden></p>
+
+              <div class="restore-test" id="restore-test" hidden>
+                <div class="restore-test-body">
+                  <strong>Monthly Restore Test</strong>
+                  <p class="restore-test-line" id="restore-test-text">Not run yet</p>
+                </div>
+                <button type="button" class="btn-secondary" id="btn-restore-test-run">Run restore test now</button>
+              </div>
+            </section>
+
+            <!-- Panel 3: Media App Settings Backup -->
+            <section class="panel-card" id="media-backup" hidden>
+              <div class="panel-header panel-header-wrap">
+                <div class="panel-title-group">
+                  <h2>Media App Settings Backup</h2>
+                  <span class="panel-subtitle">Jellyfin, Seerr &amp; *arr database archive</span>
+                </div>
+                <div class="panel-actions">
+                  <span class="badge badge-neutral" id="media-backup-badge">Not run yet</span>
+                  <button type="button" class="btn-secondary" id="btn-media-backup-run" hidden>Back up now</button>
+                </div>
               </div>
               <p class="media-backup-line" id="media-backup-line"></p>
               <p class="status-note-text" id="media-backup-msg" hidden></p>
-              <button type="button" class="btn-tile-logs" id="btn-media-backup-run" hidden>Back up now</button>
-            </div>
+            </section>
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section class="dashboard-card" id="tv-updater-section" data-collapsible="true">
-          <div class="card-header-bar">
-            <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="tv-updater-body">
-              <span class="card-title-row">
-                <span class="card-title-text">Android TV Fleet</span>
-              </span>
-              <span class="card-summary">TV Fleet: Checking configured devices...</span>
-            </button></h2>
-
-            <div class="card-header-actions">
-              <span class="badge-status-unknown" id="tv-status-badge">Checking</span>
-              <button type="button" id="btn-view-tv-log" class="btn-tile-logs">Log</button>
-              <button type="button" id="btn-open-tv-details-header" class="btn-tile-logs">Devices</button>
-              <button type="button" id="btn-deploy-card" class="btn-sync-primary">
+      <!-- =================================================================== -->
+      <!-- VIEW 4: TVS (Full Android TV Fleet Workspace)                       -->
+      <!-- =================================================================== -->
+      <div class="hub-view" id="view-tvs" data-view="tvs" hidden>
+        <section class="panel-card" id="tv-updater-section">
+          <div class="panel-header panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Android TV Fleet</h2>
+              <span class="panel-subtitle card-summary">Checking configured ADB devices...</span>
+            </div>
+            <div class="panel-actions">
+              <span class="badge badge-neutral" id="tv-status-badge">Checking</span>
+              <button type="button" id="btn-view-tv-log" class="btn-secondary">Log</button>
+              <button type="button" id="btn-open-tv-details-header" class="btn-secondary">App Matrix</button>
+              <button type="button" id="btn-deploy-card" class="btn-primary">
                 <span class="btn-spinner" id="tv-card-deploy-spinner" style="display: none;" aria-hidden="true"></span>
-                <span id="tv-card-deploy-icon" aria-hidden="true">📺</span>
+                <svg class="ui-icon" id="tv-card-deploy-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
                 <span id="tv-card-deploy-label">Deploy Now</span>
               </button>
             </div>
           </div>
 
-          <div class="card-body-collapse" id="tv-updater-body">
-            <div class="meta-pills-row">
-              <span class="meta-pill" id="tv-schedule-val">Scheduled Check</span>
-              <span class="meta-pill">Last: <strong id="tv-last-sync">No run yet</strong></span>
-              <span class="meta-pill" id="tv-cluster-count">0 Devices Online</span>
-            </div>
+          <div class="meta-pills-row">
+            <span class="meta-pill" id="tv-schedule-val">Checking schedule</span>
+            <span class="meta-pill">Last sync: <strong id="tv-last-sync" class="font-mono">No run yet</strong></span>
+            <span class="meta-pill" id="tv-cluster-count">0 Devices</span>
+            <button type="button" id="btn-tv-sync-inline" class="btn-ghost">Sync GitHub APKs</button>
+            <button type="button" id="btn-tv-scan-inline" class="btn-ghost">Scan TVs</button>
+          </div>
 
-            <button type="button" class="backup-library-strip tv-cluster-strip" id="btn-open-tv-details" aria-label="Open Android TV Fleet Matrix and ADB manager">
-              <span class="lib-stat-cell">
-                <span class="lib-stat-label">TVs Online</span>
-                <span class="lib-stat-value font-mono" id="tv-val-online">0/0</span>
-              </span>
-              <span class="lib-stat-cell">
-                <span class="lib-stat-label">SmartTube</span>
-                <span class="lib-stat-value font-mono" id="tv-val-st">Unknown</span>
-              </span>
-              <span class="lib-stat-cell">
-                <span class="lib-stat-label">Custom UI</span>
-                <span class="lib-stat-value font-mono" id="tv-val-cs">Unknown</span>
-              </span>
-            </button>
+          <button type="button" class="library-stats-grid tv-summary-grid" id="btn-open-tv-details" aria-label="Open Android TV Fleet App Matrix">
+            <span class="lib-stat-cell">
+              <span class="lib-stat-label">TVs Online</span>
+              <span class="lib-stat-value font-mono" id="tv-val-online">0/0</span>
+            </span>
+            <span class="lib-stat-cell">
+              <span class="lib-stat-label" id="tv-label-app-1">SmartTube</span>
+              <span class="lib-stat-value font-mono" id="tv-val-st">Unknown</span>
+            </span>
+            <span class="lib-stat-cell">
+              <span class="lib-stat-label" id="tv-label-app-2">CloudStream Beta</span>
+              <span class="lib-stat-value font-mono" id="tv-val-cs">Unknown</span>
+            </span>
+          </button>
 
-            <div class="pipeline-stepper" id="tv-stepper">
-              <div class="step-item" id="step-tv-upstream"><div class="step-circle">1</div><span class="step-label">Upstream</span></div>
-              <div class="step-connector" id="step-tv-conn-1"></div>
-              <div class="step-item" id="step-tv-discovery"><div class="step-circle">2</div><span class="step-label">ADB Scan</span></div>
-              <div class="step-connector" id="step-tv-conn-2"></div>
-              <div class="step-item" id="step-tv-safety"><div class="step-circle">3</div><span class="step-label">Safety Guard</span></div>
-              <div class="step-connector" id="step-tv-conn-3"></div>
-              <div class="step-item" id="step-tv-push"><div class="step-circle">4</div><span class="step-label">Push APKs</span></div>
-            </div>
+          <div class="pipeline-stepper" id="tv-stepper" aria-label="TV updater pipeline">
+            <div class="step-item" id="step-tv-upstream"><div class="step-circle">1</div><span class="step-label">Upstream</span></div>
+            <div class="step-connector" id="step-tv-conn-1"></div>
+            <div class="step-item" id="step-tv-discovery"><div class="step-circle">2</div><span class="step-label">ADB Scan</span></div>
+            <div class="step-connector" id="step-tv-conn-2"></div>
+            <div class="step-item" id="step-tv-safety"><div class="step-circle">3</div><span class="step-label">Safety Guard</span></div>
+            <div class="step-connector" id="step-tv-conn-3"></div>
+            <div class="step-item" id="step-tv-push"><div class="step-circle">4</div><span class="step-label">Push APKs</span></div>
+          </div>
 
-            <p class="status-note-text" id="tv-status-msg">Checking configured ADB devices...</p>
+          <p class="status-note-text" id="tv-status-msg">Checking configured ADB devices...</p>
 
-            <div id="tv-fleet-preview" class="tv-fleet-preview">
-              <div class="ops-empty-state">Loading Android TV cluster state...</div>
-            </div>
+          <div id="tv-fleet-preview" class="tv-fleet-preview">
+            <div class="empty-state">Loading Android TV cluster state...</div>
+          </div>
 
-            <div class="card-footer-cta">
-              <button type="button" id="btn-open-tv-details-card" class="btn-tile-logs">Manage All TVs &amp; APKs</button>
-            </div>
+          <div class="panel-footer-row">
+            <button type="button" id="btn-open-tv-details-card" class="btn-secondary">Manage All TVs &amp; APKs</button>
           </div>
         </section>
       </div>
 
-      <!-- 5. Hardware Vitals & Storage Breakdown -->
-      <section class="dashboard-card" id="vitals-section" data-collapsible="true">
-        <div class="card-header-bar">
-          <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="vitals-body">
-            <span class="card-title-row">
-              <span class="card-title-text">System Vitals &amp; Storage</span>
-            </span>
-            <span class="card-summary" id="vitals-card-subtitle">Host CPU, RAM &amp; storage pools</span>
-          </button></h2>
-
-          <div class="card-header-actions">
-            <span class="telemetry-chip font-mono" id="cpu-temp-badge">CPU: --%</span>
-            <span class="telemetry-chip font-mono" id="cpu-load-val">--%</span>
+      <!-- =================================================================== -->
+      <!-- VIEW 5: SYSTEM (Vitals, Disk I/O, Network, Sleep Guard, Cron)       -->
+      <!-- =================================================================== -->
+      <div class="hub-view" id="view-system" data-view="system" hidden>
+        <!-- 5.1 Hardware Vitals & Storage Pools -->
+        <section class="panel-card" id="vitals-section">
+          <div class="panel-header panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>System Vitals &amp; Storage</h2>
+              <span class="panel-subtitle card-summary" id="vitals-card-subtitle">Host CPU, RAM &amp; storage pools</span>
+            </div>
+            <div class="panel-actions">
+              <span class="meta-pill font-mono" id="cpu-temp-badge">CPU: --%</span>
+              <span class="meta-pill font-mono" id="cpu-load-val">--%</span>
+            </div>
           </div>
-        </div>
 
-        <div class="card-body-collapse" id="vitals-body">
           <div class="vitals-grid">
             <div class="vital-box">
               <div class="vital-top">
@@ -538,7 +577,7 @@
                 <span class="vital-stat font-mono" id="cpu-stat">--% Load</span>
               </div>
               <div class="vital-progress-track">
-                <div class="vital-progress-fill fill-cyan" id="cpu-progress" style="width: 0%;"></div>
+                <div class="vital-progress-fill fill-accent" id="cpu-progress" style="width: 0%;"></div>
               </div>
             </div>
 
@@ -548,7 +587,7 @@
                 <span class="vital-stat font-mono" id="ram-stat">-- / -- GiB</span>
               </div>
               <div class="vital-progress-track">
-                <div class="vital-progress-fill fill-blue" id="ram-progress" style="width: 0%;"></div>
+                <div class="vital-progress-fill fill-info" id="ram-progress" style="width: 0%;"></div>
               </div>
             </div>
 
@@ -558,11 +597,12 @@
                 <span class="vital-stat font-mono" id="ssd-stat">-- GB Free</span>
               </div>
               <div class="vital-progress-track">
-                <div class="vital-progress-fill fill-emerald" id="ssd-progress" style="width: 0%;"></div>
+                <div class="vital-progress-fill fill-success" id="ssd-progress" style="width: 0%;"></div>
               </div>
+              <p class="status-note-text" id="ssd-breakdown-note" hidden></p>
             </div>
 
-            <div class="vital-box">
+            <div class="vital-box" id="vitals-hdd-box">
               <div class="vital-top">
                 <h3 id="vitals-hdd-title">Media Pool Storage</h3>
                 <span class="vital-stat font-mono" id="hdd-stat">Checking...</span>
@@ -571,74 +611,235 @@
                 <div class="seg-segment seg-media" id="seg-media" style="width: 0%;"></div>
                 <div class="seg-segment seg-photos" id="seg-photos" style="width: 0%;"></div>
                 <div class="seg-segment seg-db" id="seg-db" style="width: 0%;"></div>
+                <div class="seg-segment seg-other" id="seg-other" style="width: 0%;"></div>
               </div>
               <div class="storage-legends">
                 <span><span class="legend-dot seg-media" aria-hidden="true"></span><span id="legend-media">Media (Measuring...)</span></span>
                 <span><span class="legend-dot seg-photos" aria-hidden="true"></span><span id="legend-photos">Photos (Measuring...)</span></span>
-                <span><span class="legend-dot seg-db" aria-hidden="true"></span><span id="legend-db">Appdata &amp; Backups (Measuring...)</span></span>
+                <span id="legend-db-wrap"><span class="legend-dot seg-db" aria-hidden="true"></span><span id="legend-db">Appdata &amp; Backups</span></span>
+                <span id="legend-other-wrap" hidden><span class="legend-dot seg-other" aria-hidden="true"></span><span id="legend-other">Other</span></span>
               </div>
               <p class="status-note-text" id="storage-breakdown-note">Measuring directory sizes in background...</p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- 6. Automation & Scheduled Cron Tasks -->
-      <section class="dashboard-card" id="automation-section" data-collapsible="true">
-        <div class="card-header-bar">
-          <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="automation-body">
-            <span class="card-title-row">
-              <span class="card-title-text">Automation &amp; Scheduled Tasks</span>
-            </span>
-            <span class="card-summary" id="cron-card-subtitle">cron.d &amp; systemd timers</span>
-          </button></h2>
-
-          <div class="card-header-actions">
-            <button type="button" id="btn-refresh-cron" class="btn-tile-logs" aria-label="Refresh automation tasks list">Refresh Tasks</button>
-          </div>
-        </div>
-
-        <div class="card-body-collapse" id="automation-body">
-          <div class="cron-grid" id="cron-grid">
-            <div class="ops-empty-state">Loading configured cron jobs and timers...</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 7. Installed Service Matrix -->
-      <section class="dashboard-card" id="services-matrix" data-collapsible="true">
-        <div class="card-header-bar">
-          <h2 class="card-heading"><button type="button" class="card-collapse-btn" aria-expanded="true" aria-controls="services-matrix-body">
-            <span class="card-title-row">
-              <span class="card-title-text">Installed Services</span>
-            </span>
-            <span class="card-summary">Apps: Discovering installed containers...</span>
-          </button></h2>
-
-          <div class="card-header-actions">
-            <div class="service-filter-group" id="service-filter-group" role="group" aria-label="Filter services by category">
-              <button type="button" class="svc-filter-btn active" data-filter="all" aria-pressed="true">All (0)</button>
-              <button type="button" class="svc-filter-btn" data-filter="media" aria-pressed="false">Media (0)</button>
-              <button type="button" class="svc-filter-btn" data-filter="ingest" aria-pressed="false">Ingest (0)</button>
-              <button type="button" class="svc-filter-btn" data-filter="system" aria-pressed="false">System (0)</button>
+        <!-- 5.2 Disk I/O & Active Sessions + Network & Speedtest -->
+        <div class="system-two-col">
+          <section class="panel-card" id="storage-ops-panel">
+            <div class="panel-header panel-header-wrap">
+              <div class="panel-title-group">
+                <h2>Disk I/O &amp; Active Sessions</h2>
+                <span class="panel-subtitle card-summary">Measuring disk throughput &amp; connections...</span>
+              </div>
+              <div class="panel-actions">
+                <span class="speed-chip font-mono" id="storage-collective-speed">
+                  <strong id="storage-total-mbps">0.00</strong> MB/s Total
+                </span>
+              </div>
             </div>
-            <a id="open-dozzle-full-btn" href="#services-matrix" target="_blank" rel="noopener" class="btn-tile-logs" style="display: none;">Open Dozzle UI &nearr;</a>
-          </div>
+            <div id="storage-ops-list" class="ops-list-container">
+              <div class="empty-state">Sampling block device I/O and active sessions...</div>
+            </div>
+          </section>
+
+          <section class="panel-card" id="speedometers">
+            <div class="panel-header panel-header-wrap">
+              <div class="panel-title-group">
+                <h2>Network &amp; Speedtest</h2>
+                <span class="panel-subtitle card-summary">Live NIC throughput &amp; WAN benchmark</span>
+              </div>
+              <div class="panel-actions">
+                <div class="segmented-group" role="group" aria-label="Bandwidth speed unit">
+                  <button type="button" class="pill-btn active" id="btn-unit-mbs" aria-pressed="true">MB/s</button>
+                  <button type="button" class="pill-btn" id="btn-unit-mbps" aria-pressed="false">Mbps</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="net-stack">
+              <!-- Live Server Interface (LAN) -->
+              <div class="sub-panel">
+                <div class="sub-panel-top">
+                  <div>
+                    <h3>Live Server Interface</h3>
+                    <p class="sub-panel-meta" id="lan-total-sub">Real-time interface traffic</p>
+                  </div>
+                  <div class="nic-meta">
+                    <span class="badge badge-neutral font-mono" id="lan-nic-name">Detecting NIC...</span>
+                    <span class="nic-spec" id="lan-nic-spec">Checking link...</span>
+                  </div>
+                </div>
+
+                <div class="speedo-main-value">
+                  <span class="speedo-number font-mono" id="lan-total-mbps">0.00</span>
+                  <span class="speedo-unit" id="lan-unit-label">MB/s</span>
+                </div>
+
+                <div class="speedo-metrics-row font-mono">
+                  <span>RX: <strong id="lan-rx-val">0.00 MB/s</strong></span>
+                  <span>TX: <strong id="lan-tx-val">0.00 MB/s</strong></span>
+                  <span>Peak: <strong id="lan-peak-val">0.00 MB/s</strong></span>
+                </div>
+
+                <div class="sparkline-wrap">
+                  <div class="sparkline-canvas-box">
+                    <canvas id="lan-sparkline-canvas" aria-label="Live interface throughput sparkline"></canvas>
+                  </div>
+                  <div class="sparkline-scale font-mono" aria-hidden="true">
+                    <span id="lan-scale-max">10 MB/s</span>
+                    <span id="lan-scale-mid">5 MB/s</span>
+                    <span id="lan-scale-min">0</span>
+                  </div>
+                </div>
+
+                <div class="sub-panel-footer">
+                  <button type="button" id="btn-refresh-lan" class="btn-secondary">
+                    <span class="btn-spinner" id="lan-refresh-spinner" style="display: none;" aria-hidden="true"></span>
+                    <svg class="ui-icon" id="lan-refresh-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-refresh"></use></svg>
+                    <span>Sample Now</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Broadband Benchmark (On-Demand Speedtest — NEVER mixed with live traffic) -->
+              <div class="sub-panel">
+                <div class="sub-panel-top">
+                  <div>
+                    <h3>Broadband Benchmark</h3>
+                    <p class="sub-panel-meta" id="wan-tested-time">On-demand ISP speedtest</p>
+                  </div>
+                  <span class="badge badge-neutral" id="internet-isp-name">Not tested yet</span>
+                </div>
+
+                <div class="speedtest-kpi-row">
+                  <div class="st-kpi">
+                    <span class="st-kpi-label">Download</span>
+                    <span class="st-kpi-val font-mono" id="wan-dl-val">Not tested</span>
+                  </div>
+                  <div class="st-kpi">
+                    <span class="st-kpi-label">Upload</span>
+                    <span class="st-kpi-val font-mono" id="wan-up-val">Not tested</span>
+                  </div>
+                  <div class="st-kpi">
+                    <span class="st-kpi-label">Ping</span>
+                    <span class="st-kpi-val font-mono" id="wan-ping-val">--</span>
+                  </div>
+                </div>
+
+                <p class="status-note-text" id="speedtest-server-note"></p>
+                <p class="inline-callout is-warning" id="speedtest-error-note" hidden></p>
+
+                <div class="sub-panel-footer">
+                  <button type="button" id="btn-run-speedtest" class="btn-primary">
+                    <span class="btn-spinner" id="speedtest-spinner" style="display: none;" aria-hidden="true"></span>
+                    <svg class="ui-icon" id="speedtest-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-zap"></use></svg>
+                    <span id="speedtest-btn-label">Run Speedtest</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <div class="card-body-collapse" id="services-matrix-body">
-          <div class="services-grid" id="services-grid">
-            <div class="ops-empty-state">Probing installed Docker services...</div>
+        <!-- 5.3 Sleep Guard Power Automation -->
+        <section class="panel-card" id="sleep-guard-card">
+          <div class="panel-header panel-header-wrap">
+            <div class="panel-title-group">
+              <div class="title-with-icon">
+                <svg class="ui-icon sleep-state-svg" id="sleep-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-moon"></use></svg>
+                <h2 id="sleep-status-title">Sleep Guard</h2>
+              </div>
+              <span class="panel-subtitle card-summary" id="sleep-subtext">Checking automatic suspend schedule...</span>
+            </div>
+            <div class="panel-actions">
+              <span class="meta-pill font-mono" id="sleep-countdown-pill"><span id="sleep-countdown">Checking...</span></span>
+              <span class="meta-pill is-accent" id="sleep-override-pill" style="display: none;">
+                <span id="sleep-override-text">Override Active</span>
+                <button type="button" id="btn-clear-hero-override" class="pill-clear-btn" aria-label="Clear tonight's sleep override">&times;</button>
+              </span>
+            </div>
           </div>
-        </div>
-      </section>
+
+          <div id="sleep-guard-body" class="sleep-controls-layout">
+            <div class="sleep-timeline-container" id="sleep-timeline-container" aria-hidden="true">
+              <div class="timeline-track">
+                <div class="timeline-sleep-zone" id="sleep-window-zone"></div>
+                <div class="timeline-sleep-zone" id="sleep-window-zone-wrap" hidden></div>
+                <div class="timeline-current-needle" id="sleep-current-needle"></div>
+              </div>
+              <div class="timeline-labels font-mono">
+                <span>00:00</span>
+                <span>06:00</span>
+                <span>12:00</span>
+                <span>18:00</span>
+                <span>24:00</span>
+              </div>
+            </div>
+
+            <div class="sleep-action-cluster" id="sleep-action-cluster">
+              <button type="button" id="btn-shift-1h" class="btn-secondary" aria-label="Delay sleep tonight by 1 hour">+1h</button>
+              <button type="button" id="btn-shift-2h" class="btn-secondary" aria-label="Delay sleep tonight by 2 hours">+2h</button>
+              <button type="button" id="btn-open-sleep-modal" class="btn-secondary" aria-label="Configure sleep schedule">Schedule</button>
+              <button type="button" id="sleep-toggle-btn" class="btn-primary">
+                <span class="btn-spinner" id="sleep-btn-spinner" style="display: none;" aria-hidden="true"></span>
+                <span id="sleep-btn-text">Prevent Sleep Tonight</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5.4 Scheduled Automations -->
+        <section class="panel-card" id="automation-section">
+          <div class="panel-header panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Scheduled Automations</h2>
+              <span class="panel-subtitle card-summary" id="cron-card-subtitle">cron.d &amp; systemd timers</span>
+            </div>
+            <div class="panel-actions">
+              <button type="button" id="btn-refresh-cron" class="btn-secondary" aria-label="Refresh scheduled tasks">Refresh Tasks</button>
+            </div>
+          </div>
+          <div class="cron-grid" id="cron-grid">
+            <div class="empty-state">Loading installed cron jobs and timers...</div>
+          </div>
+        </section>
+
+        <!-- 5.5 Node Management Shortcuts -->
+        <section class="panel-card" aria-labelledby="node-tools-heading">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2 id="node-tools-heading">Node Administration</h2>
+              <span class="panel-subtitle">Configuration, network safety, alerts &amp; diagnostics</span>
+            </div>
+          </div>
+          <div class="tools-shortcut-grid">
+            <button type="button" class="tool-shortcut-btn" data-proxy-click="btn-open-config-center">
+              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-settings"></use></svg>
+              <span><strong>Server Config &amp; Netplan</strong><small>Paths, hardlinks, ports &amp; static IP</small></span>
+            </button>
+            <button type="button" class="tool-shortcut-btn" data-proxy-click="btn-open-alerts">
+              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-bell"></use></svg>
+              <span><strong>Alerts &amp; Channels</strong><small>ntfy, Telegram, Discord, Email &amp; rules</small></span>
+            </button>
+            <button type="button" class="tool-shortcut-btn" data-proxy-click="btn-open-ai-copilot">
+              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-sparkles"></use></svg>
+              <span><strong>AI Copilot Snapshot</strong><small>Copy token-compact host diagnostics</small></span>
+            </button>
+            <button type="button" class="tool-shortcut-btn" data-open-account="true">
+              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-user"></use></svg>
+              <span><strong>Dashboard Account</strong><small>Change password or sign out</small></span>
+            </button>
+          </div>
+        </section>
+      </div>
 
       <footer class="hub-footer">
-        <span class="footer-brand">Homelab Control Hub • Port 7575</span>
+        <span class="footer-brand font-mono" id="footer-brand-text">Homelab Control Hub</span>
         <div class="footer-actions">
-          <button type="button" id="footer-refresh-btn" class="footer-action-btn">Refresh Now</button>
-          <a id="footer-dozzle-link" href="#services-matrix" target="_blank" rel="noopener" class="footer-action-btn" style="display: none;">Dozzle Logs &nearr;</a>
-          <a id="footer-cockpit-link" href="#services-matrix" target="_blank" rel="noopener" class="footer-action-btn" style="display: none;">Cockpit Admin &nearr;</a>
+          <button type="button" id="footer-refresh-btn" class="btn-ghost">Refresh</button>
+          <a id="footer-dozzle-link" href="#/apps" target="_blank" rel="noopener" class="btn-ghost" style="display: none;">Dozzle Logs &nearr;</a>
+          <a id="footer-cockpit-link" href="#/system" target="_blank" rel="noopener" class="btn-ghost" style="display: none;">Cockpit Admin &nearr;</a>
         </div>
       </footer>
     </main>
@@ -646,13 +847,33 @@
 
   <!-- ===================== ACCESSIBLE MODALS ===================== -->
 
+  <!-- 0. Shared Confirmation Modal -->
+  <div class="modal-overlay" id="confirm-action-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" style="display: none;">
+    <div class="modal-glass modal-compact">
+      <div class="modal-header">
+        <div>
+          <h2 id="confirm-modal-title">Confirm action</h2>
+        </div>
+        <button type="button" class="modal-close" id="confirm-modal-close" aria-label="Cancel confirmation">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-modal-message" class="confirm-message"></p>
+        <p id="confirm-modal-warning" class="inline-callout is-warning" hidden></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="confirm-modal-cancel">Cancel</button>
+        <button type="button" class="btn-danger" id="confirm-modal-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 1. Sleep Schedule Config Modal -->
   <div class="modal-overlay" id="sleep-schedule-modal" role="dialog" aria-modal="true" aria-labelledby="sleep-modal-title" style="display: none;">
     <div class="modal-glass">
       <div class="modal-header">
         <div>
           <h2 id="sleep-modal-title">Sleep Guard Scheduler</h2>
-          <p class="modal-sub">Adjust tonight's sleep override or permanent RTC schedule.</p>
+          <p class="modal-sub">Adjust tonight&rsquo;s sleep override or permanent RTC schedule.</p>
         </div>
         <button type="button" class="modal-close" id="sleep-modal-close" aria-label="Close sleep scheduler">&times;</button>
       </div>
@@ -665,7 +886,7 @@
         <div class="tab-pane active" id="tab-tonight" role="tabpanel">
           <div class="override-banner" id="tonight-active-banner" style="display: none;">
             <span id="tonight-active-text">Override currently armed</span>
-            <button type="button" class="btn-micro" id="btn-revert-tonight">Clear</button>
+            <button type="button" class="btn-secondary" id="btn-revert-tonight">Clear</button>
           </div>
           <div class="preset-cards-row">
             <button type="button" class="preset-card" data-delay="1">Delay +1 Hour</button>
@@ -683,8 +904,8 @@
             </div>
           </div>
           <div class="preview-strip">
-            <span class="meta-pill" id="tonight-duration-badge">6 hrs</span>
-            <span id="tonight-preview-text">Sleep at 01:00 • Wake at 07:00</span>
+            <span class="meta-pill font-mono" id="tonight-duration-badge">6 hrs</span>
+            <span id="tonight-preview-text">Sleep at 01:00 &middot; Wake at 07:00</span>
           </div>
         </div>
 
@@ -704,16 +925,16 @@
             </div>
           </div>
           <div class="preview-strip">
-            <span class="meta-pill" id="perm-duration-badge">6 hrs</span>
-            <span id="perm-preview-text">Daily rule: 00:00 → 06:00</span>
+            <span class="meta-pill font-mono" id="perm-duration-badge">6 hrs</span>
+            <span id="perm-preview-text">Daily rule: 00:00 &rarr; 06:00</span>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <span class="modal-hint" id="sleep-modal-footer-hint">Changes take effect tonight only</span>
         <div class="modal-footer-btns">
-          <button type="button" class="btn-tile-restart" id="sleep-modal-cancel">Cancel</button>
-          <button type="button" class="btn-sync-primary" id="sleep-modal-save">
+          <button type="button" class="btn-secondary" id="sleep-modal-cancel">Cancel</button>
+          <button type="button" class="btn-primary" id="sleep-modal-save">
             <span class="btn-spinner" id="sleep-modal-spinner" style="display: none;" aria-hidden="true"></span>
             <span id="sleep-modal-save-text">Apply Sleep Shift Tonight</span>
           </button>
@@ -737,25 +958,25 @@
           <div class="modal-status-left">
             <span class="modal-dot" id="modal-sync-dot" aria-hidden="true"></span>
             <span id="sync-status-indicator" class="sync-status-indicator"></span>
-            <span id="modal-sync-banner-text">Ready to sync Noodle Gallery and database dump.</span>
-            <span class="badge-live" id="sync-live-tag" style="display: none;">LIVE</span>
+            <span id="modal-sync-banner-text">Ready to run photo library and database backup.</span>
+            <span class="badge badge-info" id="sync-live-tag" style="display: none;">LIVE</span>
           </div>
-          <button type="button" id="btn-modal-trigger-sync" class="btn-sync-primary">
+          <button type="button" id="btn-modal-trigger-sync" class="btn-primary">
             <span class="btn-spinner" id="modal-sync-spinner" style="display: none;" aria-hidden="true"></span>
-            <span id="modal-sync-icon" aria-hidden="true">☁️</span>
+            <svg class="ui-icon" id="modal-sync-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cloud"></use></svg>
             <span id="modal-sync-btn-text">Run backup now</span>
           </button>
         </div>
         <pre id="backup-log-content" class="modal-log-viewer font-mono">Loading log...</pre>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-tile-logs" id="backup-modal-refresh">Refresh Log</button>
-        <button type="button" class="btn-tile-restart" id="backup-modal-dismiss">Close</button>
+        <button type="button" class="btn-secondary" id="backup-modal-refresh">Refresh Log</button>
+        <button type="button" class="btn-ghost" id="backup-modal-dismiss">Close</button>
       </div>
     </div>
   </div>
 
-  <!-- Backup remote -->
+  <!-- 2b. Backup Remote Picker Modal -->
   <div class="modal-overlay" id="remote-modal" role="dialog" aria-modal="true" aria-labelledby="remote-modal-title" style="display: none;">
     <div class="modal-glass">
       <div class="modal-header">
@@ -766,7 +987,7 @@
         <button type="button" class="modal-close" id="remote-modal-close" aria-label="Close backup remote">&times;</button>
       </div>
       <div class="modal-body remote-body">
-        <p class="status-note-text">Now: <strong id="remote-current">Unknown</strong></p>
+        <p class="status-note-text">Now: <strong id="remote-current" class="font-mono">Unknown</strong></p>
         <div class="form-field">
           <label for="remote-select">rclone remote</label>
           <select id="remote-select" class="form-input"></select>
@@ -780,21 +1001,21 @@
       <div class="modal-footer">
         <span class="modal-hint">Test first; saving switches both backups from the next run.</span>
         <div class="modal-footer-btns">
-          <button type="button" class="btn-tile-restart" id="remote-cancel">Close</button>
-          <button type="button" class="btn-tile-logs" id="remote-test">Test</button>
-          <button type="button" class="btn-sync-primary" id="remote-save" disabled>Save</button>
+          <button type="button" class="btn-ghost" id="remote-cancel">Close</button>
+          <button type="button" class="btn-secondary" id="remote-test">Test</button>
+          <button type="button" class="btn-primary" id="remote-save" disabled>Save</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 3. Immich Library & Google Drive Quota Modal -->
+  <!-- 3. Photo Library & Cloud Quota Modal -->
   <div class="modal-overlay" id="immich-library-modal" role="dialog" aria-modal="true" aria-labelledby="immich-modal-title" style="display: none;">
     <div class="modal-glass modal-wide">
       <div class="modal-header">
         <div>
-          <h2 id="immich-modal-title">Photo Library &amp; Drive Mirror</h2>
-          <p class="modal-sub font-mono" id="library-modal-sub-path">Measuring photo directory &amp; Google Drive quota...</p>
+          <h2 id="immich-modal-title">Photo Library &amp; Cloud Quota</h2>
+          <p class="modal-sub font-mono" id="library-modal-sub-path">Measuring photo directory &amp; remote quota...</p>
         </div>
         <button type="button" class="modal-close" id="immich-modal-close" aria-label="Close photo library details">&times;</button>
       </div>
@@ -805,16 +1026,16 @@
             <div class="kv-row"><span>Photo Library Path:</span><strong class="font-mono" id="modal-lib-disk-label">Configured folder</strong></div>
             <div class="kv-row"><span>Local Size:</span><strong class="font-mono" id="modal-lib-disk">Measuring...</strong></div>
             <div class="kv-row"><span>PostgreSQL Dump:</span><strong class="font-mono" id="modal-lib-db-dump">Checking...</strong></div>
-            <div class="kv-row"><span>Google Drive Used:</span><strong class="font-mono" id="modal-lib-gdrive-used">Unknown</strong></div>
-            <div class="kv-row"><span>Google Drive Free:</span><strong class="font-mono" id="modal-lib-gdrive-free">Unknown</strong></div>
+            <div class="kv-row"><span>Remote Used:</span><strong class="font-mono" id="modal-lib-gdrive-used">Unknown</strong></div>
+            <div class="kv-row"><span>Remote Free:</span><strong class="font-mono" id="modal-lib-gdrive-free">Unknown</strong></div>
             <div class="kv-row"><span>Quota Usage:</span><strong class="font-mono" id="modal-lib-gdrive-pct">--</strong></div>
             <div class="vital-progress-track">
-              <div class="vital-progress-fill fill-cyan" id="modal-lib-gdrive-bar" style="width: 0%;"></div>
+              <div class="vital-progress-fill fill-accent" id="modal-lib-gdrive-bar" style="width: 0%;"></div>
             </div>
           </div>
 
           <div class="detail-panel">
-            <h3>Immich Assets &amp; Face Recognition</h3>
+            <h3>Library Assets &amp; Face Recognition</h3>
             <div class="kv-row"><span>Total Assets:</span><strong class="font-mono" id="modal-lib-total-assets">Unknown</strong></div>
             <div class="kv-row"><span>Photos:</span><strong class="font-mono" id="modal-lib-photos">Unknown</strong></div>
             <div class="kv-row"><span>Videos:</span><strong class="font-mono" id="modal-lib-videos">Unknown</strong></div>
@@ -826,8 +1047,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-tile-logs" id="immich-modal-refresh">Refresh Telemetry</button>
-        <button type="button" class="btn-tile-restart" id="immich-modal-dismiss">Close</button>
+        <button type="button" class="btn-secondary" id="immich-modal-refresh">Refresh Telemetry</button>
+        <button type="button" class="btn-ghost" id="immich-modal-dismiss">Close</button>
       </div>
     </div>
   </div>
@@ -847,13 +1068,13 @@
           <div class="modal-status-left">
             <span class="modal-dot" id="modal-tv-dot" aria-hidden="true"></span>
             <span id="modal-tv-banner-text">Scanning configured ADB targets...</span>
-            <span class="badge-live" id="tv-live-tag" style="display: none;">DEPLOYING</span>
+            <span class="badge badge-info" id="tv-live-tag" style="display: none;">DEPLOYING</span>
           </div>
           <div class="tv-toolbar-actions">
-            <button type="button" id="btn-modal-sync-upstream" class="btn-tile-logs">Sync GitHub APKs</button>
-            <button type="button" id="btn-modal-refresh-telemetry" class="btn-tile-logs">Scan TVs</button>
-            <button type="button" id="btn-modal-push-incoming" class="btn-tile-logs">Push Incoming/</button>
-            <button type="button" id="btn-tv-modal-view-log" class="btn-tile-logs">Log</button>
+            <button type="button" id="btn-modal-sync-upstream" class="btn-secondary">Sync GitHub APKs</button>
+            <button type="button" id="btn-modal-refresh-telemetry" class="btn-secondary">Scan TVs</button>
+            <button type="button" id="btn-modal-push-incoming" class="btn-secondary">Push Incoming/</button>
+            <button type="button" id="btn-tv-modal-view-log" class="btn-secondary">Log</button>
           </div>
         </div>
 
@@ -863,12 +1084,12 @@
         </div>
 
         <div id="tv-devices-container" class="tv-devices-container">
-          <div class="ops-empty-state">Loading configured TV devices...</div>
+          <div class="empty-state">Loading configured TV devices...</div>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-sync-primary" id="btn-tv-modal-force-deploy-all">Force Deploy All Devices Now</button>
-        <button type="button" class="btn-tile-restart" id="tv-modal-dismiss">Close</button>
+        <button type="button" class="btn-primary" id="btn-tv-modal-force-deploy-all">Force Deploy All Devices Now</button>
+        <button type="button" class="btn-ghost" id="tv-modal-dismiss">Close</button>
       </div>
     </div>
   </div>
@@ -887,8 +1108,8 @@
         <pre id="tv-log-content" class="modal-log-viewer font-mono">Loading log...</pre>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-tile-logs" id="tv-log-modal-refresh">Refresh Log</button>
-        <button type="button" class="btn-tile-restart" id="tv-log-modal-dismiss">Close</button>
+        <button type="button" class="btn-secondary" id="tv-log-modal-refresh">Refresh Log</button>
+        <button type="button" class="btn-ghost" id="tv-log-modal-dismiss">Close</button>
       </div>
     </div>
   </div>
@@ -907,13 +1128,13 @@
         <pre id="cron-modal-log-content" class="modal-log-viewer font-mono">Loading task log...</pre>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-tile-logs" id="cron-modal-refresh">Refresh Log</button>
-        <button type="button" class="btn-tile-restart" id="cron-modal-dismiss">Close</button>
+        <button type="button" class="btn-secondary" id="cron-modal-refresh">Refresh Log</button>
+        <button type="button" class="btn-ghost" id="cron-modal-dismiss">Close</button>
       </div>
     </div>
   </div>
 
-  <!-- 7. Container Logs Modal -->
+  <!-- 7. Container Logs Modal (with search filter & copy) -->
   <div class="modal-overlay" id="dozzle-modal" role="dialog" aria-modal="true" aria-labelledby="dozzle-modal-title" style="display: none;">
     <div class="modal-glass modal-wide">
       <div class="modal-header">
@@ -925,11 +1146,19 @@
       </div>
       <div class="modal-body">
         <div class="modal-toolbar-row">
-          <div class="unit-toggle-group" id="log-view-toggle" style="display: none;">
-            <button type="button" class="unit-pill-btn active" id="btn-log-tab-native">Native Tail</button>
-            <button type="button" class="unit-pill-btn" id="btn-log-tab-dozzle">Dozzle Live Stream</button>
+          <div class="segmented-group" id="log-view-toggle" style="display: none;">
+            <button type="button" class="pill-btn active" id="btn-log-tab-native">Native Tail</button>
+            <button type="button" class="pill-btn" id="btn-log-tab-dozzle">Dozzle Stream</button>
           </div>
-          <a id="dozzle-modal-ext-link" href="#services-matrix" target="_blank" rel="noopener" class="btn-tile-logs" style="display: none;">Open in New Tab &nearr;</a>
+          <div class="log-filter-bar" id="container-log-filter-bar">
+            <label for="container-log-filter" class="sr-only">Filter log lines</label>
+            <input type="search" id="container-log-filter" class="form-input" placeholder="Filter log lines..." autocomplete="off" />
+            <button type="button" class="btn-secondary" id="container-log-copy">
+              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-copy"></use></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <a id="dozzle-modal-ext-link" href="#/apps" target="_blank" rel="noopener" class="btn-secondary" style="display: none;">Dozzle &nearr;</a>
         </div>
 
         <div id="container-native-log-view">
@@ -941,9 +1170,9 @@
       </div>
       <div class="modal-footer">
         <div id="container-native-footer">
-          <button type="button" class="btn-tile-logs" id="container-modal-refresh">Refresh Tail</button>
+          <button type="button" class="btn-secondary" id="container-modal-refresh">Refresh Tail</button>
         </div>
-        <button type="button" class="btn-tile-restart" id="container-modal-dismiss">Close</button>
+        <button type="button" class="btn-ghost" id="container-modal-dismiss">Close</button>
       </div>
     </div>
   </div>
@@ -984,7 +1213,7 @@
         </div>
 
         <div id="indexer-list" class="indexer-list">
-          <div class="ops-empty-state">Loading Prowlarr definitions...</div>
+          <div class="empty-state">Loading Prowlarr definitions...</div>
         </div>
 
         <div id="indexer-results" class="indexer-results"></div>
@@ -995,8 +1224,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-tile-restart" id="indexer-modal-cancel">Cancel</button>
-        <button type="button" class="btn-sync-primary" id="indexer-modal-add" disabled>Add selected</button>
+        <button type="button" class="btn-ghost" id="indexer-modal-cancel">Cancel</button>
+        <button type="button" class="btn-primary" id="indexer-modal-add" disabled>Add selected</button>
       </div>
     </div>
   </div>
@@ -1007,11 +1236,18 @@
       <div class="modal-header">
         <div>
           <h2 id="config-modal-title">Server Configuration &amp; Node Control</h2>
-          <p class="modal-sub">Paths, atomic hardlink verification, port map, credentials &amp; Netplan IP.</p>
+          <p class="modal-sub">Paths, atomic hardlink verification, port map, credentials &amp; Netplan static IP.</p>
         </div>
         <button type="button" class="modal-close" id="config-modal-close" aria-label="Close server configuration">&times;</button>
       </div>
       <div class="modal-body">
+        <div id="config-readonly-banner" class="inline-callout is-info" hidden>
+          <div>
+            <strong>Managed by blueprint installer (read-only)</strong>
+            <span id="config-readonly-hint">Edit <code>/etc/homelab/config.json</code> and re-run <code>sudo ./setup.sh --headless --config /etc/homelab/config.json</code> to apply path or secret changes. Hardlink probes, Port Matrix, and Netplan remain live below.</span>
+          </div>
+        </div>
+
         <div class="modal-tabs" role="tablist">
           <button type="button" class="cfg-tab-btn active" data-config-tab="paths" role="tab" aria-selected="true">Storage &amp; Identity</button>
           <button type="button" class="cfg-tab-btn" data-config-tab="ports" role="tab" aria-selected="false">Port Matrix</button>
@@ -1033,11 +1269,11 @@
           </div>
 
           <div class="hardlink-test-row">
-            <button type="button" id="btn-test-hardlink" class="btn-tile-logs">
+            <button type="button" id="btn-test-hardlink" class="btn-secondary">
               <span class="btn-spinner" id="hl-spinner" style="display: none;" aria-hidden="true"></span>
               <span>Test Atomic Hardlinks</span>
             </button>
-            <a id="btn-launch-setup-wizard" href="/" class="btn-tile-logs">Setup Guide</a>
+            <button type="button" id="btn-detect-user" class="btn-secondary">Auto-Detect Host PUID / PGID</button>
           </div>
           <div id="hl-result-banner" class="hl-banner" style="display: none;">
             <div id="hl-result-text"></div>
@@ -1057,27 +1293,24 @@
               <input type="text" id="cfg-timezone" class="form-input font-mono" placeholder="UTC" />
             </div>
           </div>
-          <div>
-            <button type="button" id="btn-detect-user" class="btn-tile-logs">Auto-Detect Host PUID / PGID</button>
-          </div>
         </div>
 
         <!-- Tab 2: Ports -->
         <div class="cfg-tab-pane" id="cfg-pane-ports" role="tabpanel">
           <div class="modal-toolbar-row">
-            <p class="modal-sub">Live IPv4 socket availability probe across blueprint services.</p>
-            <button type="button" id="btn-refresh-ports" class="btn-tile-logs">Re-Probe Host Ports</button>
+            <p class="modal-sub">Live IPv4 socket status across blueprint services.</p>
+            <button type="button" id="btn-refresh-ports" class="btn-secondary">Re-Probe Host Ports</button>
           </div>
           <div id="ports-matrix-grid" class="ports-matrix-grid">
-            <div class="ops-empty-state">Click Re-Probe Host Ports or open tab to scan sockets...</div>
+            <div class="empty-state">Click Re-Probe Host Ports or open tab to scan sockets...</div>
           </div>
         </div>
 
         <!-- Tab 3: Secrets -->
         <div class="cfg-tab-pane" id="cfg-pane-secrets" role="tabpanel">
           <div class="modal-toolbar-row">
-            <p class="modal-sub">Service API keys and passwords synced to .env telemetry readers.</p>
-            <button type="button" id="btn-generate-secrets" class="btn-tile-logs">Generate Random Secrets</button>
+            <p class="modal-sub">Service API keys and passwords (stored values shown masked as <code>********</code>).</p>
+            <button type="button" id="btn-generate-secrets" class="btn-secondary">Generate Random Secrets</button>
           </div>
           <div class="form-row-two">
             <div class="form-field">
@@ -1101,11 +1334,20 @@
 
         <!-- Tab 4: Netplan -->
         <div class="cfg-tab-pane" id="cfg-pane-network" role="tabpanel">
-          <p class="modal-sub">Generate and test static LAN IP with automatic <strong>120s rollback protection</strong> if SSH/HTTP connectivity drops.</p>
+          <p class="modal-sub">Apply a static LAN IP with an armed <strong>120s revert timer</strong>. Confirm from the new address or the previous config restores automatically.</p>
+
+          <div id="netplan-modal-pending" class="inline-callout is-warning" hidden>
+            <div>
+              <strong>Pending IP confirmation (<span id="netplan-modal-ip" class="font-mono">--</span>)</strong>
+              <span id="netplan-modal-countdown-text">Confirm within 120s to keep this static IP.</span>
+            </div>
+            <button type="button" id="btn-netplan-modal-confirm" class="btn-primary">Confirm &amp; Keep IP</button>
+          </div>
+
           <div class="form-row-two">
             <div class="form-field">
               <label for="cfg-netplan-iface">Network Interface</label>
-              <input type="text" id="cfg-netplan-iface" class="form-input font-mono" placeholder="eth0" />
+              <input type="text" id="cfg-netplan-iface" class="form-input font-mono" placeholder="enp3s0" />
             </div>
             <div class="form-field">
               <label for="cfg-netplan-ip">Static IPv4 Address / CIDR</label>
@@ -1121,15 +1363,15 @@
             </div>
           </div>
           <div class="hardlink-test-row">
-            <button type="button" id="btn-preview-netplan" class="btn-tile-logs">Preview Netplan YAML</button>
-            <button type="button" id="btn-apply-netplan" class="btn-sync-primary">Apply with 120s Rollback Safety</button>
+            <button type="button" id="btn-preview-netplan" class="btn-secondary">Preview Netplan YAML</button>
+            <button type="button" id="btn-apply-netplan" class="btn-primary">Apply with 120s Rollback Safety</button>
           </div>
           <pre id="netplan-yaml-preview" class="modal-log-viewer font-mono" style="display: none;"></pre>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-tile-restart" id="config-modal-cancel">Cancel</button>
-        <button type="button" class="btn-sync-primary" id="btn-save-config">
+        <button type="button" class="btn-ghost" id="config-modal-cancel">Close</button>
+        <button type="button" class="btn-primary" id="btn-save-config">
           <span class="btn-spinner" id="config-save-spinner" style="display: none;" aria-hidden="true"></span>
           <span>Save &amp; Sync Config</span>
         </button>
@@ -1137,7 +1379,7 @@
     </div>
   </div>
 
-  <!-- 10. AI Copilot Diagnostics Modal -->
+  <!-- 10. Alerts Modal -->
   <div class="modal-overlay" id="alerts-modal" role="dialog" aria-modal="true" aria-labelledby="alerts-modal-title" style="display: none;">
     <div class="modal-glass modal-wide">
       <div class="modal-header">
@@ -1197,20 +1439,21 @@
       <div class="modal-footer">
         <span class="modal-hint" id="alerts-hint"></span>
         <div class="modal-footer-btns">
-          <button type="button" class="btn-tile-restart" id="alerts-cancel">Close</button>
-          <button type="button" class="btn-tile-logs" id="alerts-check-now">Check now</button>
-          <button type="button" class="btn-sync-primary" id="alerts-save">Save</button>
+          <button type="button" class="btn-ghost" id="alerts-cancel">Close</button>
+          <button type="button" class="btn-secondary" id="alerts-check-now">Check now</button>
+          <button type="button" class="btn-primary" id="alerts-save">Save</button>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- 11. AI Copilot Diagnostics Modal -->
   <div class="modal-overlay" id="ai-copilot-modal" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title" style="display: none;">
     <div class="modal-glass modal-wide">
       <div class="modal-header">
         <div>
           <h2 id="ai-modal-title">AI Copilot Hardware Diagnostics</h2>
-          <p class="modal-sub">Copy a token-compact snapshot of CPU, RAM, VAAPI, and container health.</p>
+          <p class="modal-sub">Copy a token-compact snapshot of CPU, RAM, GPU acceleration, storage, and network.</p>
         </div>
         <button type="button" class="modal-close" id="ai-modal-close" aria-label="Close AI Copilot diagnostics">&times;</button>
       </div>
@@ -1224,13 +1467,16 @@
         <pre id="ai-prompt-content" class="modal-log-viewer font-mono">Generating hardware diagnostics snapshot...</pre>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn-sync-primary" id="btn-copy-ai-prompt">Copy Diagnostic Prompt</button>
-        <button type="button" class="btn-tile-restart" id="ai-modal-dismiss">Close</button>
+        <button type="button" class="btn-primary" id="btn-copy-ai-prompt">
+          <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-copy"></use></svg>
+          <span>Copy Diagnostic Prompt</span>
+        </button>
+        <button type="button" class="btn-ghost" id="ai-modal-dismiss">Close</button>
       </div>
     </div>
   </div>
 
-  <script src="/js/auth.js?v=3"></script>
-  <script type="module" src="/js/app.js?v=27"></script>
+  <script src="/js/auth.js?v=4"></script>
+  <script type="module" src="/js/app.js?v=30"></script>
 </body>
 </html>

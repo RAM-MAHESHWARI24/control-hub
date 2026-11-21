@@ -1,7 +1,8 @@
 /**
- * Widget: Android TV auto-updater
- * Keeps TV counts and the fleet list strictly synchronized from one source,
- * removes dummy HTML/JS fallbacks, and wires accessible modals.
+ * Widget: Android TV Auto-Updater
+ * Real dynamic app names (no "Custom UI"), honest Standby/Offline state,
+ * dynamic ADB port, inline details & rename preserved across polls,
+ * and automatic nav hiding when tv_autoupdater is not installed.
  */
 
 import { $, setCardSummary } from "../shared/dom.js";
@@ -9,6 +10,8 @@ import { ENDPOINTS } from "../config.js";
 import { escapeHtml } from "../shared/formatters.js";
 import { openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
+import { state } from "../state.js";
+import { renderOverview } from "./overview.js";
 
 const tvStatusBadge = $("tv-status-badge");
 const tvLastSync = $("tv-last-sync");
@@ -25,11 +28,15 @@ const btnViewTvLog = $("btn-view-tv-log");
 const btnOpenTvDetails = $("btn-open-tv-details");
 const btnOpenTvDetailsHeader = $("btn-open-tv-details-header");
 const btnOpenTvDetailsCard = $("btn-open-tv-details-card");
+const btnTvSyncInline = $("btn-tv-sync-inline");
+const btnTvScanInline = $("btn-tv-scan-inline");
 const tvFleetPreview = $("tv-fleet-preview");
 
 const tvValOnline = $("tv-val-online");
 const tvValSt = $("tv-val-st");
 const tvValCs = $("tv-val-cs");
+const tvLabelApp1 = $("tv-label-app-1");
+const tvLabelApp2 = $("tv-label-app-2");
 
 const stepTvUpstream = $("step-tv-upstream");
 const stepTvDiscovery = $("step-tv-discovery");
@@ -55,6 +62,10 @@ const tvLogModalDismiss = $("tv-log-modal-dismiss");
 const tvLogSubPath = $("tv-log-modal-sub-path");
 
 let forceUpdateEnabled = false;
+let onModuleVisibilityChange = null;
+export function setTvVisibilityCallback(fn) {
+  onModuleVisibilityChange = fn;
+}
 
 function updateDeployUiState(deploying) {
   if (btnDeployCard) {
@@ -97,7 +108,7 @@ function renderTvStepper(currentStage, status) {
         if (circle) circle.textContent = "✓";
       } else if (num === currentStage) {
         elem.className = "step-item step-active";
-        if (circle) circle.innerHTML = `<span class="step-spin" aria-hidden="true">⟳</span>`;
+        if (circle) circle.textContent = "…";
       } else {
         elem.className = "step-item";
         if (circle) circle.textContent = `${num}`;
@@ -127,7 +138,6 @@ function renderTvStepper(currentStage, status) {
   });
 }
 
-// Detail panels the user opened (kept open across the 15 s re-render).
 const openInfo = new Set();
 
 function deviceSummary(dev) {
@@ -166,7 +176,7 @@ function deviceInfoPanel(dev, scope) {
         <div class="tv-rename-row">
           <input type="text" id="${escapeHtml(inputId)}" class="form-input" maxlength="40" autocomplete="off"
                  value="${escapeHtml(dev.nickname || "")}" placeholder="${escapeHtml(dev.model_label || dev.profile_name || "")}" />
-          <button type="submit" class="btn-tile-logs">Save name</button>
+          <button type="submit" class="btn-secondary">Save name</button>
         </div>
         <p class="tv-rename-hint">Leave it empty to show the model name.</p>
       </form>
@@ -198,14 +208,14 @@ async function saveNickname(form) {
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
-      showToast("Name not saved", data.message || "Try again.", "⚠️");
+      showToast("Name not saved", data.message || "Try again.", "warning");
       return;
     }
-    showToast("TV renamed", data.nickname ? `Now shown as "${data.nickname}".` : "Showing the model name again.", "📺");
+    showToast("TV renamed", data.nickname ? `Now shown as "${data.nickname}".` : "Showing the model name again.", "success");
     if (input) input.blur();
     await fetchTvUpdaterStatus(true);
   } catch (_) {
-    showToast("Name not saved", "The Control Hub did not answer.", "❌");
+    showToast("Name not saved", "The Control Hub did not answer.", "danger");
   } finally {
     if (button) button.disabled = false;
   }
@@ -235,14 +245,14 @@ function renderFleetPreview(devices) {
   if (!tvFleetPreview) return;
   if (isEditingIn(tvFleetPreview)) return;
   if (!devices || devices.length === 0) {
-    tvFleetPreview.innerHTML = `<div class="ops-empty-state">No Android TV devices configured or reachable.</div>`;
+    tvFleetPreview.innerHTML = `<div class="empty-state">No Android TV devices configured or reachable.</div>`;
     return;
   }
 
   tvFleetPreview.innerHTML = devices.map((dev) => {
     const isOnline = Boolean(dev.is_online);
-    const fgName = escapeHtml(dev.foreground_app_name || (isOnline ? "Idle / Launcher" : "Standby"));
-    const isFgManaged = (dev.apps || []).some((a) => a.is_foreground);
+    const fgName = isOnline ? escapeHtml(dev.foreground_app_name || "Idle / Launcher") : null;
+    const isFgManaged = isOnline && (dev.apps || []).some((a) => a.is_foreground);
     const hasPending = (dev.apps || []).some((a) => !a.is_up_to_date || !a.is_installed);
 
     let statusPillClass = "synced";
@@ -262,7 +272,7 @@ function renderFleetPreview(devices) {
           <span class="fleet-device-ip font-mono">${escapeHtml(dev.ip)}:${escapeHtml(dev.port)}</span>
         </div>
         <div class="fleet-item-bottom">
-          <span class="fleet-app-tag ${isFgManaged ? "text-amber" : "text-cyan"}">
+          <span class="fleet-app-tag ${isFgManaged ? "text-amber" : (isOnline ? "text-cyan" : "text-muted")}">
             ${isOnline ? `Active: ${fgName}` : "Standby / Offline"}
           </span>
           <span class="fleet-status-pill ${statusPillClass}">${statusPillText}</span>
@@ -278,15 +288,15 @@ function renderDeviceCards(devices) {
   if (!tvDevicesContainer) return;
   if (isEditingIn(tvDevicesContainer)) return;
   if (!devices || devices.length === 0) {
-    tvDevicesContainer.innerHTML = `<div class="ops-empty-state">No Android TV devices configured in cluster.</div>`;
+    tvDevicesContainer.innerHTML = `<div class="empty-state">No Android TV devices configured in cluster.</div>`;
     return;
   }
 
   const html = devices.map((dev) => {
     const isOnline = Boolean(dev.is_online);
-    const fgName = escapeHtml(dev.foreground_app_name || "Idle / Launcher");
-    const isMedia = Boolean(dev.is_media_playing);
-    const isFgManaged = (dev.apps || []).some((a) => a.is_foreground);
+    const fgName = isOnline ? escapeHtml(dev.foreground_app_name || "Idle / Launcher") : "Offline / Standby";
+    const isMedia = isOnline && Boolean(dev.is_media_playing);
+    const isFgManaged = isOnline && (dev.apps || []).some((a) => a.is_foreground);
 
     const appsHtml = (dev.apps || []).map((app) => {
       let badgeClass = "badge-status-synced";
@@ -303,41 +313,37 @@ function renderDeviceCards(devices) {
         canUpdate = true;
       }
 
-      const fgWarning = app.is_foreground ? `<span class="tv-fg-warning">Active in FG</span>` : "";
+      const fgWarning = isOnline && app.is_foreground ? `<span class="tv-fg-warning">Active in FG</span>` : "";
 
       return `
-        <tr class="tv-app-row ${app.is_foreground ? "row-in-foreground" : ""}">
-          <td class="tv-app-col-name">
+        <tr class="tv-app-row ${isOnline && app.is_foreground ? "row-in-foreground" : ""}">
+          <td>
             <div class="tv-app-title-group">
               <strong>${escapeHtml(app.name)}</strong>
-              <small class="text-dim">${escapeHtml(app.package)}</small>
+              <small class="text-muted font-mono">${escapeHtml(app.package)}</small>
             </div>
             ${fgWarning}
           </td>
-          <td class="tv-app-col-ver">
-            <div class="tv-ver-box">
-              <span class="ver-code">vCode: ${app.installed_code > 0 ? app.installed_code : "None"}</span>
-              <span class="ver-name text-dim">${escapeHtml(app.installed_name || "")}</span>
+          <td>
+            <div class="tv-ver-box font-mono">
+              <span>${app.installed_code > 0 ? `vCode ${app.installed_code}` : "None"}</span>
+              <span class="text-muted">${escapeHtml(app.installed_name || "")}</span>
             </div>
           </td>
-          <td class="tv-app-col-target">
-            <div class="tv-ver-box">
-              <span class="ver-code text-cyan">vCode: ${app.target_code > 0 ? app.target_code : "N/A"}</span>
-              <span class="ver-name text-dim">${escapeHtml(app.target_name || "")}</span>
+          <td>
+            <div class="tv-ver-box font-mono">
+              <span class="text-cyan">${app.target_code > 0 ? `vCode ${app.target_code}` : "N/A"}</span>
+              <span class="text-muted">${escapeHtml(app.target_name || "")}</span>
             </div>
           </td>
-          <td class="tv-app-col-status">
-            <span class="tv-status-chip ${badgeClass}">${badgeText}</span>
-          </td>
-          <td class="tv-app-col-actions">
-            <div class="tv-action-buttons">
-              <button type="button" class="btn-micro btn-app-deploy ${canUpdate ? "btn-primary-micro" : "btn-secondary-micro"}"
-                      data-device="${escapeHtml(dev.id)}"
-                      data-package="${escapeHtml(app.package)}"
-                      data-appname="${escapeHtml(app.name)}">
-                ${canUpdate ? "Install / Update" : "Reinstall"}
-              </button>
-            </div>
+          <td><span class="${badgeClass}">${badgeText}</span></td>
+          <td>
+            <button type="button" class="btn-micro btn-app-deploy ${canUpdate ? "btn-primary-micro" : "btn-secondary-micro"}"
+                    data-device="${escapeHtml(dev.id)}"
+                    data-package="${escapeHtml(app.package)}"
+                    data-appname="${escapeHtml(app.name)}">
+              ${canUpdate ? "Install / Update" : "Reinstall"}
+            </button>
           </td>
         </tr>
       `;
@@ -348,38 +354,35 @@ function renderDeviceCards(devices) {
         <div class="tv-device-header">
           <div class="tv-device-title-wrap">
             <div class="tv-device-icon-box" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tv-icon">
-                <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
-                <polyline points="17 2 12 7 7 2"></polyline>
-              </svg>
+              <svg class="ui-icon tv-icon"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
             </div>
             <div>
               <div class="tv-device-name-row">
                 <h4>${nameButton(dev, "modal")}</h4>
-                <span class="tv-model-pill">${escapeHtml(dev.model_label || "Model unknown")}</span>
-                <span class="tv-ip-badge font-mono">${escapeHtml(dev.ip)}:${escapeHtml(dev.port)}</span>
+                <span class="meta-pill">${escapeHtml(dev.model_label || "Model unknown")}</span>
+                <span class="meta-pill font-mono">${escapeHtml(dev.ip)}:${escapeHtml(dev.port)}</span>
               </div>
               <div class="tv-device-status-sub">
-                ${isOnline ? '<span class="status-indicator online" aria-hidden="true"></span> Online • ADB Port 5555' : '<span class="status-indicator offline" aria-hidden="true"></span> Standby / Offline'}
+                ${isOnline
+                  ? `<span class="status-indicator online" aria-hidden="true"></span> Online · ADB Port ${escapeHtml(dev.port)}`
+                  : `<span class="status-indicator offline" aria-hidden="true"></span> Standby / Offline`}
               </div>
             </div>
           </div>
-          <div class="tv-device-header-actions">
-            <button type="button" class="btn-micro btn-deploy-tv-all" data-device="${escapeHtml(dev.id)}" data-devicename="${escapeHtml(dev.name)}">
-              Deploy All to ${escapeHtml(dev.name)}
-            </button>
-          </div>
+          <button type="button" class="btn-secondary btn-deploy-tv-all" data-device="${escapeHtml(dev.id)}" data-devicename="${escapeHtml(dev.name)}">
+            Deploy All to ${escapeHtml(dev.name)}
+          </button>
         </div>
 
         ${deviceInfoPanel(dev, "modal")}
 
         <div class="tv-session-strip">
-          <div class="session-left">
-            <span class="session-label">CURRENTLY FOCUSED:</span>
-            <span class="session-app ${isFgManaged ? "text-amber" : "text-cyan"}">${fgName}</span>
+          <div>
+            <span class="text-muted">FOCUSED: </span>
+            <strong class="${isFgManaged ? "text-amber" : (isOnline ? "text-cyan" : "text-muted")}">${fgName}</strong>
           </div>
-          <div class="session-right">
-            ${isMedia ? '<span class="session-media-active">Media Playback Active</span>' : '<span class="session-media-idle">Idle Session</span>'}
+          <div>
+            ${isMedia ? `<span class="badge-status-pending">Media Playing</span>` : `<span class="text-muted">${isOnline ? "Idle" : "Unreachable"}</span>`}
           </div>
         </div>
 
@@ -423,18 +426,20 @@ export async function fetchTvUpdaterStatus(force = false) {
   try {
     const url = force ? `${ENDPOINTS.tvUpdaterStatus}?refresh=true` : ENDPOINTS.tvUpdaterStatus;
     const res = await fetch(url);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const data = await res.json();
 
-    const tvSection = $("tv-updater-section");
+    state.tvSnapshot = data;
+    const installed = data.installed !== false;
+    state.modules.tvs = installed;
     const tvNavBtn = $("nav-item-tvs");
-    if (data.installed === false) {
-      if (tvSection) tvSection.style.display = "none";
-      if (tvNavBtn) tvNavBtn.style.display = "none";
-      return;
+    if (tvNavBtn) tvNavBtn.hidden = !installed;
+    if (typeof onModuleVisibilityChange === "function") onModuleVisibilityChange("tvs", installed);
+
+    if (!installed) {
+      renderOverview();
+      return true;
     }
-    if (tvSection) tvSection.style.display = "";
-    if (tvNavBtn) tvNavBtn.style.display = "";
 
     const devices = Array.isArray(data.devices) ? data.devices : [];
     const totalDevices = devices.length;
@@ -476,6 +481,10 @@ export async function fetchTvUpdaterStatus(force = false) {
 
     if (tvValOnline) tvValOnline.textContent = `${onlineDevices}/${totalDevices} Online`;
     const upApps = data.upstream_apps || {};
+    const firstDevApps = (devices[0] && devices[0].apps) || [];
+    if (tvLabelApp1 && firstDevApps[0]) tvLabelApp1.textContent = firstDevApps[0].name || "SmartTube";
+    if (tvLabelApp2 && firstDevApps[1]) tvLabelApp2.textContent = firstDevApps[1].name || "CloudStream Beta";
+
     if (tvValSt) {
       const st = upApps["org.smarttube.stable"];
       tvValSt.textContent = st && st.version_name ? `v${st.version_name}` : "Not synced";
@@ -485,7 +494,7 @@ export async function fetchTvUpdaterStatus(force = false) {
       tvValCs.textContent = cs && cs.version_name ? `v${cs.version_name}` : "Not synced";
     }
 
-    setCardSummary("tv-updater-section", `TVs: ${onlineDevices}/${totalDevices} online`);
+    setCardSummary("tv-updater-section", `${onlineDevices}/${totalDevices} TVs online`);
 
     if (modalTvDot) {
       modalTvDot.className = isDeploying ? "modal-dot dot-syncing" : (isError ? "modal-dot dot-error" : "modal-dot dot-live");
@@ -504,8 +513,11 @@ export async function fetchTvUpdaterStatus(force = false) {
 
     renderFleetPreview(devices);
     renderDeviceCards(devices);
+    renderOverview();
+    return true;
   } catch (err) {
     console.error("Error fetching TV updater status:", err);
+    return false;
   }
 }
 
@@ -520,14 +532,14 @@ export async function triggerTvDeployment(forceInstall = false) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(force ? "Force Deployment Started" : "Deployment Started", data.message || "Deploying packages...", "📺");
+      showToast(force ? "Force Deployment Started" : "Deployment Started", data.message || "Deploying packages...", "info");
       await fetchTvUpdaterStatus(true);
     } else {
-      showToast("Deployment Busy", data.message || "Deployment is already running.", "⚠️");
+      showToast("Deployment Busy", data.message || "Deployment is already running.", "warning");
       updateDeployUiState(false);
     }
   } catch (_) {
-    showToast("Error", "Could not trigger TV app deployment.", "❌");
+    showToast("Error", "Could not trigger TV app deployment.", "danger");
     updateDeployUiState(false);
   }
 }
@@ -543,21 +555,21 @@ export async function triggerTvDeploymentForDevice(deviceId, deviceName) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast("Device Deployment", `Deploying pending apps to ${deviceName}...`, "📺");
+      showToast("Device Deployment", `Deploying pending apps to ${deviceName}...`, "info");
       await fetchTvUpdaterStatus(true);
     } else {
-      showToast("Busy", data.message, "⚠️");
+      showToast("Busy", data.message, "warning");
       updateDeployUiState(false);
     }
   } catch (_) {
-    showToast("Error", `Could not trigger deployment for ${deviceName}`, "❌");
+    showToast("Error", `Could not trigger deployment for ${deviceName}`, "danger");
     updateDeployUiState(false);
   }
 }
 
 export async function triggerSingleAppDeploy(deviceId, packageName, appName = "") {
   const force = forceUpdateEnabled;
-  showToast(force ? "Force Installing App" : "Installing App", `Deploying ${appName || packageName} to ${deviceId}...`, "🚀");
+  showToast(force ? "Force Installing App" : "Installing App", `Deploying ${appName || packageName} to ${deviceId}...`, "info");
   try {
     const res = await fetch(ENDPOINTS.tvUpdaterInstallApp, {
       method: "POST",
@@ -566,48 +578,50 @@ export async function triggerSingleAppDeploy(deviceId, packageName, appName = ""
     });
     const data = await res.json();
     if (data.success) {
-      showToast("Action Initiated", data.message, "✓");
+      showToast("Action Initiated", data.message, "success");
       await fetchTvUpdaterStatus(true);
     } else {
-      showToast("Notice", data.message, "⚠️");
+      showToast("Notice", data.message, "warning");
     }
   } catch (_) {
-    showToast("Error", `Failed to trigger deployment for ${packageName}`, "❌");
+    showToast("Error", `Failed to trigger deployment for ${packageName}`, "danger");
   }
 }
 
 export async function triggerUpstreamSync() {
   if (btnModalSyncUpstream) btnModalSyncUpstream.disabled = true;
-  showToast("Upstream Sync", "Checking GitHub releases...", "☁️");
+  if (btnTvSyncInline) btnTvSyncInline.disabled = true;
+  showToast("Upstream Sync", "Checking GitHub releases...", "info");
   try {
     const res = await fetch(ENDPOINTS.tvUpdaterSyncUpstream, { method: "POST" });
     const data = await res.json();
     if (data.success) {
-      showToast("Upstream Sync", data.message, "✓");
+      showToast("Upstream Sync", data.message, "success");
       await fetchTvUpdaterStatus(true);
     } else {
-      showToast("Notice", data.message, "⚠️");
+      showToast("Notice", data.message, "warning");
     }
   } catch (_) {
-    showToast("Error", "Could not check upstream releases", "❌");
+    showToast("Error", "Could not check upstream releases", "danger");
   } finally {
     if (btnModalSyncUpstream) btnModalSyncUpstream.disabled = false;
+    if (btnTvSyncInline) btnTvSyncInline.disabled = false;
   }
 }
 
 export async function triggerPushIncoming() {
-  showToast("Pushing Drops", "Scanning incoming_apks/ and pushing to TVs...", "📦");
+  showToast("Pushing Drops", "Scanning incoming_apks/ and pushing to TVs...", "info");
   try {
     const res = await fetch(ENDPOINTS.tvUpdaterPushIncoming, { method: "POST" });
     const data = await res.json();
     if (data.success) {
-      showToast("Sideload Push", data.message, "✓");
+      showToast("Sideload Push", data.message, "success");
       await fetchTvUpdaterStatus(true);
     } else {
-      showToast("Notice", data.message, "⚠️");
+      showToast("Notice", data.message, "warning");
     }
   } catch (_) {
-    showToast("Error", "Could not push incoming APK drops", "❌");
+    showToast("Error", "Could not push incoming APK drops", "danger");
   }
 }
 
@@ -647,6 +661,8 @@ export function setupTvUpdater() {
   if (btnOpenTvDetails) btnOpenTvDetails.addEventListener("click", () => openTvDetailModal(btnOpenTvDetails));
   if (btnOpenTvDetailsHeader) btnOpenTvDetailsHeader.addEventListener("click", () => openTvDetailModal(btnOpenTvDetailsHeader));
   if (btnOpenTvDetailsCard) btnOpenTvDetailsCard.addEventListener("click", () => openTvDetailModal(btnOpenTvDetailsCard));
+  if (btnTvSyncInline) btnTvSyncInline.addEventListener("click", triggerUpstreamSync);
+  if (btnTvScanInline) btnTvScanInline.addEventListener("click", () => fetchTvUpdaterStatus(true));
 
   const btnModalRefreshTelemetry = $("btn-modal-refresh-telemetry");
   const btnModalPushIncoming = $("btn-modal-push-incoming");
@@ -669,7 +685,7 @@ export function setupTvUpdater() {
         forceUpdateEnabled
           ? "Updates will install even if the app is active in foreground."
           : "Safety guard active: updates pause while media plays or app is in foreground.",
-        forceUpdateEnabled ? "⚡" : "🛡️"
+        forceUpdateEnabled ? "warning" : "success"
       );
     });
   }

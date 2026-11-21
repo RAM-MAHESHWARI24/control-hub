@@ -1,9 +1,10 @@
 /**
- * Widget: System Automation & Scheduled Cron Tasks
- * Renders registered automation cards, dynamic task counts, and accessible log viewer.
+ * Widget: Scheduled Automations (cron.d & systemd timers)
+ * Renders only installed automations with real schedules, SVG sprite icons,
+ * diff-checked updates, and accessible log viewer.
  */
 
-import { $, setCardSummary } from "../shared/dom.js";
+import { $, setCardSummary, uiIcon } from "../shared/dom.js";
 import { ENDPOINTS } from "../config.js";
 import { escapeHtml } from "../shared/formatters.js";
 import { openModal, registerModal } from "../shared/modal.js";
@@ -22,61 +23,64 @@ const cronModalDismiss = $("cron-modal-dismiss");
 const cronModalRefresh = $("cron-modal-refresh");
 
 let activeCronJobId = null;
+let lastJobsSignature = "";
 
-function getCronIconSvg(iconName) {
-  switch (iconName) {
-    case "cloud":
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>`;
-    case "moon":
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
-    case "tv":
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>`;
-    case "sliders":
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line></svg>`;
-    case "cpu":
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect></svg>`;
-    default:
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>`;
-  }
-}
+const ICON_MAP = {
+  cloud: "cloud",
+  database: "database",
+  shield: "shield",
+  moon: "moon",
+  tv: "tv",
+  sliders: "sliders",
+  cpu: "cpu",
+};
 
 export async function fetchCronTasks() {
-  if (!cronGrid) return;
+  if (!cronGrid) return false;
   try {
     const res = await fetch(ENDPOINTS.cronStatus);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const data = await res.json();
     const jobs = data.jobs || [];
 
     if (cronSubtitle) {
-      cronSubtitle.textContent = `cron.d & systemd automations • ${jobs.length} tasks`;
+      cronSubtitle.textContent = `cron.d & systemd timers · ${jobs.length} installed`;
     }
-    setCardSummary("automation-section", `Schedules: ${jobs.length} configured tasks`);
+    setCardSummary("automation-section", `${jobs.length} installed automation${jobs.length === 1 ? "" : "s"}`);
+
+    const sig = JSON.stringify(jobs);
+    if (sig === lastJobsSignature && cronGrid.children.length > 0) return true;
+    lastJobsSignature = sig;
+
+    if (jobs.length === 0) {
+      cronGrid.innerHTML = `<div class="empty-state">No scheduled homelab cron jobs or timers detected on this host.</div>`;
+      return true;
+    }
 
     cronGrid.innerHTML = jobs.map((job) => {
-      const isRunning = job.is_running;
-      let badgeClass = isRunning ? "running" : "";
-      if (job.id === "immich_ml" && !job.is_running) badgeClass = "inactive";
-      if (job.id === "server_suspend" && job.status_text && job.status_text.includes("Disabled")) badgeClass = "running";
+      const isRunning = Boolean(job.is_running);
+      const stLower = String(job.status_text || "").toLowerCase();
+      let badgeClass = "";
+      if (isRunning) badgeClass = "running";
+      else if (stLower.includes("error") || stLower.includes("fail") || stLower.includes("stale") || stLower.includes("interrupted")) badgeClass = "error";
+      else if (stLower.includes("disabled") || stLower.includes("conserved") || stLower.includes("not ") || stLower.includes("unknown") || stLower.includes("pending") || stLower.includes("never")) badgeClass = "inactive";
 
       const runDisabledAttr = (!job.can_run && job.id !== "server_suspend") ? "disabled" : "";
       const safeName = escapeHtml(job.name);
+      const spriteName = ICON_MAP[job.icon] || "activity";
 
       return `
         <div class="cron-item-card" id="cron-card-${escapeHtml(job.id)}">
           <div>
             <div class="cron-item-top">
               <div class="cron-item-brand">
-                <div class="cron-icon-box" aria-hidden="true">
-                  ${getCronIconSvg(job.icon)}
-                </div>
+                <div class="cron-icon-box" aria-hidden="true">${uiIcon(spriteName)}</div>
                 <div class="cron-title-group">
                   <h4>${safeName}</h4>
-                  <span class="cron-schedule">${escapeHtml(job.schedule)}</span>
+                  <span class="cron-schedule font-mono">${escapeHtml(job.schedule)}</span>
                 </div>
               </div>
               <span class="cron-status-badge ${badgeClass}" id="cron-badge-${escapeHtml(job.id)}">
-                ${isRunning ? '<span class="pulsing-dot active-pulse" aria-hidden="true"></span>' : ""}
                 ${escapeHtml(job.status_text)}
               </span>
             </div>
@@ -85,13 +89,13 @@ export async function fetchCronTasks() {
 
           <div>
             <div class="cron-meta-row">
-              <span>Last Run: <strong>${escapeHtml(job.last_run)}</strong></span>
+              <span>Last Run: <strong class="font-mono">${escapeHtml(job.last_run)}</strong></span>
             </div>
             <div class="cron-actions-row">
-              <button type="button" class="btn-cron-log" data-log-id="${escapeHtml(job.id)}" data-log-name="${safeName}" aria-label="View log for ${safeName}">
+              <button type="button" class="btn-secondary btn-cron-log" data-log-id="${escapeHtml(job.id)}" data-log-name="${safeName}" aria-label="View log for ${safeName}">
                 View Log
               </button>
-              <button type="button" class="btn-cron-run" id="btn-cron-run-${escapeHtml(job.id)}" data-run-id="${escapeHtml(job.id)}" data-run-name="${safeName}" ${runDisabledAttr}>
+              <button type="button" class="btn-ghost btn-cron-run" id="btn-cron-run-${escapeHtml(job.id)}" data-run-id="${escapeHtml(job.id)}" data-run-name="${safeName}" ${runDisabledAttr}>
                 ${escapeHtml(job.run_label)}
               </button>
             </div>
@@ -112,8 +116,10 @@ export async function fetchCronTasks() {
         }
       };
     });
+    return true;
   } catch (err) {
     console.error("Error fetching cron tasks:", err);
+    return false;
   }
 }
 
@@ -146,19 +152,20 @@ export async function refreshCronModalLog() {
 export async function runCronJob(jobId, jobName) {
   const btn = $(`btn-cron-run-${jobId}`);
   if (btn) btn.disabled = true;
-  showToast("Automation Triggered", `Executing '${jobName}' in background...`, "⚡");
+  showToast("Automation Triggered", `Executing '${jobName}' in background...`, "info");
 
   try {
     const res = await fetch(ENDPOINTS.cronRun(jobId), { method: "POST" });
     const data = await res.json();
-    if (data.success) {
-      showToast("Task Started", data.message, "✓");
+    if (res.ok && data.success) {
+      showToast("Task Started", data.message, "success");
+      lastJobsSignature = "";
       await fetchCronTasks();
     } else {
-      showToast("Notice", data.message || data.error || "Could not start task", "⚠️");
+      showToast("Notice", data.message || data.error || "Could not start task", "warning");
     }
   } catch (_) {
-    showToast("Error", `Could not trigger task '${jobName}'`, "❌");
+    showToast("Error", `Could not trigger task '${jobName}'`, "danger");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -166,6 +173,6 @@ export async function runCronJob(jobId, jobName) {
 
 export function setupCronTasks() {
   registerModal(cronLogModal, { closeButtons: [cronModalClose, cronModalDismiss] });
-  if (btnRefreshCron) btnRefreshCron.addEventListener("click", fetchCronTasks);
+  if (btnRefreshCron) btnRefreshCron.addEventListener("click", () => { lastJobsSignature = ""; fetchCronTasks(); });
   if (cronModalRefresh) cronModalRefresh.addEventListener("click", refreshCronModalLog);
 }

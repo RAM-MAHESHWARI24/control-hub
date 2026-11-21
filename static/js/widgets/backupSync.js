@@ -1,7 +1,8 @@
 /**
- * Widget: Nightly Google Drive Sync (Noodle Gallery Cloud Backup)
- * Renders honest backup status, 4-stage sync stepper, library telemetry,
- * log viewer modal, and breakdown modal. Never renders invented fallback numbers.
+ * Widget: Photo & Media Cloud Backup Monitor
+ * Provider-agnostic labels, partial-permission warning visibility,
+ * dynamic module visibility (auto-hides Backups nav if uninstalled),
+ * remote switcher modal, restore test, and log viewer.
  */
 
 import { $, setCardSummary } from "../shared/dom.js";
@@ -9,6 +10,7 @@ import { state } from "../state.js";
 import { ENDPOINTS } from "../config.js";
 import { openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
+import { renderOverview } from "./overview.js";
 
 const backupStatusBadge = $("backup-status-badge");
 const backupSection = $("backup-section");
@@ -65,14 +67,13 @@ const modalSyncSpinner = $("modal-sync-spinner");
 const modalSyncIcon = $("modal-sync-icon");
 const modalSyncBtnText = $("modal-sync-btn-text");
 
-// Summary Strip
 const btnOpenLibraryDetails = $("btn-open-library-details");
 const libValDisk = $("lib-val-disk");
 const libValGdrive = $("lib-val-gdrive");
 const libValAssets = $("lib-val-assets");
 const libValFaces = $("lib-val-faces");
+const libPartialWarning = $("lib-partial-warning");
 
-// Library Modal
 const immichLibraryModal = $("immich-library-modal");
 const immichModalClose = $("immich-modal-close");
 const immichModalDismiss = $("immich-modal-dismiss");
@@ -100,9 +101,14 @@ const stepConn1 = $("step-conn-1");
 const stepConn2 = $("step-conn-2");
 const stepConn3 = $("step-conn-3");
 
+let onModuleVisibilityChange = null;
+export function setBackupVisibilityCallback(fn) {
+  onModuleVisibilityChange = fn;
+}
+
 function formatTb(gb) {
   if (typeof gb !== "number" || Number.isNaN(gb)) return "Unknown";
-  return `${(gb / 1024).toFixed(2)} TB`;
+  return gb >= 1024 ? `${(gb / 1024).toFixed(2)} TB` : `${gb.toFixed(1)} GB`;
 }
 
 function updateSyncUiState(syncing) {
@@ -155,7 +161,7 @@ function renderBackupStepper(currentStage, status) {
         if (circle) circle.textContent = "✓";
       } else if (num === currentStage) {
         elem.className = "step-item step-active";
-        if (circle) circle.innerHTML = `<span class="step-spin" aria-hidden="true">⟳</span>`;
+        if (circle) circle.textContent = "…";
       } else {
         elem.className = "step-item";
         if (circle) circle.textContent = `${num}`;
@@ -233,7 +239,6 @@ function renderHealth(health, data) {
   }
   if (backupNextRun) backupNextRun.textContent = (health && health.next_run) || data.schedule || "Not scheduled";
 
-  // Pre-flight: list the checks only when one of them failed.
   if (backupPreflight) {
     backupPreflight.replaceChildren();
     const checks = (health && health.preflight && health.preflight.checks) || [];
@@ -274,8 +279,8 @@ function renderHealth(health, data) {
     const ret = health && health.retention;
     if (ret && typeof ret.kept === "number") {
       const next = ret.next_delete || [];
-      backupRetention.textContent = `Drive keeps ${ret.kept} database dumps (the newest nightly ones plus the first of each month). `
-        + `The last run deleted ${ret.deleted_last_run}; the next run deletes ${next.length ? next.join(", ") : "none"}.`;
+      backupRetention.textContent = `Remote keeps ${ret.kept} database dumps (newest nightly + first of each month). `
+        + `Last run deleted ${ret.deleted_last_run}; next run deletes ${next.length ? next.join(", ") : "none"}.`;
     } else {
       backupRetention.textContent = "Retention has not run yet.";
     }
@@ -311,9 +316,9 @@ async function runRestoreTest() {
   try {
     const res = await fetch(ENDPOINTS.backupRestoreTest, { method: "POST" });
     const data = await res.json();
-    showToast(data.success ? "Restore test started" : "Not started", data.message || "", data.success ? "🧪" : "⚠️");
+    showToast(data.success ? "Restore test started" : "Not started", data.message || "", data.success ? "success" : "warning");
   } catch (_) {
-    showToast("Not started", "The Control Hub did not answer.", "❌");
+    showToast("Not started", "The Control Hub did not answer.", "danger");
   } finally {
     setTimeout(fetchBackupStatus, 2000);
   }
@@ -379,7 +384,9 @@ async function testRemote() {
   showRemoteResult([`Testing ${remote}...`]);
   try {
     const res = await fetch(ENDPOINTS.backupRemoteTest, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remote }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ remote }),
     });
     const data = await res.json();
     if (!data.ok) {
@@ -408,7 +415,9 @@ async function saveRemote() {
   if (remoteSave) remoteSave.disabled = true;
   try {
     const res = await fetch(ENDPOINTS.backupRemote, {
-      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remote: testedRemote }),
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ remote: testedRemote }),
     });
     const data = await res.json();
     if (!data.ok) {
@@ -417,7 +426,7 @@ async function saveRemote() {
     }
     if (remoteCurrent) remoteCurrent.textContent = data.remote;
     showRemoteResult([`Both backups now use ${data.remote}, starting with the next run.`]);
-    showToast("Backup remote changed", `Now ${data.remote}.`, "☁️");
+    showToast("Backup remote changed", `Now ${data.remote}.`, "success");
     testedRemote = null;
     fetchBackupStatus();
   } catch (_) {
@@ -445,7 +454,7 @@ function renderMediaBackup(media) {
   if (mediaBackupMsg) {
     const show = media.is_red || media.state === "syncing";
     mediaBackupMsg.hidden = !show;
-    mediaBackupMsg.textContent = show ? (media.state === "syncing" ? "Backing up the media apps' settings..." : media.message) : "";
+    mediaBackupMsg.textContent = show ? (media.state === "syncing" ? "Backing up media apps' settings..." : media.message) : "";
   }
   if (btnMediaBackupRun) {
     btnMediaBackupRun.hidden = !media.can_run;
@@ -459,9 +468,9 @@ async function runMediaBackup() {
   try {
     const res = await fetch(ENDPOINTS.backupMediaRun, { method: "POST" });
     const data = await res.json();
-    showToast(data.success ? "Media backup started" : "Not started", data.message || "", data.success ? "☁️" : "⚠️");
+    showToast(data.success ? "Media backup started" : "Not started", data.message || "", data.success ? "success" : "warning");
   } catch (_) {
-    showToast("Not started", "The Control Hub did not answer.", "❌");
+    showToast("Not started", "The Control Hub did not answer.", "danger");
   } finally {
     setTimeout(fetchBackupStatus, 2000);
   }
@@ -492,8 +501,15 @@ function syncLogPolling(isSyncing) {
 export async function fetchBackupStatus() {
   try {
     const res = await fetch(ENDPOINTS.backupStatus);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const data = await res.json();
+
+    state.backupSnapshot = data;
+    const isInstalled = data.installed !== false;
+    state.modules.backups = isInstalled;
+    const navBackups = $("nav-item-backups");
+    if (navBackups) navBackups.hidden = !isInstalled;
+    if (typeof onModuleVisibilityChange === "function") onModuleVisibilityChange("backups", isInstalled);
 
     const health = data.health || null;
     const status = health ? health.state : (data.status || "unknown");
@@ -520,40 +536,42 @@ export async function fetchBackupStatus() {
     if (backupDbSize) backupDbSize.textContent = data.db_size || "Unknown";
     if (backupRemoteMirror) backupRemoteMirror.textContent = data.gdrive_remote || "Not configured";
     if (backupStatusMsg) {
-      // The health box already states the outcome; this line only narrates a run in progress.
       backupStatusMsg.textContent = isSyncing ? (data.message || "Backup running...") : "";
       backupStatusMsg.hidden = !isSyncing;
     }
 
     if (backupModalSubPath) {
-      const logPart = data.log_file || "Unknown";
-      const remotePart = data.gdrive_remote || "Not configured";
-      backupModalSubPath.textContent = `Log: ${logPart} • Remote: ${remotePart}`;
+      backupModalSubPath.textContent = `Log: ${data.log_file || "Unknown"} · Remote: ${data.gdrive_remote || "Not configured"}`;
     }
     if (libraryModalSubPath) {
-      const memDir = data.memories_dir || "Unknown";
-      const remotePart = data.gdrive_remote || "Not configured";
-      libraryModalSubPath.textContent = `Local: ${memDir} • Remote: ${remotePart}`;
+      libraryModalSubPath.textContent = `Local: ${data.memories_dir || "Unknown"} · Remote: ${data.gdrive_remote || "Not configured"}`;
     }
 
-    // Summary Strip (honest values only)
     if (libValDisk) {
       libValDisk.textContent = data.disk_size || "Unknown";
       libValDisk.title = data.disk_reason || "";
     }
+    if (libPartialWarning) {
+      if (data.disk_partial) {
+        libPartialWarning.textContent = `Partial photo size scan: ${data.disk_reason || "some directories require homelab-storage-sizes.timer (root)"}.`;
+        libPartialWarning.hidden = false;
+      } else {
+        libPartialWarning.hidden = true;
+      }
+    }
     if (libValGdrive) {
       if (typeof data.gdrive_used_gb === "number" && typeof data.gdrive_total_gb === "number") {
-        libValGdrive.innerHTML = `${data.gdrive_used_gb} GB <span class="text-dim">/ ${formatTb(data.gdrive_total_gb)}</span>`;
+        libValGdrive.innerHTML = `${data.gdrive_used_gb} GB <span class="text-muted">/ ${formatTb(data.gdrive_total_gb)}</span>`;
         libValGdrive.title = "";
       } else {
         libValGdrive.textContent = "Unknown";
-        libValGdrive.title = data.gdrive_reason || "Drive quota unavailable";
+        libValGdrive.title = data.gdrive_reason || "Remote quota unavailable";
       }
     }
     if (libValAssets) {
       if (typeof data.total_assets === "number") {
-        const photosTxt = typeof data.photos_count === "number" ? ` (${(data.photos_count / 1000).toFixed(1)}k photos)` : "";
-        libValAssets.innerHTML = `${Number(data.total_assets).toLocaleString()}<span class="text-dim">${photosTxt}</span>`;
+        const photosTxt = typeof data.photos_count === "number" ? ` (${(data.photos_count / 1000).toFixed(1)}k)` : "";
+        libValAssets.innerHTML = `${Number(data.total_assets).toLocaleString()}<span class="text-muted">${photosTxt}</span>`;
         libValAssets.title = "";
       } else {
         libValAssets.textContent = "Unknown";
@@ -562,8 +580,8 @@ export async function fetchBackupStatus() {
     }
     if (libValFaces) {
       if (typeof data.assets_with_named_faces === "number") {
-        const peopleTxt = typeof data.named_people === "number" ? ` (${data.named_people} people)` : "";
-        libValFaces.innerHTML = `${Number(data.assets_with_named_faces).toLocaleString()}<span class="text-dim">${peopleTxt}</span>`;
+        const peopleTxt = typeof data.named_people === "number" ? ` (${data.named_people})` : "";
+        libValFaces.innerHTML = `${Number(data.assets_with_named_faces).toLocaleString()}<span class="text-muted">${peopleTxt}</span>`;
         libValFaces.title = "";
       } else {
         libValFaces.textContent = "Unknown";
@@ -574,8 +592,8 @@ export async function fetchBackupStatus() {
     setCardSummary(
       "backup-section",
       health && health.last_good
-        ? `Backup: ${(BADGES[status] || BADGES.unknown)[1].toLowerCase()} · last good ${health.age}${data.db_size ? `, ${data.db_size}` : ""}`
-        : `Backup: ${(health && health.message) || data.reason || "No run yet"}`
+        ? `${(BADGES[status] || BADGES.unknown)[1]} · last good ${health.age}${data.db_size ? `, ${data.db_size}` : ""}`
+        : `${(health && health.message) || data.reason || "No run yet"}`
     );
 
     if (modalSyncDot) {
@@ -590,15 +608,15 @@ export async function fetchBackupStatus() {
       if (nowTs - state.lastSyncCompletionToastTime > 300000) {
         state.lastSyncCompletionToastTime = nowTs;
         state.userInitiatedSync = false;
-        showToast(
-          "Backup finished",
-          `Photo backup verified (${(health && health.last_good) || data.last_sync || "just now"}).`,
-          "☁️"
-        );
+        showToast("Backup finished", `Photo backup verified (${(health && health.last_good) || data.last_sync || "just now"}).`, "success");
       }
     }
+
+    renderOverview();
+    return true;
   } catch (err) {
     console.error("Error fetching backup status:", err);
+    return false;
   }
 }
 
@@ -609,16 +627,16 @@ export async function triggerBackupSync() {
   try {
     const res = await fetch(ENDPOINTS.backupSync, { method: "POST" });
     const data = await res.json();
-    if (data.success) {
-      showToast("Backup started", "Pre-flight checks first, then face tags, database dump and photo mirror.", "☁️");
+    if (res.ok && data.success) {
+      showToast("Backup started", "Pre-flight checks first, then face tags, database dump and photo mirror.", "info");
       await fetchBackupStatus();
       openBackupLogModal(btnViewBackupLog);
     } else {
-      showToast("Sync Busy", data.message || "Backup is already executing...", "⚠️");
+      showToast("Backup Notice", data.message || "Backup is already executing or not installed.", "warning");
       await fetchBackupStatus();
     }
   } catch (_) {
-    showToast("Error", "Could not trigger backup", "❌");
+    showToast("Error", "Could not trigger backup", "danger");
     updateSyncUiState(false);
   }
 }
@@ -675,7 +693,7 @@ export async function fetchLibraryStats(force = false) {
     } else {
       if (modalLibGdriveUsed) modalLibGdriveUsed.textContent = "Unknown";
       if (modalLibGdriveFree) modalLibGdriveFree.textContent = "Unknown";
-      if (modalLibGdrivePct) modalLibGdrivePct.textContent = data.gdrive_reason || "Drive quota unavailable";
+      if (modalLibGdrivePct) modalLibGdrivePct.textContent = data.gdrive_reason || "Remote quota unavailable";
       if (modalLibGdriveBar) modalLibGdriveBar.style.width = "0%";
     }
 
@@ -703,10 +721,10 @@ export async function fetchLibraryStats(force = false) {
     } else {
       const reason = data.assets_reason || "Database unavailable";
       [modalLibTotalAssets, modalLibPhotos, modalLibVideos, modalLibNamedPeople, modalLibUnhiddenPeople, modalLibNamedAssets, modalLibFaceInstances]
-        .forEach((el) => {
-          if (el) {
-            el.textContent = "Unknown";
-            el.title = reason;
+        .forEach((node) => {
+          if (node) {
+            node.textContent = "Unknown";
+            node.title = reason;
           }
         });
     }
@@ -718,11 +736,11 @@ export async function fetchLibraryStats(force = false) {
 export function setupBackupSync() {
   registerModal(backupLogModal, { closeButtons: [backupModalClose, backupModalDismiss] });
   registerModal(immichLibraryModal, { closeButtons: [immichModalClose, immichModalDismiss] });
+  registerModal(remoteModal, { closeButtons: [$("remote-modal-close"), $("remote-cancel")] });
 
   if (btnSyncCard) btnSyncCard.addEventListener("click", triggerBackupSync);
   if (btnMediaBackupRun) btnMediaBackupRun.addEventListener("click", runMediaBackup);
   if (btnRestoreTestRun) btnRestoreTestRun.addEventListener("click", runRestoreTest);
-  registerModal(remoteModal, { closeButtons: [$("remote-modal-close"), $("remote-cancel")] });
   if (btnChangeRemote) btnChangeRemote.addEventListener("click", openRemoteModal);
   if (remoteTestBtn) remoteTestBtn.addEventListener("click", testRemote);
   if (remoteSave) remoteSave.addEventListener("click", saveRemote);
@@ -730,7 +748,7 @@ export function setupBackupSync() {
   if (remoteFolder) remoteFolder.addEventListener("input", onRemoteInput);
   if (btnModalTriggerSync) btnModalTriggerSync.addEventListener("click", triggerBackupSync);
   if (btnViewBackupLog) btnViewBackupLog.addEventListener("click", () => openBackupLogModal(btnViewBackupLog));
-  if (backupModalRefresh) backupModalRefresh.addEventListener("click", refreshBackupLog);
+  if (backupModalRefresh) backupModalRefresh.addEventListener("click", () => refreshBackupLog(false));
 
   if (btnOpenLibraryDetails) btnOpenLibraryDetails.addEventListener("click", () => openImmichLibraryModal(btnOpenLibraryDetails));
   if (immichModalRefresh) immichModalRefresh.addEventListener("click", () => fetchLibraryStats(true));

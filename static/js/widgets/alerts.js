@@ -1,14 +1,15 @@
 /**
- * Widget: Alerts (Phase 2B)
- * Header button with the number of open alerts, and a dialog to set up channels
- * (ntfy, Telegram, Discord, email), rules, quiet hours, and to read recent alerts.
- * Secrets come back from the server as "********" and are only sent when changed.
+ * Widget: Alerts
+ * Always-visible header Alerts bell showing open firing count even when no
+ * external delivery channel is enabled, global Attention Strip banner, and
+ * full channel/rule/quiet-hours configuration modal.
  */
 
 import { $ } from "../shared/dom.js";
 import { ENDPOINTS } from "../config.js";
 import { openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
+import { state } from "../state.js";
 
 const CHANNELS = {
   ntfy: {
@@ -87,21 +88,44 @@ function randomTopic() {
 function renderBadge(data) {
   const btn = $("btn-open-alerts");
   const badge = $("alerts-count");
-  if (!btn || !badge) return;
-  const open = (data.firing || []).length;
-  if (!data.any_channel) {
-    badge.textContent = "off";
-    badge.className = "alerts-count is-off";
-    badge.hidden = false;
-    btn.setAttribute("aria-label", "Alerts: no channel set up yet");
-  } else if (open) {
-    badge.textContent = String(open);
-    badge.className = "alerts-count is-open";
-    badge.hidden = false;
-    btn.setAttribute("aria-label", `Alerts: ${open} open`);
-  } else {
-    badge.hidden = true;
-    btn.setAttribute("aria-label", "Alerts: nothing open");
+  const banner = $("alerts-firing-banner");
+  const bannerTitle = $("alerts-banner-title");
+  const bannerDetail = $("alerts-banner-detail");
+  const firing = data.firing || [];
+  const open = firing.length;
+
+  // Always show firing alert count even when no external channel is turned on!
+  if (btn && badge) {
+    if (open > 0) {
+      badge.textContent = String(open);
+      badge.className = "alerts-count is-open";
+      badge.hidden = false;
+      btn.setAttribute("aria-label", `Alerts: ${open} open`);
+    } else if (!data.any_channel) {
+      badge.textContent = "off";
+      badge.className = "alerts-count is-off";
+      badge.hidden = false;
+      btn.setAttribute("aria-label", "Alerts: no channel set up yet");
+    } else {
+      badge.hidden = true;
+      btn.setAttribute("aria-label", "Alerts: nothing open");
+    }
+  }
+
+  if (banner) {
+    if (open > 0) {
+      const hasCrit = firing.some((f) => f.severity === "critical");
+      banner.className = `notice-banner ${hasCrit ? "notice-danger" : "notice-warning"}`;
+      if (bannerTitle) bannerTitle.textContent = `${open} active alert${open === 1 ? "" : "s"} need attention`;
+      if (bannerDetail) {
+        const preview = firing.slice(0, 2).map((f) => f.title).join(" · ");
+        const extra = open > 2 ? ` (+${open - 2} more)` : "";
+        bannerDetail.textContent = `${preview}${extra}`;
+      }
+      banner.hidden = false;
+    } else {
+      banner.hidden = true;
+    }
   }
 }
 
@@ -117,7 +141,7 @@ function renderFiring(data) {
   firing.forEach((f) => {
     const li = el("li", { className: `alerts-item sev-${f.severity}` });
     const top = el("div", { className: "alerts-item-top" });
-    top.append(el("span", { className: "alerts-sev" }, SEVERITY_TEXT[f.severity] || f.severity), el("strong", {}, f.title));
+    top.append(el("span", { className: `alerts-sev sev-${f.severity}` }, SEVERITY_TEXT[f.severity] || f.severity), el("strong", {}, f.title));
     li.append(top, el("div", { className: "alerts-item-msg" }, f.message), el("div", { className: "alerts-item-when" }, `Since ${f.since}`));
     list.append(li);
   });
@@ -136,7 +160,7 @@ function renderHistory(data) {
     const li = el("li", { className: `alerts-item sev-${h.resolved ? "resolved" : h.severity}` });
     const when = (h.at || "").replace("T", " ").slice(0, 16);
     const top = el("div", { className: "alerts-item-top" });
-    top.append(el("span", { className: "alerts-item-when" }, when), el("strong", {}, h.title));
+    top.append(el("span", { className: "alerts-item-when font-mono" }, when), el("strong", {}, h.title));
     li.append(top);
     if (h.queued) li.append(el("div", { className: "alerts-item-when" }, "Held for the morning digest (quiet hours)"));
     if (h.unsent) li.append(el("div", { className: "alerts-item-when" }, "Not sent: no channel was on (sent when one is turned on, if still open)"));
@@ -185,7 +209,7 @@ function renderChannels(data) {
       input.value = cfg[f.key] ?? "";
       if (f.generate) {
         const row = el("div", { className: "alerts-input-row" });
-        const gen = el("button", { type: "button", className: "btn-tile-logs" }, "New topic");
+        const gen = el("button", { type: "button", className: "btn-secondary" }, "New topic");
         gen.addEventListener("click", () => {
           input.value = randomTopic();
           input.focus();
@@ -199,7 +223,7 @@ function renderChannels(data) {
     });
 
     const actions = el("div", { className: "alerts-channel-actions" });
-    const test = el("button", { type: "button", className: "btn-tile-logs", "data-test": name }, "Send test");
+    const test = el("button", { type: "button", className: "btn-secondary", "data-test": name }, "Send test");
     const status = el("span", { className: "alerts-channel-status", "aria-live": "polite" }, channelStatusText(name, data));
     test.addEventListener("click", () => sendTest(name, status, test));
     actions.append(test, status);
@@ -269,6 +293,7 @@ function renderSchedule(data) {
 
 function renderAll(data) {
   current = data;
+  state.alertsSnapshot = data;
   renderBadge(data);
   renderFiring(data);
   renderChannels(data);
@@ -343,13 +368,13 @@ async function save() {
     });
     const data = await res.json();
     if (!res.ok) {
-      showToast("Alerts not saved", data.error || "Check the values.", "⚠️");
+      showToast("Alerts not saved", data.error || "Check the values.", "warning");
       return;
     }
     renderAll(data);
-    showToast("Alerts saved", data.any_channel ? "Rules are checked every minute." : "Turn on a channel to receive alerts.", "🔔");
+    showToast("Alerts saved", data.any_channel ? "Rules are checked every minute." : "Turn on a channel to receive alerts.", "success");
   } catch (_) {
-    showToast("Alerts not saved", "The Control Hub did not answer.", "❌");
+    showToast("Alerts not saved", "The Control Hub did not answer.", "danger");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -363,7 +388,7 @@ async function checkNow() {
     const data = await res.json();
     renderAll(data);
     const n = (data.sent_now || []).length;
-    showToast("Rules checked", n ? `${n} alert(s) sent.` : "Nothing new to send.", "🔔");
+    showToast("Rules checked", n ? `${n} alert(s) sent.` : "Nothing new to send.", "info");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -372,11 +397,11 @@ async function checkNow() {
 export async function fetchAlerts() {
   try {
     const res = await fetch(ENDPOINTS.alerts);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const data = await res.json();
+    state.alertsSnapshot = data;
     const modal = $("alerts-modal");
     if (modal && modal.style.display !== "none" && current) {
-      // Dialog open: refresh the read-only parts, never overwrite what the user is typing.
       current = { ...current, firing: data.firing, history: data.history, channel_status: data.channel_status };
       renderBadge(data);
       renderFiring(data);
@@ -385,25 +410,30 @@ export async function fetchAlerts() {
       current = data;
       renderBadge(data);
     }
+    return true;
   } catch (_) {
-    /* keep the last state */
+    return false;
   }
+}
+
+async function openAlertsDialog(triggerEl = null) {
+  const modal = $("alerts-modal");
+  if (!modal) return;
+  await fetchAlerts();
+  if (current) renderAll(current);
+  openModal(modal, triggerEl);
 }
 
 export function setupAlerts() {
   const modal = $("alerts-modal");
   const openBtn = $("btn-open-alerts");
+  const bannerBtn = $("btn-alerts-banner-open");
   registerModal(modal, { closeButtons: [$("alerts-modal-close"), $("alerts-cancel")] });
-  if (openBtn) {
-    openBtn.addEventListener("click", async () => {
-      await fetchAlerts();
-      if (current) renderAll(current);
-      openModal(modal, openBtn);
-    });
-  }
+  if (openBtn) openBtn.addEventListener("click", () => openAlertsDialog(openBtn));
+  if (bannerBtn) bannerBtn.addEventListener("click", () => openAlertsDialog(bannerBtn));
+
   const saveBtn = $("alerts-save");
   if (saveBtn) saveBtn.addEventListener("click", save);
   const checkBtn = $("alerts-check-now");
   if (checkBtn) checkBtn.addEventListener("click", checkNow);
 }
-

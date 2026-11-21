@@ -1,35 +1,119 @@
 /**
  * Control Hub - Main Entrypoint
- * Wires widgets, collapsible mobile cards, bottom/rail navigation,
- * visibility-aware polling, manual refresh, and touch pull-to-refresh.
+ * 5-view hash router (Overview, Apps, Backups, TVs, System), automatic hiding
+ * of uninstalled modules, truthful connection tracking, visibility-aware polling,
+ * theme redraw hooks, and pull-to-refresh.
  */
 
-import { $, expandCard, setCardCollapsed } from "./shared/dom.js";
+import { $ } from "./shared/dom.js";
 import { state } from "./state.js";
 import { showToast } from "./shared/toast.js";
-import { setupHeader, setMenuOpen } from "./widgets/header.js";
+import {
+  recordPollResult,
+  setMenuOpen,
+  setRetryConnectionHandler,
+  setThemeChangeHandler,
+  setupHeader,
+} from "./widgets/header.js";
 import { fetchSleepStatus, setupSleepGuard } from "./widgets/sleepGuard.js";
-import { fetchSpeedometers, setupNetworkSpeed } from "./widgets/networkSpeed.js";
+import { drawLanSparkline, fetchSpeedometers, setupNetworkSpeed } from "./widgets/networkSpeed.js";
 import { setupCurrentDownloads } from "./widgets/currentDownloads.js";
-import { fetchBackupStatus, setupBackupSync } from "./widgets/backupSync.js";
-import { fetchTvUpdaterStatus, setupTvUpdater } from "./widgets/tvUpdater.js";
+import { fetchBackupStatus, setBackupVisibilityCallback, setupBackupSync } from "./widgets/backupSync.js";
+import { fetchTvUpdaterStatus, setTvVisibilityCallback, setupTvUpdater } from "./widgets/tvUpdater.js";
 import { fetchVitals } from "./widgets/systemVitals.js";
 import { fetchCronTasks, setupCronTasks } from "./widgets/cronTasks.js";
 import { fetchServices, setupServiceMatrix } from "./widgets/serviceMatrix.js";
-import { setupConfigCenter } from "./widgets/configCenter.js";
+import { fetchNetplanStatus, setupConfigCenter } from "./widgets/configCenter.js";
 import { fetchIndexerStatus, setupIndexers } from "./widgets/indexers.js";
 import { fetchAlerts, setupAlerts } from "./widgets/alerts.js";
 
 const FAST_POLL_MS = 2500;
 const MEDIUM_POLL_MS = 15000;
+const VALID_VIEWS = ["overview", "apps", "backups", "tvs", "system"];
 
 let isRefreshing = false;
 
+// ============================================================================
+// 5-View Hash Router
+// ============================================================================
+
+function parseHashView() {
+  const raw = (window.location.hash || "").replace(/^#\/?/, "").split("?")[0].trim().toLowerCase();
+  return VALID_VIEWS.includes(raw) ? raw : "overview";
+}
+
+export function activateView(viewName, updateHash = false) {
+  let target = VALID_VIEWS.includes(viewName) ? viewName : "overview";
+  // Guard against navigating into an uninstalled module view
+  if (target === "backups" && state.modules.backups === false) target = "overview";
+  if (target === "tvs" && state.modules.tvs === false) target = "overview";
+
+  state.activeView = target;
+
+  document.querySelectorAll(".hub-view[data-view]").forEach((el) => {
+    const active = el.getAttribute("data-view") === target;
+    el.hidden = !active;
+    el.classList.toggle("is-active", active);
+  });
+
+  document.querySelectorAll("#hub-nav [data-view-link]").forEach((link) => {
+    const active = link.getAttribute("data-view-link") === target;
+    link.classList.toggle("is-active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+
+  if (updateHash) {
+    const desired = `#/${target}`;
+    if (window.location.hash !== desired) {
+      window.history.replaceState(null, "", desired);
+    }
+  }
+
+  setMenuOpen(false);
+  if (target === "system") {
+    window.requestAnimationFrame(() => drawLanSparkline());
+  }
+}
+
+function handleModuleVisibility(moduleKey, installed) {
+  if (!installed && state.activeView === moduleKey) {
+    activateView("overview", true);
+  }
+}
+
+function setupRouter() {
+  window.addEventListener("hashchange", () => {
+    activateView(parseHashView(), false);
+  });
+
+  document.querySelectorAll("#hub-nav [data-view-link]").forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const target = link.getAttribute("data-view-link") || "overview";
+      if (window.location.hash !== `#/${target}`) {
+        window.location.hash = `#/${target}`;
+      } else {
+        activateView(target, false);
+      }
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  });
+
+  activateView(parseHashView(), false);
+}
+
+// ============================================================================
+// Visibility-Aware Polling & Truthful Connection Tracking
+// ============================================================================
+
 async function pollFastTelemetry() {
-  await Promise.allSettled([
+  const results = await Promise.allSettled([
     fetchSpeedometers(),
     fetchVitals(),
   ]);
+  const anyOk = results.some((r) => r.status === "fulfilled" && r.value === true);
+  recordPollResult(anyOk);
 }
 
 async function pollMediumTelemetry() {
@@ -41,6 +125,7 @@ async function pollMediumTelemetry() {
     fetchServices(),
     fetchIndexerStatus(),
     fetchAlerts(),
+    fetchNetplanStatus(),
   ]);
 }
 
@@ -59,7 +144,7 @@ export async function refreshAll(announce = false) {
       pollMediumTelemetry(),
     ]);
     if (announce) {
-      showToast("Telemetry Refreshed", "Live host metrics synchronized.", "🔄", 2500);
+      showToast("Telemetry Refreshed", "Live host metrics synchronized.", "success", 2400);
     }
   } finally {
     isRefreshing = false;
@@ -100,53 +185,6 @@ function setupVisibilityPolling() {
       refreshAll(false);
       startPolling();
     }
-  });
-}
-
-function setupCollapsibleCards() {
-  const isPhone = window.innerWidth <= 599;
-  document.querySelectorAll('.dashboard-card[data-collapsible="true"]').forEach((card) => {
-    const btn = card.querySelector(".card-collapse-btn");
-    if (!btn) return;
-
-    if (isPhone && card.id !== "sleep-guard-card") {
-      setCardCollapsed(card.id, true);
-    }
-
-    btn.addEventListener("click", () => {
-      const collapsed = card.classList.contains("is-collapsed");
-      setCardCollapsed(card.id, !collapsed);
-    });
-  });
-}
-
-function setupNavigation() {
-  const navLinks = document.querySelectorAll("#hub-nav .hub-nav-item");
-  navLinks.forEach((link) => {
-    link.addEventListener("click", () => {
-      navLinks.forEach((item) => {
-        item.classList.remove("is-active");
-        item.removeAttribute("aria-current");
-      });
-      link.classList.add("is-active");
-      link.setAttribute("aria-current", "location");
-
-      const targetId = link.getAttribute("data-nav-target");
-      if (targetId) {
-        expandCard(targetId);
-        if (targetId === "torrent-downloads-panel") {
-          expandCard("storage-ops-panel");
-        }
-      }
-      setMenuOpen(false);
-    });
-  });
-
-  const menuActions = document.querySelectorAll("#header-actions-menu button, #header-actions-menu a");
-  menuActions.forEach((el) => {
-    el.addEventListener("click", () => {
-      if (window.innerWidth <= 599) setMenuOpen(false);
-    });
   });
 }
 
@@ -211,8 +249,12 @@ function setupPullToRefresh() {
 
 document.addEventListener("DOMContentLoaded", () => {
   setupHeader();
-  setupCollapsibleCards();
-  setupNavigation();
+  setThemeChangeHandler(() => drawLanSparkline());
+  setRetryConnectionHandler(() => refreshAll(true));
+  setBackupVisibilityCallback(handleModuleVisibility);
+  setTvVisibilityCallback(handleModuleVisibility);
+
+  setupRouter();
   setupRefreshControls();
   setupPullToRefresh();
 
