@@ -116,7 +116,7 @@ function renderBadge(data) {
     if (open > 0) {
       const hasCrit = firing.some((f) => f.severity === "critical");
       banner.className = `notice-banner ${hasCrit ? "notice-danger" : "notice-warning"}`;
-      if (bannerTitle) bannerTitle.textContent = `${open} active alert${open === 1 ? "" : "s"} need attention`;
+      if (bannerTitle) bannerTitle.textContent = open === 1 ? "1 active alert needs attention" : `${open} active alerts need attention`;
       if (bannerDetail) {
         const preview = firing.slice(0, 2).map((f) => f.title).join(" · ");
         const extra = open > 2 ? ` (+${open - 2} more)` : "";

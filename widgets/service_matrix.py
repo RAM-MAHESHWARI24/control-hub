@@ -66,7 +66,7 @@ def _list_docker_containers():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=3,
+            timeout=6,
         )
         if proc.returncode != 0:
             return {}, False, (proc.stderr or "Docker daemon unavailable").strip()[:160]

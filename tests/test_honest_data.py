@@ -182,17 +182,17 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
                 payload_text = json.dumps(resp.get_json())
                 self._assert_no_banned_literals(payload_text, ep)
 
-        backup = self.client.get("/api/backup/status", headers=self.headers).get_json()
-        self.assertEqual(backup["status"], "unknown")
-        self.assertIsNone(backup["last_sync"])
-        self.assertIsNone(backup["total_assets"])
-        self.assertIsNone(backup["assets_with_named_faces"])
-        self.assertIsNone(backup["named_people"])
-        self.assertIsNone(backup["gdrive_used_gb"])
+            backup = self.client.get("/api/backup/status", headers=self.headers).get_json()
+            self.assertEqual(backup["status"], "unknown")
+            self.assertIsNone(backup["last_sync"])
+            self.assertIsNone(backup["total_assets"])
+            self.assertIsNone(backup["assets_with_named_faces"])
+            self.assertIsNone(backup["named_people"])
+            self.assertIsNone(backup["gdrive_used_gb"])
 
-        lib = self.client.get("/api/backup/library-stats", headers=self.headers).get_json()
-        self.assertIsNone(lib["assets"])
-        self.assertIsNone(lib["gdrive"])
+            lib = self.client.get("/api/backup/library-stats", headers=self.headers).get_json()
+            self.assertIsNone(lib["assets"])
+            self.assertIsNone(lib["gdrive"])
 
         speed = self.client.get("/api/speedtest/latest", headers=self.headers).get_json()
         self.assertFalse(speed["available"])
@@ -292,14 +292,15 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
         (bak_root / "dump.sql").write_bytes(b"d" * 256)
 
         cache_file = str(self.root / "sizes_cache.json")
-        res = storage_sizes.get_storage_sizes(
-            cache_file=cache_file,
-            media_path=str(data_root),
-            photos_path=str(photos_root),
-            appdata_path=str(appdata_root),
-            backup_path=str(bak_root),
-            blocking=True,
-        )
+        with mock.patch("shutil.which", return_value=None):
+            res = storage_sizes.get_storage_sizes(
+                cache_file=cache_file,
+                media_path=str(data_root),
+                photos_path=str(photos_root),
+                appdata_path=str(appdata_root),
+                backup_path=str(bak_root),
+                blocking=True,
+            )
         self.assertTrue(res["measured"])
         self.assertEqual(res["media_bytes"], 1024)
         self.assertEqual(res["photos_bytes"], 2048)
@@ -446,7 +447,7 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
             return orig_stat(p, **kw)
 
         with mock.patch("os.name", "posix"), \
-             mock.patch("os.path.exists", side_effect=lambda p: str(p) in dev_ids), \
+             mock.patch("os.path.exists", side_effect=lambda p: str(p) in dev_ids or str(p) == str(fake_mounts_file)), \
              mock.patch("os.stat", side_effect=fake_stat), \
              mock.patch("shutil.disk_usage", return_value=Usage()):
             parts = storage_manager.get_disk_partitions(proc_mounts=fake_mounts_file)
