@@ -25,6 +25,9 @@ const mediaBackupBadge = $("media-backup-badge");
 const mediaBackupLine = $("media-backup-line");
 const mediaBackupMsg = $("media-backup-msg");
 const btnMediaBackupRun = $("btn-media-backup-run");
+const restoreTest = $("restore-test");
+const restoreTestText = $("restore-test-text");
+const btnRestoreTestRun = $("btn-restore-test-run");
 const backupLastTime = $("backup-last-time");
 const backupDbSize = $("backup-db-size");
 const backupRemoteMirror = $("backup-remote-mirror");
@@ -270,6 +273,43 @@ function renderHealth(health, data) {
   }
 }
 
+function renderRestoreTest(info, last) {
+  if (!restoreTest) return;
+  const installed = Boolean(info && info.installed);
+  restoreTest.hidden = !installed && !last;
+  if (restoreTest.hidden) return;
+  restoreTest.dataset.state = info && info.running ? "running" : (last ? (last.ok ? "ok" : "fail") : "none");
+  let text;
+  if (info && info.running) {
+    text = "running now (download, restore into a throwaway database, count)...";
+  } else if (last) {
+    text = last.ok
+      ? `passed ${last.when || ""}: ${Number(last.restored).toLocaleString()} photos and videos restored from ${last.dump_file}`
+      : `FAILED ${last.when || ""}: ${last.message}`;
+  } else {
+    text = "not run yet";
+  }
+  if (info && info.next && !(info && info.running)) text += ` · next ${info.next}`;
+  if (restoreTestText) restoreTestText.textContent = text;
+  if (btnRestoreTestRun) {
+    btnRestoreTestRun.hidden = !installed;
+    btnRestoreTestRun.disabled = Boolean(info && info.running);
+  }
+}
+
+async function runRestoreTest() {
+  if (btnRestoreTestRun) btnRestoreTestRun.disabled = true;
+  try {
+    const res = await fetch(ENDPOINTS.backupRestoreTest, { method: "POST" });
+    const data = await res.json();
+    showToast(data.success ? "Restore test started" : "Not started", data.message || "", data.success ? "🧪" : "⚠️");
+  } catch (_) {
+    showToast("Not started", "The Control Hub did not answer.", "❌");
+  } finally {
+    setTimeout(fetchBackupStatus, 2000);
+  }
+}
+
 function renderMediaBackup(media) {
   if (!mediaBackup) return;
   mediaBackup.hidden = !media;
@@ -350,6 +390,7 @@ export async function fetchBackupStatus() {
     renderBackupStepper(stage, isSyncing ? "syncing" : (status === "error" || status === "interrupted" ? "error" : status));
     renderHealth(health, data);
     renderMediaBackup(data.media || null);
+    renderRestoreTest(data.restore || null, (health && health.restore_test) || null);
     syncLogPolling(isSyncing);
 
     if (backupStatusBadge) {
@@ -563,6 +604,7 @@ export function setupBackupSync() {
 
   if (btnSyncCard) btnSyncCard.addEventListener("click", triggerBackupSync);
   if (btnMediaBackupRun) btnMediaBackupRun.addEventListener("click", runMediaBackup);
+  if (btnRestoreTestRun) btnRestoreTestRun.addEventListener("click", runRestoreTest);
   if (btnModalTriggerSync) btnModalTriggerSync.addEventListener("click", triggerBackupSync);
   if (btnViewBackupLog) btnViewBackupLog.addEventListener("click", () => openBackupLogModal(btnViewBackupLog));
   if (backupModalRefresh) backupModalRefresh.addEventListener("click", refreshBackupLog);

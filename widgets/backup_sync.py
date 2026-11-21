@@ -28,6 +28,8 @@ from config import (
     MEDIA_BACKUP_CRON_FILE,
     MEDIA_BACKUP_SCRIPT,
     MEDIA_BACKUP_STATUS_FILE,
+    RESTORE_TEST_UNIT,
+    SYSTEMD_UNIT_DIR,
     STORAGE_SIZES_CACHE_FILE,
     get_host_timezone,
     get_tz_abbr,
@@ -356,6 +358,7 @@ def get_backup_status():
         "schedule": _schedule_text(),
         "health": health,
         "media": media_backup_summary(),
+        "restore": restore_test_info(),
         "gdrive_remote": lib_meta.get("gdrive_remote"),
         "log_file": BACKUP_LOG_FILE,
         "memories_dir": HDD_MEMORIES,
@@ -397,6 +400,38 @@ def media_backup_summary():
     health["archive_size"] = backup_health.human_bytes(size) if size else None
     health["can_run"] = bool(MEDIA_BACKUP_SCRIPT and os.path.isfile(MEDIA_BACKUP_SCRIPT))
     return health
+
+
+def restore_test_info():
+    """Whether the monthly restore test is installed, running, and when it runs next."""
+    if not os.path.isfile(os.path.join(SYSTEMD_UNIT_DIR, f"{RESTORE_TEST_UNIT}.service")):
+        return {"installed": False}
+    info = {"installed": True, "running": False, "next": None}
+    try:
+        res = subprocess.run(["systemctl", "is-active", f"{RESTORE_TEST_UNIT}.service"], capture_output=True, text=True, timeout=2)
+        info["running"] = res.stdout.strip() in ("active", "activating")
+        res = subprocess.run(["systemctl", "show", f"{RESTORE_TEST_UNIT}.timer", "-p", "NextElapseUSecRealtime", "--value"],
+                             capture_output=True, text=True, timeout=2)
+        nxt = res.stdout.strip()
+        info["next"] = nxt if nxt and nxt != "n/a" else None
+    except Exception:
+        pass
+    return info
+
+
+@backup_sync_bp.route("/api/backup/restore-test", methods=["POST"])
+def run_restore_test():
+    """Starts the restore test now (a root systemd service; the dashboard only asks systemd to start it)."""
+    info = restore_test_info()
+    if not info.get("installed"):
+        return jsonify({"success": False, "message": "The restore test is not installed."}), 404
+    if info.get("running"):
+        return jsonify({"success": False, "message": "A restore test is already running."})
+    res = subprocess.run(["sudo", "/usr/bin/systemctl", "start", "--no-block", f"{RESTORE_TEST_UNIT}.service"],
+                         capture_output=True, text=True, timeout=10)
+    if res.returncode != 0:
+        return jsonify({"success": False, "message": (res.stderr or "systemctl failed").strip()[:200]}), 500
+    return jsonify({"success": True, "message": "Restore test started. It takes a few minutes."})
 
 
 @backup_sync_bp.route("/api/backup/media/run", methods=["POST"])

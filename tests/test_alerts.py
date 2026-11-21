@@ -156,6 +156,12 @@ class TestCollectors(unittest.TestCase):
         self.assertEqual([(c.key, c.rule, c.title) for c in media],
                          [("backup_failed:media", "backup_failed", "Media settings backup failed or was interrupted")])
 
+    def test_restore_test(self):
+        self.assertEqual(alerts.collect_restore_test({"restore_test": {"ok": True}}), [])
+        self.assertEqual(alerts.collect_restore_test(None), [])
+        out = alerts.collect_restore_test({"restore_test": {"ok": False, "message": "damaged"}})
+        self.assertEqual([(c.key, c.severity, c.message) for c in out], [("restore_test", "critical", "damaged")])
+
     def test_disks(self):
         gb = 1024**3
         usage = {"/": Usage(100 * gb, 50 * gb, 50 * gb), "/mnt/hdd/data": Usage(100 * gb, 90 * gb, 10 * gb),

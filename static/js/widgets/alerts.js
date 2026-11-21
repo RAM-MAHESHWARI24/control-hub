@@ -59,7 +59,7 @@ const RULE_FIELDS = {
 };
 
 const RULE_ORDER = [
-  "backup_failed", "drive_unreachable", "backup_stale", "disk_critical", "disk_warning",
+  "backup_failed", "drive_unreachable", "restore_test_failed", "backup_stale", "disk_critical", "disk_warning",
   "container_down", "cpu_temp", "tv_update_failed", "signin_failures",
 ];
 

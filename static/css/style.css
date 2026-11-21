@@ -1104,6 +1104,23 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+/* Monthly restore test (inside the backup card) */
+.restore-test {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.restore-test-line {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.restore-test[data-state="fail"] .restore-test-line { color: #fecdd3; }
+.restore-test[data-state="ok"] .restore-test-line strong { color: var(--accent-emerald); }
+
 /* Media app settings backup (inside the backup card) */
 .media-backup {
   border-top: 1px solid var(--border-subtle);
@@ -1171,7 +1188,9 @@ button:disabled {
 .tv-info-panel[hidden],
 .backup-preflight[hidden],
 .media-backup[hidden],
-.media-backup [hidden] {
+.media-backup [hidden],
+.restore-test[hidden],
+.restore-test [hidden] {
   display: none;
 }
 

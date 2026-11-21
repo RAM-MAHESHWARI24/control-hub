@@ -130,6 +130,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             mock.patch.object(tv_updater, "TV_UPDATER_STATE_FILE", ""),
             mock.patch.object(backup_sync, "MEDIA_BACKUP_STATUS_FILE", str(root / "media-backups" / "status.json")),
             mock.patch.object(backup_sync, "MEDIA_BACKUP_CRON_FILE", str(root / "media-backup.cron")),
+            mock.patch.object(backup_sync, "SYSTEMD_UNIT_DIR", str(root / "units")),
             mock.patch.object(alerts_widget.engine, "config_path", root / "alerts.json"),
             mock.patch.object(alerts_widget.engine, "state_path", root / "alerts_state.json"),
         ]
@@ -147,6 +148,8 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             "preflight": {"ok": False, "checks": [
                 {"name": "remote", "ok": False, "detail": "gdrive: did not answer: token expired"}]},
             "retention": {"kept": 17, "delete": ["immich_db_20261001_220001.sql.gz"], "next_delete": ["immich_db_20261108_220001.sql.gz"]},
+            "restore_test": {"ok": True, "message": "Restored", "completed_at": "2026-11-01T11:07:30+05:30",
+                             "dump_file": "immich_db_20261031_220001.sql.gz", "restored": 35765, "expected": 35765},
             "history": [
                 {"started_at": "2026-11-22T22:00:01+05:30", "outcome": "error", "message": "Pre-flight: the remote gdrive: did not answer (token expired).", "duration_s": 8},
                 {"started_at": "2026-11-21T22:00:01+05:30", "outcome": "synced", "dump_file": "immich_db_20261121_220001.sql.gz",
@@ -163,6 +166,9 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             "dump_file": "media_config_20261122_213001.tar.zst", "dump_bytes": 19454318,
             "history": [{"started_at": "2026-11-22T21:30:01+05:30", "outcome": "synced", "duration_s": 8}],
         }), encoding="utf-8")
+
+        (root / "units").mkdir(exist_ok=True)
+        (root / "units" / "photo-restore-test.service").write_text("[Service]\n", encoding="utf-8")
 
         cls.password = "PlaywrightTestPass1!"
         auth_password.set_password(cls.password, path=pw_file)
@@ -382,6 +388,9 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertEqual(page.inner_text("#media-backup-badge"), "Verified")
             self.assertIn("18.6 MB", page.inner_text("#media-backup-line"))
             self.assertFalse(page.is_visible("#btn-media-backup-run"), "no button without the script")
+            self.assertIn("passed 2026-11-01 11:07", page.inner_text("#restore-test-text"))
+            self.assertIn("35,765 photos and videos", page.inner_text("#restore-test-text"))
+            self.assertTrue(page.is_visible("#btn-restore-test-run"))
             self._assert_layout_and_touch_targets(page, 360)
             self._assert_axe_wcag_aa(page, "backup-card@360x800")
             self.assertEqual(page_errors, [])
@@ -398,7 +407,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             modal = page.locator("#alerts-modal")
             modal.wait_for(state="visible", timeout=5000)
             page.wait_for_selector("#alerts-channels fieldset[data-channel='ntfy']")
-            self.assertEqual(page.locator("#alerts-rules [data-rule]").count(), 9)
+            self.assertEqual(page.locator("#alerts-rules [data-rule]").count(), 10)
             page.click("#alerts-channels fieldset[data-channel='ntfy'] button:has-text('New topic')")
             topic = page.input_value("#alerts-ntfy-topic")
             self.assertTrue(topic.startswith("homelab-") and len(topic) >= 20)

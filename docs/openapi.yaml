@@ -268,6 +268,21 @@ paths:
         '200':
           description: Backup execution telemetry
 
+  /api/backup/restore-test:
+    post:
+      summary: Run the photo backup restore test now
+      description: >-
+        Asks systemd to start photo-restore-test.service (through a fixed sudoers entry), which
+        restores the newest remote dump into a throwaway database and records the result in
+        status.json. /api/backup/status reports `restore` ({installed, running, next}) and the last
+        result under `health.restore_test`.
+      tags: [Backup]
+      responses:
+        '200':
+          description: "{success, message}; success is false when a test is already running"
+        '404':
+          description: The restore test is not installed
+
   /api/backup/media/run:
     post:
       summary: Back up the media apps' settings now

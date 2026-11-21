@@ -147,9 +147,22 @@ def summarize(status: Optional[Dict[str, Any]], *, running: bool, now: Optional[
             "next_delete": retention.get("next_delete") or [],
         }
 
+    restore = status.get("restore_test") if isinstance(status.get("restore_test"), dict) else None
+    if restore:
+        restore = {
+            "ok": bool(restore.get("ok")),
+            "message": restore.get("message"),
+            "when": _fmt(_parse(restore.get("completed_at") or restore.get("started_at")), tz_abbr),
+            "dump_file": restore.get("dump_file"),
+            "restored": restore.get("restored"),
+            "expected": restore.get("expected"),
+            "duration_s": restore.get("duration_s"),
+        }
+
     return {
         "state": state,
-        "is_red": state in ("error", "interrupted", "stale") or stale,
+        "is_red": state in ("error", "interrupted", "stale") or stale or bool(restore and not restore["ok"]),
+        "restore_test": restore,
         "stale": stale,
         "stale_after_hours": stale_after_hours,
         "message": message,

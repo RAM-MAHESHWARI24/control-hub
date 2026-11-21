@@ -21,6 +21,7 @@ export const ENDPOINTS = {
   backupSync: "/api/backup/sync",
   backupLog: "/api/backup/log",
   backupMediaRun: "/api/backup/media/run",
+  backupRestoreTest: "/api/backup/restore-test",
   alerts: "/api/alerts",
   alertsConfig: "/api/alerts/config",
   alertsTest: "/api/alerts/test",

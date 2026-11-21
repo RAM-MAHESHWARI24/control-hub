@@ -70,6 +70,9 @@ MEDIA_BACKUP_DIR = os.getenv("MEDIA_BACKUP_DIR", str(STATE_DIR / "media-backups"
 MEDIA_BACKUP_STATUS_FILE = os.getenv("MEDIA_BACKUP_STATUS_FILE", os.path.join(MEDIA_BACKUP_DIR, "status.json"))
 MEDIA_BACKUP_CRON_FILE = os.getenv("MEDIA_BACKUP_CRON_FILE", "/etc/cron.d/media-backup")
 MEDIA_BACKUP_SCRIPT = os.getenv("MEDIA_BACKUP_SCRIPT", "")
+# Monthly restore test of the photo database backup (systemd service + timer of that name).
+RESTORE_TEST_UNIT = os.getenv("RESTORE_TEST_UNIT", "photo-restore-test")
+SYSTEMD_UNIT_DIR = os.getenv("SYSTEMD_UNIT_DIR", "/etc/systemd/system")
 HDD_DATA = os.getenv("HDD_DATA", "/mnt/hdd/data")
 HDD_MEMORIES = os.getenv("HDD_MEMORIES", "/mnt/hdd/Memories")
 GDRIVE_REMOTE = os.getenv("GDRIVE_REMOTE", "")

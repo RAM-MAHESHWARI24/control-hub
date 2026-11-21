@@ -71,6 +71,19 @@ class TestStates(unittest.TestCase):
         self.assertEqual(s["retention"], {"kept": 16, "deleted_last_run": 2, "next_delete": ["c"]})
 
 
+class TestRestoreTest(unittest.TestCase):
+    def test_restore_result_is_formatted_and_a_failure_is_red(self):
+        ok = backup_health.summarize(status(restore_test={"ok": True, "completed_at": "2026-12-06T11:07:30+05:30",
+                                                          "restored": 35765, "dump_file": "d.sql.gz"}),
+                                     running=False, now=NOW, tz_abbr="IST")
+        self.assertEqual(ok["restore_test"]["when"], "2026-12-06 11:07 IST")
+        self.assertFalse(ok["is_red"])
+        bad = backup_health.summarize(status(restore_test={"ok": False, "message": "gzip test failed"}),
+                                      running=False, now=NOW, tz_abbr="IST")
+        self.assertTrue(bad["is_red"])
+        self.assertIsNone(backup_health.summarize(status(), running=False, now=NOW)["restore_test"])
+
+
 class TestSchedule(unittest.TestCase):
     def test_cron_time_and_next_run(self):
         with tempfile.TemporaryDirectory() as tmp:

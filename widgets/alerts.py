@@ -58,6 +58,7 @@ def collect(engine: alerts.AlertEngine, state: dict) -> list:
             tz_abbr=get_tz_abbr(), stale_after_hours=BACKUP_STALE_HOURS,
         )
         conditions += alerts.collect_backup(status, summary)
+        conditions += alerts.collect_restore_test(status)
 
     media = backup_health.read_status(MEDIA_BACKUP_STATUS_FILE)
     if media is not None:

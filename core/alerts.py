@@ -55,6 +55,7 @@ DEFAULT_CONFIG: Dict = {
         "backup_failed": {"enabled": True},
         "backup_stale": {"enabled": True},
         "drive_unreachable": {"enabled": True},
+        "restore_test_failed": {"enabled": True},
         "disk_warning": {"enabled": True, "percent": 85},
         "disk_critical": {"enabled": True, "percent": 95},
         "container_down": {"enabled": True, "minutes": 5, "ignore": []},
@@ -70,6 +71,7 @@ RULE_INFO = {
     "backup_failed": ("Backup failed or was interrupted (photos, media settings)", "critical"),
     "backup_stale": ("No good backup for more than 26 hours (photos, media settings)", "warning"),
     "drive_unreachable": ("Backup remote not reachable (Drive login expired or remote renamed)", "critical"),
+    "restore_test_failed": ("Photo backup restore test failed", "critical"),
     "disk_warning": ("Disk filling up", "warning"),
     "disk_critical": ("Disk almost full", "critical"),
     "container_down": ("App stopped or unhealthy", "warning"),
@@ -382,6 +384,15 @@ def collect_backup(status: Optional[Dict], summary: Optional[Dict], what: str = 
                              f"{label}: no good run for more than {int(summary.get('stale_after_hours') or 26)} hours",
                              f"Last good run: {summary.get('last_good') or 'never'} ({summary.get('age') or 'unknown'})."))
     return out
+
+
+def collect_restore_test(status: Optional[Dict]) -> List[Condition]:
+    """The last monthly restore test failed: the newest remote dump may not be restorable."""
+    test = (status or {}).get("restore_test")
+    if not isinstance(test, dict) or test.get("ok") is not False:
+        return []
+    title, sev = RULE_INFO["restore_test_failed"]
+    return [Condition("restore_test", "restore_test_failed", sev, title, test.get("message") or "See the restore test log.")]
 
 
 def collect_disks(config: Dict, mounts: List[str], usage=shutil.disk_usage) -> List[Condition]:
