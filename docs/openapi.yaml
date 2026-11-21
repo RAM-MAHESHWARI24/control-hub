@@ -424,6 +424,81 @@ paths:
         '200':
           description: Pending state and seconds left on the revert timer
 
+  /api/alerts:
+    get:
+      summary: Alert settings, open alerts and recent history
+      description: >
+        Channels (ntfy, Telegram, Discord, email; secrets returned as "********"), rules with
+        their thresholds, quiet hours, the daily summary, alerts open now, the last 30 sent or
+        held alerts, each channel's last delivery result and whether quiet hours are on now.
+      tags: [Alerts]
+      responses:
+        '200':
+          description: Alert overview
+
+  /api/alerts/config:
+    put:
+      summary: Save alert channels, rules and quiet hours
+      description: >
+        Partial update. A secret sent back as "********" keeps the stored value. Unknown keys
+        are ignored. Stored 0600 in the Control Hub state directory (ALERTS_CONFIG_FILE).
+      tags: [Alerts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channels: { type: object }
+                rules: { type: object }
+                quiet_hours:
+                  type: object
+                  properties:
+                    enabled: { type: boolean }
+                    start: { type: string, example: "23:00" }
+                    end: { type: string, example: "07:00" }
+                daily_summary:
+                  type: object
+                  properties:
+                    enabled: { type: boolean }
+                    time: { type: string, example: "08:00" }
+      responses:
+        '200':
+          description: Saved; same body as GET /api/alerts
+        '400':
+          description: A value was invalid (for example an ntfy topic shorter than 12 characters)
+
+  /api/alerts/test:
+    post:
+      summary: Send a test message to one channel
+      description: Uses the stored settings with any unsaved values from the request applied on top; nothing is saved.
+      tags: [Alerts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { type: string, enum: [ntfy, telegram, discord, email] }
+                channels: { type: object }
+      responses:
+        '200':
+          description: "{channel, ok, error}"
+        '400':
+          description: Unknown channel or invalid value
+
+  /api/alerts/check:
+    post:
+      summary: Check every rule now
+      description: Runs the same evaluation the background thread runs every minute and returns the overview plus `sent_now`.
+      tags: [Alerts]
+      responses:
+        '200':
+          description: Overview with the alerts sent by this check
+
   /api/indexers/status:
     get:
       summary: Indexer picker state

@@ -64,6 +64,13 @@ def _too_many_failures(ip: str) -> bool:
         return len(q) >= LOGIN_MAX_FAILURES
 
 
+def failure_counts() -> dict:
+    """Failed sign-ins per address within the lockout window (read by alerts)."""
+    now = time.monotonic()
+    with _failures_lock:
+        return {ip: sum(1 for t in q if now - t <= LOGIN_WINDOW_SECONDS) for ip, q in _failures.items() if q}
+
+
 def _record_failure(ip: str) -> None:
     with _failures_lock:
         _failures[ip].append(time.monotonic())

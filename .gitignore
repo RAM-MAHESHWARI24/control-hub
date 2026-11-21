@@ -13,6 +13,8 @@ venv/
 
 # State & Cache files
 speedtest_cache.json
+alerts.json
+alerts_state.json
 *.cache.json
 state.json
 

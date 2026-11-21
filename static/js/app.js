@@ -18,6 +18,7 @@ import { fetchCronTasks, setupCronTasks } from "./widgets/cronTasks.js";
 import { fetchServices, setupServiceMatrix } from "./widgets/serviceMatrix.js";
 import { setupConfigCenter } from "./widgets/configCenter.js";
 import { fetchIndexerStatus, setupIndexers } from "./widgets/indexers.js";
+import { fetchAlerts, setupAlerts } from "./widgets/alerts.js";
 
 const FAST_POLL_MS = 2500;
 const MEDIUM_POLL_MS = 15000;
@@ -39,6 +40,7 @@ async function pollMediumTelemetry() {
     fetchCronTasks(),
     fetchServices(),
     fetchIndexerStatus(),
+    fetchAlerts(),
   ]);
 }
 
@@ -223,6 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupServiceMatrix();
   setupConfigCenter();
   setupIndexers();
+  setupAlerts();
 
   setupVisibilityPolling();
   refreshAll(false);

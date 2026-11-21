@@ -71,6 +71,9 @@ GDRIVE_REMOTE = os.getenv("GDRIVE_REMOTE", "")
 
 SPEEDTEST_CACHE_FILE = os.getenv("SPEEDTEST_CACHE_FILE", str(HUB_CACHE_DIR / "speedtest_cache.json"))
 STORAGE_SIZES_CACHE_FILE = os.getenv("STORAGE_SIZES_CACHE_FILE", str(HUB_CACHE_DIR / "storage_sizes_cache.json"))
+# Alert channels/rules (may hold a bot token or SMTP password: written 0600) and alert state.
+ALERTS_CONFIG_FILE = Path(os.getenv("ALERTS_CONFIG_FILE", str(HUB_CACHE_DIR / "alerts.json")))
+ALERTS_STATE_FILE = Path(os.getenv("ALERTS_STATE_FILE", str(HUB_CACHE_DIR / "alerts_state.json")))
 SPEEDTEST_BIN = os.getenv("SPEEDTEST_BIN", "/usr/local/bin/speedtest")
 RECYCLARR_LOG_FILE = os.getenv("RECYCLARR_LOG_FILE", "/var/log/recyclarr.log")
 IMMICH_ML_LOG_FILE = os.getenv("IMMICH_ML_LOG_FILE", "/var/log/immich-ml.log")

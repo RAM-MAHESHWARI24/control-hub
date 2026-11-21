@@ -24,6 +24,7 @@ from widgets.service_matrix import service_matrix_bp
 from widgets.tv_updater import tv_updater_bp
 from widgets.config_center import config_center_bp
 from widgets.indexers import indexers_bp
+from widgets.alerts import alerts_bp, start_alerts
 
 APP_START_TIME = time.time()
 
@@ -125,6 +126,7 @@ def create_app():
     app.register_blueprint(tv_updater_bp)
     app.register_blueprint(config_center_bp)
     app.register_blueprint(indexers_bp)
+    app.register_blueprint(alerts_bp)
 
     # 5. Catch-all static proxy
     @app.route("/<path:path>")
@@ -146,6 +148,8 @@ if __name__ == "__main__":
 
     # Launch real-time background telemetry sampler
     start_telemetry_sampler()
+    # Alert rules are checked once a minute in a background thread.
+    start_alerts()
 
     print(f"[+] Control Hub listening on http://{HOST}:{PORT}")
     if app.config.get("CONTROL_HUB_TOKEN_GENERATED"):

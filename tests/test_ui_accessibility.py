@@ -40,6 +40,7 @@ import config  # noqa: E402
 from core import storage_sizes  # noqa: E402
 from core.config_core import auth_password  # noqa: E402
 import server  # noqa: E402
+from widgets import alerts as alerts_widget  # noqa: E402
 from widgets import backup_sync, cron_tasks, network_speed, system_vitals, tv_updater  # noqa: E402
 
 try:
@@ -127,6 +128,8 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             mock.patch.object(cron_tasks, "BACKUP_STATUS_FILE", str(root / "backups" / "status.json")),
             mock.patch.object(tv_updater, "TV_UPDATER_PY", ""),
             mock.patch.object(tv_updater, "TV_UPDATER_STATE_FILE", ""),
+            mock.patch.object(alerts_widget.engine, "config_path", root / "alerts.json"),
+            mock.patch.object(alerts_widget.engine, "state_path", root / "alerts_state.json"),
         ]
         for p in cls._patches:
             p.start()
@@ -340,6 +343,32 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertIn("next run deletes immich_db_20261108_220001.sql.gz", page.inner_text("#backup-retention"))
             self._assert_layout_and_touch_targets(page, 360)
             self._assert_axe_wcag_aa(page, "backup-card@360x800")
+            self.assertEqual(page_errors, [])
+        finally:
+            context.close()
+
+    def test_alerts_dialog_phone_layout_keyboard_and_axe(self) -> None:
+        context, page, _, page_errors = self._new_authenticated_page(360, 800)
+        try:
+            self.assertEqual(page.inner_text("#alerts-count"), "off")
+            if not page.is_visible("#btn-open-alerts"):
+                page.click("#btn-header-menu")
+            page.click("#btn-open-alerts")
+            modal = page.locator("#alerts-modal")
+            modal.wait_for(state="visible", timeout=5000)
+            page.wait_for_selector("#alerts-channels fieldset[data-channel='ntfy']")
+            self.assertEqual(page.locator("#alerts-rules [data-rule]").count(), 9)
+            page.click("#alerts-channels fieldset[data-channel='ntfy'] button:has-text('New topic')")
+            topic = page.input_value("#alerts-ntfy-topic")
+            self.assertTrue(topic.startswith("homelab-") and len(topic) >= 20)
+            for _ in range(8):
+                page.keyboard.press("Tab")
+                inside = page.evaluate("() => document.getElementById('alerts-modal').contains(document.activeElement)")
+                self.assertTrue(inside, "Focus escaped the alerts dialog")
+            self._assert_layout_and_touch_targets(page, 360)
+            self._assert_axe_wcag_aa(page, "alerts-modal@360x800")
+            page.keyboard.press("Escape")
+            modal.wait_for(state="hidden", timeout=5000)
             self.assertEqual(page_errors, [])
         finally:
             context.close()

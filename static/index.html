@@ -81,6 +81,11 @@
         <span aria-hidden="true">🤖</span>
         <span>AI Copilot</span>
       </button>
+      <button type="button" id="btn-open-alerts" class="action-pill-btn" aria-label="Alerts">
+        <span aria-hidden="true">🔔</span>
+        <span>Alerts</span>
+        <span class="alerts-count" id="alerts-count" hidden></span>
+      </button>
       <button type="button" id="btn-open-account" class="action-pill-btn" aria-label="Manage sign-in password and session">
         <span aria-hidden="true">👤</span>
         <span>Account</span>
@@ -1084,6 +1089,73 @@
   </div>
 
   <!-- 10. AI Copilot Diagnostics Modal -->
+  <div class="modal-overlay" id="alerts-modal" role="dialog" aria-modal="true" aria-labelledby="alerts-modal-title" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div>
+          <h2 id="alerts-modal-title">Alerts</h2>
+          <p class="modal-sub">Where alerts go, what triggers them, and when to stay quiet.</p>
+        </div>
+        <button type="button" class="modal-close" id="alerts-modal-close" aria-label="Close alerts">&times;</button>
+      </div>
+      <div class="modal-body alerts-body">
+        <section aria-labelledby="alerts-open-title">
+          <h3 class="alerts-section-title" id="alerts-open-title">Open now</h3>
+          <ul class="alerts-list" id="alerts-firing"></ul>
+        </section>
+
+        <section aria-labelledby="alerts-channels-title">
+          <h3 class="alerts-section-title" id="alerts-channels-title">Channels</h3>
+          <div class="alerts-channels" id="alerts-channels"></div>
+        </section>
+
+        <section aria-labelledby="alerts-rules-title">
+          <h3 class="alerts-section-title" id="alerts-rules-title">Rules</h3>
+          <div class="alerts-rules" id="alerts-rules"></div>
+        </section>
+
+        <section aria-labelledby="alerts-quiet-title">
+          <h3 class="alerts-section-title" id="alerts-quiet-title">Quiet hours</h3>
+          <div class="form-check-row">
+            <input type="checkbox" id="alerts-quiet-enabled" />
+            <label for="alerts-quiet-enabled">Hold non-critical alerts overnight and send them as one message when quiet hours end</label>
+          </div>
+          <div class="form-row-two">
+            <div class="form-field">
+              <label for="alerts-quiet-start">From</label>
+              <input type="time" id="alerts-quiet-start" class="form-input" />
+            </div>
+            <div class="form-field">
+              <label for="alerts-quiet-end">Until</label>
+              <input type="time" id="alerts-quiet-end" class="form-input" />
+            </div>
+          </div>
+          <div class="form-check-row">
+            <input type="checkbox" id="alerts-summary-enabled" />
+            <label for="alerts-summary-enabled">Also send a daily summary</label>
+          </div>
+          <div class="form-field">
+            <label for="alerts-summary-time">Summary time</label>
+            <input type="time" id="alerts-summary-time" class="form-input" />
+          </div>
+        </section>
+
+        <section aria-labelledby="alerts-history-title">
+          <h3 class="alerts-section-title" id="alerts-history-title">Recent</h3>
+          <ol class="alerts-list" id="alerts-history"></ol>
+        </section>
+      </div>
+      <div class="modal-footer">
+        <span class="modal-hint" id="alerts-hint"></span>
+        <div class="modal-footer-btns">
+          <button type="button" class="btn-tile-restart" id="alerts-cancel">Close</button>
+          <button type="button" class="btn-tile-logs" id="alerts-check-now">Check now</button>
+          <button type="button" class="btn-sync-primary" id="alerts-save">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="ai-copilot-modal" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title" style="display: none;">
     <div class="modal-glass modal-wide">
       <div class="modal-header">

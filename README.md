@@ -47,6 +47,12 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 * "Run backup now" starts the same script as the nightly job and shows its log live.
 * Displays master photo and video library storage consumption.
 
+### 4b. 🔔 Alerts (`widgets/alerts.py`, `core/alerts.py`)
+* Sends a message when something needs attention: photo backup failed, interrupted or older than 26 hours; backup remote not reachable (Drive login expired); a disk over 85% or 95%; an app stopped or unhealthy for 5 minutes; CPU above 80 °C for 2 minutes; a TV app update failed; too many failed dashboard sign-ins.
+* Channels: ntfy (phone app, no account; the dashboard can generate a private topic), Telegram, Discord and email (SMTP), each with a **Send test** button.
+* Each alert is sent once, repeated after 24 hours if still open, and followed by "Resolved" when it clears. During quiet hours (default 23:00 to 07:00) only critical alerts go out; the rest arrive as one message when quiet hours end. An optional daily summary goes out at a set time.
+* Rules are checked every minute in one background thread. Settings and state live in `ALERTS_CONFIG_FILE` / `ALERTS_STATE_FILE` (0600, default the Control Hub state directory).
+
 ### 5. 📊 System Vitals & Hardware Gauges (`widgets/system_vitals.py`)
 * Real-time CPU load, memory utilization, swap headroom, and thermal temperatures.
 * **Universal Hardware Detection:** Dynamically probes host CPU model name, thread count, physical RAM, and storage mount headroom without hardcoded hardware assumptions.
@@ -129,6 +135,10 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/storage/ops` | Real-time disk I/O throughput |
 | `GET` | `/api/downloads/status` | Active qBittorrent downloads, speeds, and ETAs |
 | `GET` | `/api/backup/status` | Immich backup and Google Drive sync status |
+| `GET` | `/api/alerts` | Alert channels, rules, open alerts and recent history |
+| `PUT` | `/api/alerts/config` | Save alert channels, rules and quiet hours |
+| `POST` | `/api/alerts/test` | Send a test message to one channel |
+| `POST` | `/api/alerts/check` | Check every alert rule now |
 | `GET` | `/api/services/status` | Health status and container IDs for all services |
 | `GET` | `/api/services/logs/<service>?tail=50` | Direct Docker log stream |
 | `GET` | `/api/tv/status` | Android TV fleet ADB update status |
