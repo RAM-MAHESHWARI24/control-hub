@@ -34,7 +34,7 @@ def wait_for_idle(timeout: float = 5.0) -> None:
         thread.join(timeout=timeout)
 
 
-def _dir_size_bytes(path_str: str, timeout: int = 120) -> tuple[Optional[int], Optional[str]]:
+def _dir_size_bytes(path_str: str, timeout: int = 1800) -> tuple[Optional[int], Optional[str]]:
     """Returns (bytes, error_reason) for `path_str` without raising."""
     if not path_str:
         return None, "Path not configured"

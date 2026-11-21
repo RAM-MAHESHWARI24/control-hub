@@ -57,11 +57,11 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 * Visual inspection of system cron jobs (nightly ML scheduler, daily Recyclarr sync, photo backup, TV auto-updater).
 
 ### 8. 📜 Service Matrix & Container Logs (`widgets/service_matrix.py`)
-* Instant launcher for all running services.
-* Integrated container log streaming via Dozzle using dynamic 12-character hex Docker IDs (`/container/<docker_id>`).
+* Lists only the containers that exist on this host (plus Cockpit when its socket is active), with filter counts built from that list.
+* Restart a container (the service account is in the `docker` group, no sudo) and read its recent logs inline. A Dozzle link appears only when a `dozzle` container exists.
 
 ### 9. 📺 Android TV Fleet Preview (`widgets/tv_updater.py`)
-* Status and sync state of background ADB app updates across living room and bedroom smart TVs.
+* Status and sync state of background ADB app updates for the TVs in the TV auto-updater profile. The online count and the device list come from the same data.
 
 ---
 

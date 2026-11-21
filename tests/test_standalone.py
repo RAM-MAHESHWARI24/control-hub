@@ -51,8 +51,18 @@ class TestControlHubStandalone(unittest.TestCase):
 
     def test_password_sign_in(self):
         """A browser signs in with the password, gets a cookie, can change the password and sign out"""
+        from unittest import mock
+
         from core import auth
-        from core.config_core.auth_password import PASSWORD_FILE, set_password
+        from core.config_core import auth_password
+        from core.config_core.auth_password import set_password
+
+        # Another test module may import auth_password before this file sets
+        # CONTROL_HUB_PASSWORD_FILE, so pin the module-level path explicitly.
+        PASSWORD_FILE = Path(_PW_DIR) / "password"
+        patcher = mock.patch.object(auth_password, "PASSWORD_FILE", PASSWORD_FILE)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
         auth._failures.clear()
         if PASSWORD_FILE.exists():

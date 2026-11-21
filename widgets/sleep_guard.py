@@ -101,7 +101,7 @@ def load_tonight_override():
 
 
 def calculate_seconds_until(target_time_str):
-    """Calculates seconds until the next occurrence of HH:MM in local IST time"""
+    """Calculates seconds until the next occurrence of HH:MM in host local time"""
     parts = target_time_str.split(":")
     target_hour = int(parts[0]) if len(parts) >= 1 else 0
     target_min = int(parts[1]) if len(parts) >= 2 else 0
