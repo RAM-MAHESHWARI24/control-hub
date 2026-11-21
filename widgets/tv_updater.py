@@ -313,6 +313,24 @@ def trigger_single_app_install():
     })
 
 
+@tv_updater_bp.route("/api/tv-updater/devices/<device_id>/nickname", methods=["PUT"])
+def set_tv_nickname(device_id):
+    """Gives a TV a name of the user's choice; an empty name goes back to the detected model."""
+    if not tv_module_installed() or tv_updater is None:
+        return jsonify(NOT_INSTALLED), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        stored = tv_updater.set_nickname(device_id, body.get("nickname", ""))
+    except KeyError:
+        return jsonify({"success": False, "message": f"Unknown TV '{device_id}'."}), 404
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"success": False, "message": f"Could not save the name: {exc}"}), 500
+    telemetry_cache["last_fetched"] = 0
+    return jsonify({"success": True, "device_id": device_id, "nickname": stored})
+
+
 @tv_updater_bp.route("/api/tv-updater/push-incoming", methods=["POST"])
 def trigger_push_incoming():
     """Pushes manual APK drops from incoming_apks/ to all online target TVs."""

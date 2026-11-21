@@ -1104,6 +1104,85 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+/* TV names: nickname button, hover summary, details panel with rename */
+.tv-name-btn {
+  min-height: 44px;
+  padding: 4px 10px;
+  margin-left: -10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-main);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline dotted var(--text-dim);
+  text-underline-offset: 4px;
+}
+
+.tv-name-btn:hover,
+.tv-name-btn[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.tv-info-panel {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  display: grid;
+  gap: 10px;
+}
+
+/* Author display rules beat the hidden attribute; restore it for toggled panels. */
+.tv-info-panel[hidden],
+.backup-preflight[hidden] {
+  display: none;
+}
+
+.tv-info-list {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.tv-info-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+  gap: 8px;
+  font-size: 0.8125rem;
+}
+
+.tv-info-row dt { color: var(--text-dim); }
+.tv-info-row dd { margin: 0; color: var(--text-main); overflow-wrap: anywhere; }
+
+.tv-rename-form {
+  display: grid;
+  gap: 4px;
+}
+
+.tv-rename-form label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tv-rename-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tv-rename-row .form-input { flex: 1 1 auto; min-width: 0; }
+
+.tv-rename-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
 /* Phase 2B: alerts */
 .alerts-count {
   min-width: 22px;

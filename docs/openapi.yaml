@@ -289,11 +289,46 @@ paths:
   /api/tv-updater/status:
     get:
       summary: Android TV Updater Fleet Status
-      description: Returns target Android TV IP, connection state, installed app versions, and available updates.
+      description: >-
+        Returns each TV's address, connection state, installed app versions and available
+        updates. `name` is the user's nickname, else the model the TV reported (for example
+        "Xiaomi MIBOX4"), else the profile name; `model`/`model_label` are null until the TV
+        has been online once. `details` holds manufacturer, model, codename, Android version,
+        the TV's own device name and when it was last seen. Versions of an offline TV come
+        from when it was last seen and say so.
       tags: [Fleet Management]
       responses:
         '200':
           description: TV fleet status
+
+  /api/tv-updater/devices/{device_id}/nickname:
+    put:
+      summary: Give a TV a nickname
+      description: >-
+        Stores a name of the user's choice (at most 40 characters, whitespace collapsed) in
+        nicknames.json in the TV auto-updater's state directory. An empty name removes it, and
+        the dashboard shows the detected model again.
+      tags: [Fleet Management]
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: { type: string, example: living_room_tv }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname: { type: string, maxLength: 40, example: Living room }
+      responses:
+        '200':
+          description: "{success, device_id, nickname}"
+        '400':
+          description: Name too long or contains control characters
+        '404':
+          description: Unknown TV, or the TV module is not installed
 
   /api/config/current:
     get:

@@ -127,8 +127,113 @@ function renderTvStepper(currentStage, status) {
   });
 }
 
+// Detail panels the user opened (kept open across the 15 s re-render).
+const openInfo = new Set();
+
+function deviceSummary(dev) {
+  const d = dev.details || {};
+  const parts = [dev.model_label || "Model not detected yet"];
+  if (d.android) parts.push(`Android ${d.android}`);
+  parts.push(`${dev.ip}:${dev.port}`);
+  parts.push(dev.is_online ? "online" : (d.last_seen ? `last seen ${d.last_seen}` : "not seen yet"));
+  return parts.join(" · ");
+}
+
+function infoRow(label, value) {
+  return value ? `<div class="tv-info-row"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>` : "";
+}
+
+function deviceInfoPanel(dev, scope) {
+  const d = dev.details || {};
+  const key = `${scope}-${dev.id}`;
+  const inputId = `tv-nick-${key}`;
+  const android = d.android ? `${d.android}${d.sdk ? ` (API ${d.sdk})` : ""}` : "";
+  return `
+    <div class="tv-info-panel" id="tv-info-${escapeHtml(key)}" ${openInfo.has(key) ? "" : "hidden"}>
+      <dl class="tv-info-list">
+        ${infoRow("Nickname", dev.nickname || (dev.model_label ? "None (showing the model)" : "None (showing the profile name)"))}
+        ${infoRow("Model", dev.model_label || "Not detected yet: the TV has not been online since this was added")}
+        ${infoRow("Manufacturer", d.manufacturer)}
+        ${infoRow("Codename", d.codename)}
+        ${infoRow("Android", android)}
+        ${infoRow("Name on the TV", d.device_name)}
+        ${infoRow("Address", `${dev.ip}:${dev.port}`)}
+        ${infoRow("Status", dev.is_online ? "Online" : (d.last_seen ? `Offline, last seen ${d.last_seen}` : "Offline, never seen"))}
+        ${infoRow("Profile", dev.profile_name)}
+      </dl>
+      <form class="tv-rename-form" data-device="${escapeHtml(dev.id)}">
+        <label for="${escapeHtml(inputId)}">Nickname</label>
+        <div class="tv-rename-row">
+          <input type="text" id="${escapeHtml(inputId)}" class="form-input" maxlength="40" autocomplete="off"
+                 value="${escapeHtml(dev.nickname || "")}" placeholder="${escapeHtml(dev.model_label || dev.profile_name || "")}" />
+          <button type="submit" class="btn-tile-logs">Save name</button>
+        </div>
+        <p class="tv-rename-hint">Leave it empty to show the model name.</p>
+      </form>
+    </div>`;
+}
+
+function nameButton(dev, scope) {
+  const key = `${scope}-${dev.id}`;
+  return `<button type="button" class="tv-name-btn" data-info-toggle="${escapeHtml(key)}"
+            aria-expanded="${openInfo.has(key)}" aria-controls="tv-info-${escapeHtml(key)}"
+            title="${escapeHtml(deviceSummary(dev))}">${escapeHtml(dev.name)}</button>`;
+}
+
+function isEditingIn(container) {
+  const active = document.activeElement;
+  return Boolean(active && container.contains(active) && active.closest(".tv-rename-form") && active.tagName === "INPUT");
+}
+
+async function saveNickname(form) {
+  const input = form.querySelector("input");
+  const button = form.querySelector("button[type=submit]");
+  const deviceId = form.dataset.device;
+  if (button) button.disabled = true;
+  try {
+    const res = await fetch(`${ENDPOINTS.tvUpdaterDevices}/${encodeURIComponent(deviceId)}/nickname`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname: input ? input.value : "" }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showToast("Name not saved", data.message || "Try again.", "⚠️");
+      return;
+    }
+    showToast("TV renamed", data.nickname ? `Now shown as "${data.nickname}".` : "Showing the model name again.", "📺");
+    if (input) input.blur();
+    await fetchTvUpdaterStatus(true);
+  } catch (_) {
+    showToast("Name not saved", "The Control Hub did not answer.", "❌");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function wireDeviceInfo(container) {
+  container.querySelectorAll("[data-info-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.infoToggle;
+      const panel = document.getElementById(`tv-info-${key}`);
+      const open = !openInfo.has(key);
+      if (open) openInfo.add(key);
+      else openInfo.delete(key);
+      btn.setAttribute("aria-expanded", String(open));
+      if (panel) panel.hidden = !open;
+    });
+  });
+  container.querySelectorAll(".tv-rename-form").forEach((form) => {
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveNickname(form);
+    });
+  });
+}
+
 function renderFleetPreview(devices) {
   if (!tvFleetPreview) return;
+  if (isEditingIn(tvFleetPreview)) return;
   if (!devices || devices.length === 0) {
     tvFleetPreview.innerHTML = `<div class="ops-empty-state">No Android TV devices configured or reachable.</div>`;
     return;
@@ -153,7 +258,7 @@ function renderFleetPreview(devices) {
     return `
       <div class="fleet-item ${isOnline ? "fleet-online" : "fleet-offline"}">
         <div class="fleet-item-top">
-          <span class="fleet-device-name">${escapeHtml(dev.name)}</span>
+          ${nameButton(dev, "card")}
           <span class="fleet-device-ip font-mono">${escapeHtml(dev.ip)}:${escapeHtml(dev.port)}</span>
         </div>
         <div class="fleet-item-bottom">
@@ -162,13 +267,16 @@ function renderFleetPreview(devices) {
           </span>
           <span class="fleet-status-pill ${statusPillClass}">${statusPillText}</span>
         </div>
+        ${deviceInfoPanel(dev, "card")}
       </div>
     `;
   }).join("");
+  wireDeviceInfo(tvFleetPreview);
 }
 
 function renderDeviceCards(devices) {
   if (!tvDevicesContainer) return;
+  if (isEditingIn(tvDevicesContainer)) return;
   if (!devices || devices.length === 0) {
     tvDevicesContainer.innerHTML = `<div class="ops-empty-state">No Android TV devices configured in cluster.</div>`;
     return;
@@ -247,8 +355,8 @@ function renderDeviceCards(devices) {
             </div>
             <div>
               <div class="tv-device-name-row">
-                <h4>${escapeHtml(dev.name)}</h4>
-                <span class="tv-model-pill">${escapeHtml(dev.model || "ANDROID")}</span>
+                <h4>${nameButton(dev, "modal")}</h4>
+                <span class="tv-model-pill">${escapeHtml(dev.model_label || "Model unknown")}</span>
                 <span class="tv-ip-badge font-mono">${escapeHtml(dev.ip)}:${escapeHtml(dev.port)}</span>
               </div>
               <div class="tv-device-status-sub">
@@ -262,6 +370,8 @@ function renderDeviceCards(devices) {
             </button>
           </div>
         </div>
+
+        ${deviceInfoPanel(dev, "modal")}
 
         <div class="tv-session-strip">
           <div class="session-left">
@@ -294,6 +404,7 @@ function renderDeviceCards(devices) {
   }).join("");
 
   tvDevicesContainer.innerHTML = html;
+  wireDeviceInfo(tvDevicesContainer);
 
   tvDevicesContainer.querySelectorAll(".btn-app-deploy").forEach((btn) => {
     btn.addEventListener("click", () => {

@@ -143,6 +143,7 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/services/status` | Health status and container IDs for all services |
 | `GET` | `/api/services/logs/<service>?tail=50` | Direct Docker log stream |
 | `GET` | `/api/tv/status` | Android TV fleet ADB update status |
+| `PUT` | `/api/tv-updater/devices/<id>/nickname` | Give a TV a nickname (empty shows the detected model) |
 
 ### Power Management Endpoints
 
