@@ -4,7 +4,7 @@
  * and emergency pause/resume all control.
  */
 
-import { $ } from "../shared/dom.js";
+import { $, setCardSummary } from "../shared/dom.js";
 import { state } from "../state.js";
 import { ENDPOINTS } from "../config.js";
 import { escapeHtml } from "../shared/formatters.js";
@@ -19,9 +19,16 @@ const torrentBtnLabel = $("torrent-btn-label");
 export function renderTorrents(tq = {}) {
   const dlSum = tq.collective_dl_mbs !== undefined ? tq.collective_dl_mbs : 0.0;
   const upSum = tq.collective_up_mbs !== undefined ? tq.collective_up_mbs : 0.0;
+  const activeCount = Array.isArray(tq.items) ? tq.items.length : 0;
 
   if (torrentTotalDl) torrentTotalDl.textContent = dlSum.toFixed(2);
   if (torrentTotalUp) torrentTotalUp.textContent = upSum.toFixed(2);
+  setCardSummary(
+    "torrent-downloads-panel",
+    activeCount > 0
+      ? `Downloads: ${activeCount} active (↓ ${dlSum.toFixed(2)} MB/s)`
+      : "Downloads: Idle"
+  );
 
   if (!torrentDownloadsList) return;
 

@@ -1,10 +1,10 @@
 /**
  * Widget: Network & Transfer Speeds
- * Real-time WAN (Broadband Fiber) & LAN (Ethernet) transfer speeds, unit conversion,
- * 60-second canvas sparkline rendering, and Ookla Speedtest line benchmark.
+ * Real-time WAN & LAN transfer speeds, unit conversion, 60-second sparkline
+ * rendering, and Ookla Speedtest benchmark. Shows honest states when untested.
  */
 
-import { $ } from "../shared/dom.js";
+import { $, setCardSummary } from "../shared/dom.js";
 import { state } from "../state.js";
 import { ENDPOINTS } from "../config.js";
 import { showToast } from "../shared/toast.js";
@@ -52,6 +52,8 @@ const lanScale2 = $("lan-scale-2");
 const lanScale3 = $("lan-scale-3");
 const lanScale4 = $("lan-scale-4");
 
+let hasMeasuredSpeedtest = false;
+
 export function drawSparkline(canvas, historyData, strokeColor, fillStart, fillEnd, maxVal = 12.5) {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
@@ -62,9 +64,8 @@ export function drawSparkline(canvas, historyData, strokeColor, fillStart, fillE
   if (!historyData || historyData.length < 2) return;
 
   const ceiling = Math.max(maxVal, ...historyData, 0.1);
-  const stepX = w / 59; // 60 data points
+  const stepX = w / 59;
 
-  // Gradient Fill Area
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, fillStart);
   grad.addColorStop(1, fillEnd);
@@ -72,23 +73,16 @@ export function drawSparkline(canvas, historyData, strokeColor, fillStart, fillE
   ctx.beginPath();
   const startIdx = 60 - historyData.length;
   ctx.moveTo(startIdx * stepX, h);
-
   historyData.forEach((val, i) => {
     const x = (startIdx + i) * stepX;
     const y = h - (Math.min(val, ceiling) / ceiling) * (h - 6) - 3;
-    if (i === 0) {
-      ctx.lineTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
-    }
+    ctx.lineTo(x, y);
   });
-
   ctx.lineTo((startIdx + historyData.length - 1) * stepX, h);
   ctx.closePath();
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Stroke Line
   ctx.beginPath();
   historyData.forEach((val, i) => {
     const x = (startIdx + i) * stepX;
@@ -98,29 +92,20 @@ export function drawSparkline(canvas, historyData, strokeColor, fillStart, fillE
   });
   ctx.strokeStyle = strokeColor;
   ctx.lineWidth = 1.8;
-  ctx.shadowColor = strokeColor;
-  ctx.shadowBlur = 6;
   ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // Active Head Pulse Dot
-  const lastX = (startIdx + historyData.length - 1) * stepX;
-  const lastY = h - (Math.min(historyData[historyData.length - 1], ceiling) / ceiling) * (h - 6) - 3;
-  ctx.beginPath();
-  ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.shadowColor = strokeColor;
-  ctx.shadowBlur = 8;
-  ctx.fill();
-  ctx.shadowBlur = 0;
 }
 
 export function setUnit(unit) {
   state.currentUnit = unit;
-  if (btnUnitMbs) btnUnitMbs.classList.toggle("active", unit === "mbs");
-  if (btnUnitMbps) btnUnitMbps.classList.toggle("active", unit === "mbps");
+  if (btnUnitMbs) {
+    btnUnitMbs.classList.toggle("active", unit === "mbs");
+    btnUnitMbs.setAttribute("aria-pressed", unit === "mbs" ? "true" : "false");
+  }
+  if (btnUnitMbps) {
+    btnUnitMbps.classList.toggle("active", unit === "mbps");
+    btnUnitMbps.setAttribute("aria-pressed", unit === "mbps" ? "true" : "false");
+  }
 
-  // Scale labels
   if (unit === "mbs") {
     if (wanScale0) wanScale0.textContent = "0";
     if (wanScale1) wanScale1.textContent = "3M";
@@ -151,22 +136,28 @@ export function setUnit(unit) {
 }
 
 export function renderSpeedReadouts() {
-  const isMbps = (state.currentUnit === "mbps");
+  const isMbps = state.currentUnit === "mbps";
   const multiplier = isMbps ? 8.0 : 1.0;
   const unitStr = isMbps ? "Mbps" : "MB/s";
 
   if (wanUnitLabel) wanUnitLabel.textContent = unitStr;
   if (lanUnitLabel) lanUnitLabel.textContent = unitStr;
 
-  const wanDisplay = (state.lastWanDlMbs * multiplier).toFixed(1);
-  const wanDlDisplay = (state.lastWanDlMbs * multiplier).toFixed(1);
-  const wanUpDisplay = (state.lastWanUpMbs * multiplier).toFixed(1);
-  const wanPeakDisplay = (state.wanPeakMbs * multiplier).toFixed(1);
-
-  if (wanTotalMbps) wanTotalMbps.textContent = wanDisplay;
-  if (wanDlVal) wanDlVal.textContent = `${wanDlDisplay} ${unitStr}`;
-  if (wanUpVal) wanUpVal.textContent = `${wanUpDisplay} ${unitStr}`;
-  if (wanPeakVal) wanPeakVal.textContent = `${wanPeakDisplay} ${unitStr}`;
+  const hasWanRate = hasMeasuredSpeedtest || state.lastWanDlMbs > 0 || state.lastWanUpMbs > 0;
+  if (hasWanRate) {
+    const wanDlDisplay = (state.lastWanDlMbs * multiplier).toFixed(1);
+    const wanUpDisplay = (state.lastWanUpMbs * multiplier).toFixed(1);
+    const wanPeakDisplay = (state.wanPeakMbs * multiplier).toFixed(1);
+    if (wanTotalMbps) wanTotalMbps.textContent = wanDlDisplay;
+    if (wanDlVal) wanDlVal.textContent = `${wanDlDisplay} ${unitStr}`;
+    if (wanUpVal) wanUpVal.textContent = `${wanUpDisplay} ${unitStr}`;
+    if (wanPeakVal) wanPeakVal.textContent = `${wanPeakDisplay} ${unitStr}`;
+  } else {
+    if (wanTotalMbps) wanTotalMbps.textContent = "--";
+    if (wanDlVal) wanDlVal.textContent = "Not tested";
+    if (wanUpVal) wanUpVal.textContent = "Not tested";
+    if (wanPeakVal) wanPeakVal.textContent = "--";
+  }
 
   const lanDisplay = (state.lastLanTotalMbs * multiplier).toFixed(2);
   const lanRxDisplay = (state.lastLanRxMbs * multiplier).toFixed(2);
@@ -177,43 +168,59 @@ export function renderSpeedReadouts() {
   if (lanRxVal) lanRxVal.textContent = `${lanRxDisplay} ${unitStr}`;
   if (lanTxVal) lanTxVal.textContent = `${lanTxDisplay} ${unitStr}`;
   if (lanPeakVal) lanPeakVal.textContent = `${lanPeakDisplay} ${unitStr}`;
+
+  setCardSummary(
+    "speedometers",
+    `Network: WAN ${hasWanRate ? `${(state.lastWanDlMbs * multiplier).toFixed(1)} ${unitStr}` : "untested"} · LAN ${lanDisplay} ${unitStr}`
+  );
 }
 
 export async function fetchSpeedometers() {
   try {
     const res = await fetch(ENDPOINTS.networkSpeed);
+    if (!res.ok) return;
     const data = await res.json();
 
-    // 1. WAN Internet
     const inet = data.internet || {};
     const sp = data.speedtest || {};
+    hasMeasuredSpeedtest = Boolean(sp.available && typeof sp.download_mbs === "number");
 
-    let dlMbs = inet.dl_mbs !== undefined ? inet.dl_mbs : 0.0;
-    let upMbs = inet.up_mbs !== undefined ? inet.up_mbs : 0.0;
-    if (dlMbs === 0 && sp.download_mbs) dlMbs = sp.download_mbs;
-    if (upMbs === 0 && sp.upload_mbs) upMbs = sp.upload_mbs;
+    let dlMbs = typeof inet.dl_mbs === "number" ? inet.dl_mbs : 0.0;
+    let upMbs = typeof inet.up_mbs === "number" ? inet.up_mbs : 0.0;
+    if (dlMbs === 0 && typeof sp.download_mbs === "number") dlMbs = sp.download_mbs;
+    if (upMbs === 0 && typeof sp.upload_mbs === "number") upMbs = sp.upload_mbs;
 
     state.lastWanDlMbs = dlMbs;
     state.lastWanUpMbs = upMbs;
     if (dlMbs > state.wanPeakMbs) state.wanPeakMbs = dlMbs;
 
-    state.wanHistory.push(dlMbs);
-    if (state.wanHistory.length > 60) state.wanHistory.shift();
-    drawSparkline(wanSparklineCanvas, state.wanHistory, "#00f2fe", "rgba(0, 242, 254, 0.35)", "rgba(0, 242, 254, 0.0)", 12.5);
-
-    const isp = sp.isp || "Excitel";
-    const ping = sp.ping_ms || 2.7;
-    if (internetIspName) internetIspName.textContent = `${isp} (${ping}ms)`;
-    if (wanTestedTime) {
-      const timeStr = sp.tested_at ? ` • ${sp.tested_at}` : "";
-      wanTestedTime.textContent = `${isp} Line Benchmark${timeStr}`;
+    if (hasMeasuredSpeedtest || dlMbs > 0) {
+      state.wanHistory.push(dlMbs);
+      if (state.wanHistory.length > 60) state.wanHistory.shift();
+      drawSparkline(wanSparklineCanvas, state.wanHistory, "#00f2fe", "rgba(0, 242, 254, 0.35)", "rgba(0, 242, 254, 0.0)", 12.5);
     }
 
-    // 2. LAN Interface
+    if (internetIspName) {
+      if (sp.available && sp.isp) {
+        const pingTxt = typeof sp.ping_ms === "number" ? ` (${sp.ping_ms} ms)` : "";
+        internetIspName.textContent = `${sp.isp}${pingTxt}`;
+      } else {
+        internetIspName.textContent = "Not tested yet";
+      }
+    }
+    if (wanTestedTime) {
+      if (sp.available && sp.isp) {
+        const timeStr = sp.tested_at ? ` • ${sp.tested_at}` : "";
+        wanTestedTime.textContent = `${sp.isp} Line Benchmark${timeStr}`;
+      } else {
+        wanTestedTime.textContent = sp.reason || "Run speedtest to measure line";
+      }
+    }
+
     const net = data.network || {};
-    const totalLanMbs = net.total_mbs !== undefined ? net.total_mbs : 0.0;
-    const rxMbs = net.rx_mbs !== undefined ? net.rx_mbs : 0.0;
-    const txMbs = net.tx_mbs !== undefined ? net.tx_mbs : 0.0;
+    const totalLanMbs = typeof net.total_mbs === "number" ? net.total_mbs : 0.0;
+    const rxMbs = typeof net.rx_mbs === "number" ? net.rx_mbs : 0.0;
+    const txMbs = typeof net.tx_mbs === "number" ? net.tx_mbs : 0.0;
 
     state.lastLanTotalMbs = totalLanMbs;
     state.lastLanRxMbs = rxMbs;
@@ -224,8 +231,8 @@ export async function fetchSpeedometers() {
     if (state.lanHistory.length > 60) state.lanHistory.shift();
     drawSparkline(lanSparklineCanvas, state.lanHistory, "#00f5a0", "rgba(0, 245, 160, 0.35)", "rgba(0, 245, 160, 0.0)", 12.5);
 
-    if (net.interface && lanNicName) lanNicName.textContent = net.interface;
-    if (net.spec_text && lanNicSpec) lanNicSpec.textContent = net.spec_text;
+    if (lanNicName) lanNicName.textContent = net.interface || "Unknown";
+    if (lanNicSpec) lanNicSpec.textContent = net.spec_text || "Link unknown";
     if (net.link_speed_mbps && lanTotalSub) {
       const linkLabel = net.link_speed_mbps >= 1000 ? `${(net.link_speed_mbps / 1000).toFixed(0)} Gbps` : `${net.link_speed_mbps} Mbps`;
       lanTotalSub.textContent = `Ethernet Traffic • ${linkLabel} ${(net.duplex || "Full").toUpperCase() === "FULL" ? "Full Duplex" : "Half Duplex"}`;
@@ -233,22 +240,13 @@ export async function fetchSpeedometers() {
 
     renderSpeedReadouts();
 
-    // Pass data along to child widgets
     if (data.torrents_queue) renderTorrents(data.torrents_queue);
     if (data.storage_ops) renderStorageOps(data.storage_ops);
 
-    // Speedtest running state
-    if (sp.is_testing) {
-      if (btnRunSpeedtest) btnRunSpeedtest.disabled = true;
-      if (speedtestSpinner) speedtestSpinner.style.display = "inline-block";
-      if (speedtestIcon) speedtestIcon.style.display = "none";
-      if (speedtestBtnLabel) speedtestBtnLabel.textContent = "Benchmarking Line...";
-    } else {
-      if (btnRunSpeedtest) btnRunSpeedtest.disabled = false;
-      if (speedtestSpinner) speedtestSpinner.style.display = "none";
-      if (speedtestIcon) speedtestIcon.style.display = "inline-block";
-      if (speedtestBtnLabel) speedtestBtnLabel.textContent = "Refresh Internet Speed";
-    }
+    if (btnRunSpeedtest) btnRunSpeedtest.disabled = Boolean(sp.is_testing);
+    if (speedtestSpinner) speedtestSpinner.style.display = sp.is_testing ? "inline-block" : "none";
+    if (speedtestIcon) speedtestIcon.style.display = sp.is_testing ? "none" : "inline-block";
+    if (speedtestBtnLabel) speedtestBtnLabel.textContent = sp.is_testing ? "Benchmarking..." : "Run Speedtest";
   } catch (err) {
     console.error("Error fetching speedometers:", err);
   }
@@ -265,8 +263,7 @@ export async function triggerSpeedtest() {
     const res = await fetch(ENDPOINTS.speedtestRun, { method: "POST" });
     const data = await res.json();
     if (data.success) {
-      showToast("Speedtest Started", "Running official Ookla benchmark in background...", "🚀");
-      // Poll faster for results
+      showToast("Speedtest Started", "Running Ookla benchmark in background...", "🚀");
       let attempts = 0;
       const pollId = setInterval(async () => {
         attempts++;
@@ -275,22 +272,25 @@ export async function triggerSpeedtest() {
         if (!sData.is_testing || attempts >= 25) {
           clearInterval(pollId);
           await fetchSpeedometers();
-          showToast(
-            "Speedtest Complete",
-            `↓ ${sData.download_mbps || 0} Mbps | ↑ ${sData.upload_mbps || 0} Mbps (${sData.ping_ms || 0}ms)`,
-            "⚡"
-          );
+          if (sData.available) {
+            showToast(
+              "Speedtest Complete",
+              `↓ ${sData.download_mbps} Mbps | ↑ ${sData.upload_mbps} Mbps (${sData.ping_ms}ms)`,
+              "⚡"
+            );
+          }
         }
       }, 2500);
     } else {
       showToast("Speedtest Busy", data.message || "Speedtest already in progress", "⚠️");
+      await fetchSpeedometers();
     }
-  } catch (err) {
+  } catch (_) {
     showToast("Error", "Could not trigger speedtest benchmark", "❌");
     btnRunSpeedtest.disabled = false;
     if (speedtestSpinner) speedtestSpinner.style.display = "none";
     if (speedtestIcon) speedtestIcon.style.display = "inline-block";
-    if (speedtestBtnLabel) speedtestBtnLabel.textContent = "Refresh Internet Speed";
+    if (speedtestBtnLabel) speedtestBtnLabel.textContent = "Run Speedtest";
   }
 }
 
@@ -306,7 +306,7 @@ export function setupNetworkSpeed() {
         setTimeout(() => {
           if (lanRefreshSpinner) lanRefreshSpinner.style.display = "none";
           if (lanRefreshIcon) lanRefreshIcon.style.display = "inline-block";
-        }, 600);
+        }, 500);
       });
     });
   }

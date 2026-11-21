@@ -13,8 +13,12 @@ import subprocess
 from flask import Blueprint, jsonify, request
 
 from config import (
-    SUSPEND_SKIP_FILE, SUSPEND_OVERRIDE_FILE,
-    SUSPEND_CONFIG_FILE, SUSPEND_CRON_FILE
+    SUSPEND_CONFIG_FILE,
+    SUSPEND_CRON_FILE,
+    SUSPEND_OVERRIDE_FILE,
+    SUSPEND_SKIP_FILE,
+    get_host_timezone,
+    get_tz_abbr,
 )
 
 sleep_guard_bp = Blueprint("sleep_guard", __name__)
@@ -77,7 +81,7 @@ def save_permanent_config(conf):
         cron_line = f"# DISABLED: {cron_line}"
 
     content = (
-        "# ServerFF Suspend to RAM (S3) schedule managed by Control Hub\n"
+        "# Suspend to RAM (S3) schedule managed by Control Hub\n"
         f"{cron_line}"
     )
     write_privileged_text(SUSPEND_CRON_FILE, content)
@@ -153,16 +157,19 @@ def get_sleep_status():
     window_left_pct = round((start_mins / 1440.0) * 100.0, 1)
     window_width_pct = round((dur_mins / 1440.0) * 100.0, 1)
 
+    tz_abbr = get_tz_abbr()
     return jsonify({
         "skip_active": skip_active,
         "state_mode": state_mode,
         "state_label": state_label,
-        "effective_sleep_time": f"{effective_sleep} IST",
-        "effective_wake_time": f"{effective_wake} IST",
+        "effective_sleep_time": f"{effective_sleep} {tz_abbr}",
+        "effective_wake_time": f"{effective_wake} {tz_abbr}",
         "effective_duration_hours": effective_dur_hours,
         "seconds_until_sleep": seconds_until_sleep,
-        "sleep_time": f"{effective_sleep} IST",
-        "wake_time": f"{effective_wake} IST",
+        "sleep_time": f"{effective_sleep} {tz_abbr}",
+        "wake_time": f"{effective_wake} {tz_abbr}",
+        "timezone": get_host_timezone(),
+        "tz_abbr": tz_abbr,
         "window_left_pct": window_left_pct,
         "window_width_pct": window_width_pct,
         "permanent_config": permanent,
@@ -286,7 +293,7 @@ def shift_tonight():
 
         return jsonify({
             "success": True,
-            "message": f"Tonight's sleep shifted to {target_sleep_str} IST (wakes at {target_wake_str} IST).",
+            "message": f"Tonight's sleep shifted to {target_sleep_str} {get_tz_abbr()} (wakes at {target_wake_str} {get_tz_abbr()}).",
             "override": override_payload
         })
     except Exception as e:

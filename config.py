@@ -1,9 +1,11 @@
 """
-Control Hub - Centralized Configuration Template
-Copy this file to config.py or set environment variables in a .env file.
+Control Hub - Centralized Configuration
+Reads values from process environment, ./.env, or /etc/homelab/control-hub.env.
 """
 
+import datetime
 import os
+import tempfile
 from pathlib import Path
 
 # Directory Anchors
@@ -31,6 +33,22 @@ for _candidate in (BASE_DIR / ".env", Path(os.getenv("HOMELAB_ETC_DIR", "/etc/ho
     if _candidate.exists():
         _load_env_file(_candidate)
 
+STATE_DIR = Path(os.getenv("HOMELAB_STATE_DIR", "/var/lib/homelab"))
+APPDATA_DIR = os.getenv("HOMELAB_APPDATA_DIR", "/srv/homelab/appdata")
+
+
+def _default_hub_cache_dir() -> Path:
+    """Returns a writable directory for Control Hub runtime caches."""
+    hub_state = STATE_DIR / "control-hub"
+    if "HOMELAB_STATE_DIR" in os.environ or (hub_state.is_dir() and os.access(hub_state, os.W_OK)):
+        return hub_state
+    if os.access(BASE_DIR, os.W_OK):
+        return BASE_DIR
+    return Path(tempfile.gettempdir()) / "control-hub"
+
+
+HUB_CACHE_DIR = _default_hub_cache_dir()
+
 # Server Binding
 HOST = os.getenv("CONTROL_HUB_HOST", "0.0.0.0")
 PORT = int(os.getenv("CONTROL_HUB_PORT", 7575))
@@ -40,9 +58,16 @@ SUSPEND_SKIP_FILE = os.getenv("SUSPEND_SKIP_FILE", "/run/server-suspend.skip")
 SUSPEND_OVERRIDE_FILE = os.getenv("SUSPEND_OVERRIDE_FILE", "/run/server-suspend.override")
 SUSPEND_CONFIG_FILE = os.getenv("SUSPEND_CONFIG_FILE", "/etc/server-suspend.conf")
 SUSPEND_CRON_FILE = os.getenv("SUSPEND_CRON_FILE", "/etc/cron.d/server-suspend")
-BACKUP_LOG_FILE = os.getenv("BACKUP_LOG_FILE", "/var/backups/immich/backup.log")
-BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/immich")
-SPEEDTEST_CACHE_FILE = os.getenv("SPEEDTEST_CACHE_FILE", str(BASE_DIR / "speedtest_cache.json"))
+
+BACKUP_DIR = os.getenv("BACKUP_DIR", str(STATE_DIR / "photo-backups"))
+BACKUP_LOG_FILE = os.getenv("BACKUP_LOG_FILE", os.path.join(BACKUP_DIR, "backup.log"))
+BACKUP_STATUS_FILE = os.getenv("BACKUP_STATUS_FILE", os.path.join(BACKUP_DIR, "status.json"))
+HDD_DATA = os.getenv("HDD_DATA", "/mnt/hdd/data")
+HDD_MEMORIES = os.getenv("HDD_MEMORIES", "/mnt/hdd/Memories")
+GDRIVE_REMOTE = os.getenv("GDRIVE_REMOTE", "")
+
+SPEEDTEST_CACHE_FILE = os.getenv("SPEEDTEST_CACHE_FILE", str(HUB_CACHE_DIR / "speedtest_cache.json"))
+STORAGE_SIZES_CACHE_FILE = os.getenv("STORAGE_SIZES_CACHE_FILE", str(HUB_CACHE_DIR / "storage_sizes_cache.json"))
 SPEEDTEST_BIN = os.getenv("SPEEDTEST_BIN", "/usr/local/bin/speedtest")
 RECYCLARR_LOG_FILE = os.getenv("RECYCLARR_LOG_FILE", "/var/log/recyclarr.log")
 IMMICH_ML_LOG_FILE = os.getenv("IMMICH_ML_LOG_FILE", "/var/log/immich-ml.log")
@@ -73,16 +98,55 @@ QBITTORRENT_PASS = os.getenv("QBITTORRENT_PASS", "")
 PROWLARR_URL = os.getenv("PROWLARR_URL", "http://127.0.0.1:9696")
 PROWLARR_KEY_FILE = os.getenv("PROWLARR_KEY_FILE", str(Path(os.getenv("HOMELAB_ETC_DIR", "/etc/homelab")) / "prowlarr.key"))
 
+
+def get_host_timezone() -> str:
+    """Returns the configured host IANA timezone name or local tzname."""
+    tz = (os.getenv("TZ") or os.getenv("TIMEZONE") or "").strip()
+    if tz:
+        return tz
+    tz_file = Path("/etc/timezone")
+    if tz_file.exists():
+        try:
+            val = tz_file.read_text(encoding="utf-8").strip()
+            if val:
+                return val
+        except OSError:
+            pass
+    localtime = Path("/etc/localtime")
+    if localtime.is_symlink():
+        try:
+            target = os.readlink(str(localtime))
+            if "zoneinfo/" in target:
+                return target.split("zoneinfo/", 1)[1]
+        except OSError:
+            pass
+    return datetime.datetime.now().astimezone().tzname() or "UTC"
+
+
+def get_tz_abbr() -> str:
+    """Returns the short local timezone label (e.g., UTC, CET, IST)."""
+    tz_env = (os.getenv("TZ") or "").strip()
+    if tz_env and "/" not in tz_env and len(tz_env) <= 6:
+        return tz_env
+    try:
+        abbr = datetime.datetime.now().astimezone().tzname()
+        if abbr:
+            return abbr
+    except Exception:
+        pass
+    return get_host_timezone()
+
+
 # Services Catalog for Service Matrix
 SERVICES_CATALOG = {
     "jellyfin": {"name": "Jellyfin", "port": 8096, "desc": "Media Streaming Server", "icon": "film", "category": "media"},
     "seerr": {"name": "Seerr", "port": 5055, "desc": "Media Discovery & Requests", "icon": "search", "category": "media"},
-    "immich_server": {"name": "Immich", "port": 2283, "desc": "Photo & Video Cloud", "icon": "image", "category": "media"},
+    "immich_server": {"name": "Immich", "port": 2283, "desc": "Photo & Video Cloud", "icon": "image", "category": "media", "optional": True},
     "sonarr": {"name": "Sonarr", "port": 8989, "desc": "TV Series Automation", "icon": "tv", "category": "ingest"},
     "radarr": {"name": "Radarr", "port": 7878, "desc": "Movie Automation", "icon": "video", "category": "ingest"},
     "prowlarr": {"name": "Prowlarr", "port": 9696, "desc": "Indexer Proxy & Scrapers", "icon": "rss", "category": "ingest"},
     "bazarr": {"name": "Bazarr", "port": 6767, "desc": "Subtitles Manager", "icon": "file-text", "category": "ingest"},
     "qbittorrent": {"name": "qBittorrent", "port": 8080, "desc": "BitTorrent Downloader", "icon": "download", "category": "system"},
-    "dozzle": {"name": "Dozzle", "port": 8888, "desc": "Live Docker Log Streamer", "icon": "terminal", "category": "system"},
-    "byparr": {"name": "Byparr", "port": 8191, "desc": "Cloudflare Challenge Solver", "icon": "shield", "category": "system"}
+    "dozzle": {"name": "Dozzle", "port": 8888, "desc": "Live Docker Log Streamer", "icon": "terminal", "category": "system", "optional": True},
+    "byparr": {"name": "Byparr", "port": 8191, "desc": "Cloudflare Challenge Solver", "icon": "shield", "category": "system", "optional": True},
 }

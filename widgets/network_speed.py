@@ -3,15 +3,17 @@ Widget: Network & Transfer Speeds
 Provides endpoints for real-time WAN/LAN bandwidth streaming and Ookla Speedtest line benchmark.
 """
 
-import os
-import time
-import json
 import datetime
-import threading
+import json
+import os
 import subprocess
+import threading
+import time
+from pathlib import Path
+
 from flask import Blueprint, jsonify
 
-from config import SPEEDTEST_CACHE_FILE, SPEEDTEST_BIN
+from config import SPEEDTEST_BIN, SPEEDTEST_CACHE_FILE, get_tz_abbr
 from core.telemetry_sampler import telemetry_lock, telemetry_state
 
 network_speed_bp = Blueprint("network_speed", __name__)
@@ -19,32 +21,34 @@ network_speed_bp = Blueprint("network_speed", __name__)
 speedtest_running_lock = threading.Lock()
 is_speedtesting = False
 
+
 def format_relative_time(ts):
-    """Formats timestamp into dynamic relative label (e.g. Today at ..., Yesterday at ..., Oct 18 at ...)"""
+    """Formats timestamp into dynamic relative label."""
     if not ts:
-        return "Recent"
+        return "Unknown"
     try:
         test_dt = datetime.datetime.fromtimestamp(ts)
         now_dt = datetime.datetime.now()
-        time_str = test_dt.strftime("%I:%M %p IST")
+        time_str = test_dt.strftime(f"%H:%M {get_tz_abbr()}")
         days = (now_dt.date() - test_dt.date()).days
         if days == 0:
             return f"Today at {time_str}"
-        elif days == 1:
+        if days == 1:
             return f"Yesterday at {time_str}"
-        elif days < 7:
+        if days < 7:
             return f"{test_dt.strftime('%A')} at {time_str}"
-        else:
-            return f"{test_dt.strftime('%b %d')} at {time_str}"
+        return f"{test_dt.strftime('%b %d')} at {time_str}"
     except Exception:
-        return "Recent"
+        return "Unknown"
+
 
 def load_speedtest_cache():
-    """Loads previous speedtest results from cache with dynamic relative timestamps"""
+    """Loads previous speedtest results from cache; never invents fake ISP/speed values."""
     if os.path.exists(SPEEDTEST_CACHE_FILE):
         try:
-            with open(SPEEDTEST_CACHE_FILE, "r") as f:
+            with open(SPEEDTEST_CACHE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                data["available"] = True
                 data["is_testing"] = is_speedtesting
                 if "timestamp" in data:
                     data["tested_at"] = format_relative_time(data["timestamp"])
@@ -52,20 +56,23 @@ def load_speedtest_cache():
         except Exception:
             pass
     return {
+        "available": False,
         "is_testing": is_speedtesting,
-        "download_mbps": 94.1,
-        "upload_mbps": 94.0,
-        "download_mbs": 11.2,
-        "upload_mbs": 11.2,
-        "ping_ms": 2.7,
-        "isp": "Excitel",
-        "server": "ADN Broadband (Delhi)",
-        "tested_at": "Recent",
-        "timestamp": int(time.time())
+        "download_mbps": None,
+        "upload_mbps": None,
+        "download_mbs": None,
+        "upload_mbs": None,
+        "ping_ms": None,
+        "isp": None,
+        "server": None,
+        "tested_at": "Not tested yet",
+        "reason": "Run a speedtest to measure broadband throughput",
+        "timestamp": None,
     }
 
+
 def run_speedtest_thread():
-    """Executes official Ookla speedtest CLI binary and caches JSON results"""
+    """Executes official Ookla speedtest CLI binary and caches JSON results atomically."""
     global is_speedtesting
     with speedtest_running_lock:
         is_speedtesting = True
@@ -89,8 +96,9 @@ def run_speedtest_thread():
                     srv_loc = res.get("server", {}).get("location", "")
                     res_url = res.get("result", {}).get("url", "")
 
-                    now_str = datetime.datetime.now().strftime("%I:%M %p IST")
+                    now_str = datetime.datetime.now().strftime(f"%H:%M {get_tz_abbr()}")
                     cached = {
+                        "available": True,
                         "is_testing": False,
                         "download_mbps": round((dl_bytes * 8) / 1_000_000.0, 1),
                         "upload_mbps": round((up_bytes * 8) / 1_000_000.0, 1),
@@ -101,10 +109,13 @@ def run_speedtest_thread():
                         "server": f"{srv_name} ({srv_loc})".strip(),
                         "result_url": res_url,
                         "tested_at": f"Today at {now_str}",
-                        "timestamp": int(time.time())
+                        "timestamp": int(time.time()),
                     }
-                    with open(SPEEDTEST_CACHE_FILE, "w") as f:
-                        json.dump(cached, f, indent=2)
+                    cache_path = Path(SPEEDTEST_CACHE_FILE)
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = cache_path.with_name(cache_path.name + ".tmp")
+                    tmp.write_text(json.dumps(cached, indent=2) + "\n", encoding="utf-8")
+                    os.replace(tmp, cache_path)
         except Exception:
             pass
         finally:
@@ -113,7 +124,7 @@ def run_speedtest_thread():
 
 @network_speed_bp.route("/api/network/speed", methods=["GET"])
 def get_network_speed():
-    """Returns Dual Speedometer telemetry: 1) Internet Speed & Benchmark and 2) Network Speed"""
+    """Returns Dual Speedometer telemetry: 1) Internet Speed & Benchmark and 2) Network Speed."""
     speedtest_info = load_speedtest_cache()
     with telemetry_lock:
         return jsonify({
@@ -121,20 +132,19 @@ def get_network_speed():
             "network": telemetry_state["network"],
             "speedtest": speedtest_info,
             "torrents_queue": telemetry_state["torrents_queue"],
-            "storage_ops": telemetry_state["storage_ops"]
+            "storage_ops": telemetry_state["storage_ops"],
         })
 
 
 @network_speed_bp.route("/api/speedtest/latest", methods=["GET"])
 def get_speedtest_latest():
-    """Returns the latest speedtest result and running state"""
+    """Returns the latest speedtest result and running state."""
     return jsonify(load_speedtest_cache())
 
 
 @network_speed_bp.route("/api/speedtest/run", methods=["POST"])
 def trigger_speedtest():
-    """Triggers an asynchronous Ookla speedtest benchmark"""
-    global is_speedtesting
+    """Triggers an asynchronous Ookla speedtest benchmark."""
     if is_speedtesting:
         return jsonify({"success": False, "message": "Speedtest is already in progress..."})
 

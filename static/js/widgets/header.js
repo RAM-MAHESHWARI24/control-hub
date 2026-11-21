@@ -1,5 +1,5 @@
 /**
- * Widget: Header (Cyber-HUD, Clock, Kiosk Mode)
+ * Widget: Header (Clock, Uptime, Kiosk Mode, Responsive Menu & Status Strip)
  */
 
 import { $ } from "../shared/dom.js";
@@ -10,13 +10,30 @@ const systemUptime = $("system-uptime");
 const btnKioskToggle = $("btn-kiosk-toggle");
 const sleepCountdown = $("sleep-countdown");
 const sleepCurrentNeedle = $("sleep-current-needle");
+const btnHeaderMenu = $("btn-header-menu");
+const headerActionsMenu = $("header-actions-menu");
+const btnStatusStripToggle = $("btn-status-strip-toggle");
+const hudChipsStrip = $("hud-chips-strip");
+
+function formatLocalClockParts() {
+  const now = new Date();
+  const tz = state.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  try {
+    const timeStr = now.toLocaleTimeString("en-GB", { hour12: false, timeZone: tz });
+    const tzName = state.tzAbbr || (now.toLocaleTimeString("en-US", { timeZone: tz, timeZoneName: "short" }).split(" ").pop() || tz);
+    return { timeStr, tzName };
+  } catch (_) {
+    return {
+      timeStr: now.toLocaleTimeString("en-GB", { hour12: false }),
+      tzName: state.tzAbbr || "Local",
+    };
+  }
+}
 
 export function updateClock() {
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString("en-GB", { hour12: false, timeZone: "Asia/Kolkata" });
-  if (liveClock) liveClock.textContent = `${timeStr} IST`;
+  const { timeStr, tzName } = formatLocalClockParts();
+  if (liveClock) liveClock.textContent = `${timeStr} ${tzName}`;
 
-  // Sleep countdown decrement
   if (state.sleepSecondsRemaining > 0 && !state.sleepSkipActive) {
     state.sleepSecondsRemaining--;
     const h = Math.floor(state.sleepSecondsRemaining / 3600);
@@ -27,7 +44,6 @@ export function updateClock() {
     }
   }
 
-  // 24-Hour Timeline needle position (IST minutes from midnight: 0 to 1440)
   try {
     const parts = timeStr.split(":");
     const curHours = parseInt(parts[0], 10);
@@ -37,13 +53,19 @@ export function updateClock() {
     if (sleepCurrentNeedle) {
       sleepCurrentNeedle.style.left = `${needlePct.toFixed(1)}%`;
     }
-  } catch (e) {}
+  } catch (_) { /* ignore */ }
 }
 
 export function setUptime(uptimeText) {
   if (systemUptime && uptimeText) {
     systemUptime.textContent = uptimeText;
   }
+}
+
+export function setMenuOpen(open) {
+  if (!headerActionsMenu || !btnHeaderMenu) return;
+  headerActionsMenu.classList.toggle("is-open", open);
+  btnHeaderMenu.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
 export function setupHeader() {
@@ -53,10 +75,30 @@ export function setupHeader() {
   if (btnKioskToggle) {
     btnKioskToggle.addEventListener("click", () => {
       if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        if (document.exitFullscreen) document.exitFullscreen();
+        document.documentElement.requestFullscreen().catch(() => { });
+      } else if (document.exitFullscreen) {
+        document.exitFullscreen();
       }
+    });
+  }
+
+  if (btnHeaderMenu && headerActionsMenu) {
+    btnHeaderMenu.addEventListener("click", () => {
+      const next = !headerActionsMenu.classList.contains("is-open");
+      setMenuOpen(next);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && headerActionsMenu.classList.contains("is-open")) {
+        setMenuOpen(false);
+        btnHeaderMenu.focus();
+      }
+    });
+  }
+
+  if (btnStatusStripToggle && hudChipsStrip) {
+    btnStatusStripToggle.addEventListener("click", () => {
+      const isOpen = hudChipsStrip.classList.toggle("is-open");
+      btnStatusStripToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     });
   }
 }

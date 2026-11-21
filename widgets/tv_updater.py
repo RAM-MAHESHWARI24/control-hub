@@ -5,18 +5,21 @@ tracks hardware model discovery across dynamic DHCP subnets, inspects foreground
 and provides granular controls including force-update overrides.
 """
 
-import os
-import sys
-import time
 import json
-import threading
+import os
 import subprocess
+import sys
+import threading
+import time
+
 from flask import Blueprint, jsonify, request
 
 from config import (
-    TV_UPDATER_DIR, TV_UPDATER_PY,
-    TV_UPDATER_LOG_FILE, TV_UPDATER_LOCAL_LOG_FILE,
-    TV_UPDATER_STATE_FILE
+    TV_UPDATER_DIR,
+    TV_UPDATER_LOCAL_LOG_FILE,
+    TV_UPDATER_LOG_FILE,
+    TV_UPDATER_PY,
+    TV_UPDATER_STATE_FILE,
 )
 
 # Ensure tv-updater directory is in sys.path for direct python imports
@@ -44,34 +47,36 @@ is_deploying_tv = False
 # Cache telemetry to prevent overwhelming ADB during frequent frontend polling
 telemetry_cache = {
     "data": None,
-    "last_fetched": 0
+    "last_fetched": 0,
 }
 
+
 def get_preferred_log_file():
-    """Returns the most active/recently updated log file path"""
+    """Returns the most active/recently updated log file path."""
     if os.path.exists(TV_UPDATER_LOG_FILE):
         return TV_UPDATER_LOG_FILE
-    if os.path.exists(TV_UPDATER_LOCAL_LOG_FILE):
+    if TV_UPDATER_LOCAL_LOG_FILE and os.path.exists(TV_UPDATER_LOCAL_LOG_FILE):
         return TV_UPDATER_LOCAL_LOG_FILE
     return TV_UPDATER_LOG_FILE
 
+
 def run_tv_deployment_thread(args_list):
-    """Executes tv_updater.py with given arguments in background thread"""
+    """Executes tv_updater.py with given arguments in background thread."""
     global is_deploying_tv
     with tv_deploy_lock:
         is_deploying_tv = True
         try:
             cmd = ["python3", TV_UPDATER_PY] + args_list
-            subprocess.run(cmd, check=False)
+            subprocess.run(cmd, check=False, timeout=600)
         except Exception:
             pass
         finally:
             is_deploying_tv = False
-            # Invalidate telemetry cache so next poll is fresh
             telemetry_cache["last_fetched"] = 0
 
+
 def fetch_telemetry_snapshot(force=False):
-    """Fetches cluster telemetry from tv_updater or cached state"""
+    """Fetches cluster telemetry from tv_updater or cached state without fake defaults."""
     now = time.time()
     if not force and telemetry_cache["data"] and (now - telemetry_cache["last_fetched"] < 4):
         return telemetry_cache["data"]
@@ -79,29 +84,30 @@ def fetch_telemetry_snapshot(force=False):
     if tv_updater:
         try:
             data = tv_updater.get_cluster_telemetry(fast_probe=True)
+            data["available"] = True
             telemetry_cache["data"] = data
             telemetry_cache["last_fetched"] = now
             return data
         except Exception:
             pass
 
-    # Fallback to state.json if direct import threw
     data = {
-        "status": "pending",
+        "available": False,
+        "status": "unknown",
         "all_up_to_date": False,
         "pending_updates_count": 0,
-        "total_devices": 3,
+        "total_devices": 0,
         "online_devices": 0,
         "last_upstream_check": 0,
         "last_upstream_check_str": "Unknown",
         "devices": [],
         "upstream_apps": {},
         "incoming_apks": [],
-        "schedule": "Every 15 min (06:00 - 23:59 IST)"
+        "schedule": "Every 15 min (06:00 - 23:59)",
     }
-    if os.path.exists(TV_UPDATER_STATE_FILE):
+    if TV_UPDATER_STATE_FILE and os.path.exists(TV_UPDATER_STATE_FILE):
         try:
-            with open(TV_UPDATER_STATE_FILE, "r") as f:
+            with open(TV_UPDATER_STATE_FILE, "r", encoding="utf-8") as f:
                 st = json.load(f)
                 data["last_upstream_check"] = st.get("last_upstream_check", 0)
                 data["upstream_apps"] = st.get("upstream_apps", {})
@@ -112,17 +118,15 @@ def fetch_telemetry_snapshot(force=False):
 
 @tv_updater_bp.route("/api/tv-updater/status", methods=["GET"])
 def get_tv_updater_status():
-    """Returns cluster deployment status, active stage, and device telemetry"""
+    """Returns cluster deployment status, active stage, and device telemetry."""
     if not tv_module_installed():
         return jsonify({"installed": False, "status": "not_installed", "status_text": "Not installed"})
     force = request.args.get("refresh", "false").lower() == "true"
     is_deploying = is_deploying_tv
 
-    # Check for external process running (e.g. from cron)
     if not is_deploying:
         try:
             res = subprocess.run(["pgrep", "-f", "tv_updater.py"], stdout=subprocess.PIPE, text=True, timeout=1.2)
-            # Make sure it's not our own command if running
             lines = res.stdout.strip().splitlines()
             if lines and any(int(pid) != os.getpid() for pid in lines if pid.isdigit()):
                 is_deploying = True
@@ -130,19 +134,20 @@ def get_tv_updater_status():
             pass
 
     telemetry = fetch_telemetry_snapshot(force=force)
+    devices = telemetry.get("devices") or []
+    total_devices = len(devices)
+    online_devices = sum(1 for d in devices if d.get("is_online"))
 
-    # Determine 4-stage stepper status:
-    # 1. Upstream Sync | 2. Subnet Discovery | 3. Safety Guard | 4. ADB Silent Push
     stage_labels = {
         1: "1. Upstream Sync",
         2: "2. Subnet Discovery",
         3: "3. Safety Guard",
-        4: "4. ADB Silent Push"
+        4: "4. ADB Silent Push",
     }
 
     log_file = get_preferred_log_file()
-    last_run_msg = "Cluster ready"
-    current_stage = 4
+    last_run_msg = "Cluster ready" if total_devices > 0 else "No TV telemetry available"
+    current_stage = 4 if total_devices > 0 else 0
     is_error = False
 
     if os.path.exists(log_file):
@@ -156,21 +161,21 @@ def get_tv_updater_status():
                     current_stage = 4
                     last_run_msg = line_str.split("[INFO]")[-1].strip()
                     break
-                elif "Installing" in line_str:
+                if "Installing" in line_str:
                     current_stage = 4
                     last_run_msg = line_str.split("[INFO]")[-1].strip()
                     break
-                elif "Skipping installation" in line_str or "Postponing:" in line_str or "Safety" in line_str:
+                if "Skipping installation" in line_str or "Postponing:" in line_str or "Safety" in line_str:
                     current_stage = 3
                     last_run_msg = line_str.split("[INFO]")[-1].strip()
                     break
-                elif "Auto-Discovered" in line_str or "Discovered Online" in line_str:
+                if "Auto-Discovered" in line_str or "Discovered Online" in line_str:
                     current_stage = 2
                     break
-                elif "Initiating Daily Upstream Sync" in line_str or "Downloading from" in line_str:
+                if "Initiating Daily Upstream Sync" in line_str or "Downloading from" in line_str:
                     current_stage = 1
                     break
-                elif "[ERROR]" in line_str or "Failed to install" in line_str:
+                if "[ERROR]" in line_str or "Failed to install" in line_str:
                     is_error = True
                     last_run_msg = line_str.split("[ERROR]")[-1].strip()
         except Exception:
@@ -182,11 +187,14 @@ def get_tv_updater_status():
     elif is_error:
         overall_status = "error"
         status_text = "Install Attention"
+    elif total_devices == 0:
+        overall_status = "unknown"
+        status_text = "No TVs Configured"
     elif telemetry.get("all_up_to_date"):
         overall_status = "synced"
         status_text = "Cluster Up to Date"
         current_stage = 4
-        last_run_msg = f"All target TVs up to date ({telemetry.get('online_devices', 0)}/{telemetry.get('total_devices', 3)} Online)"
+        last_run_msg = f"All target TVs up to date ({online_devices}/{total_devices} Online)"
     else:
         pending_cnt = telemetry.get("pending_updates_count", 0)
         overall_status = "pending"
@@ -194,31 +202,32 @@ def get_tv_updater_status():
 
     return jsonify({
         "installed": True,
+        "available": telemetry.get("available", total_devices > 0),
         "status": overall_status,
         "status_text": status_text,
         "is_deploying": is_deploying,
         "current_stage": current_stage,
-        "current_stage_label": stage_labels.get(current_stage, "Ready"),
-        "all_up_to_date": telemetry.get("all_up_to_date", False),
+        "current_stage_label": stage_labels.get(current_stage, "Not Verified"),
+        "all_up_to_date": bool(total_devices > 0 and telemetry.get("all_up_to_date", False)),
         "pending_updates_count": telemetry.get("pending_updates_count", 0),
-        "total_devices": telemetry.get("total_devices", 3),
-        "online_devices": telemetry.get("online_devices", 0),
+        "total_devices": total_devices,
+        "online_devices": online_devices,
         "last_upstream_check": telemetry.get("last_upstream_check", 0),
         "last_upstream_check_str": telemetry.get("last_upstream_check_str", "Unknown"),
-        "devices": telemetry.get("devices", []),
+        "devices": devices,
         "upstream_apps": telemetry.get("upstream_apps", {}),
         "incoming_apks": telemetry.get("incoming_apks", []),
+        "log_file": log_file,
         "message": last_run_msg,
-        "schedule": "Every 15 min (06:00 - 23:59 IST)"
+        "schedule": "Every 15 min (06:00 - 23:59)",
     })
 
 
 @tv_updater_bp.route("/api/tv-updater/deploy", methods=["POST"])
 def trigger_tv_deployment():
-    """Triggers opportunistic or forced deployment across all target TVs"""
+    """Triggers opportunistic or forced deployment across all target TVs."""
     if not tv_module_installed():
         return jsonify(NOT_INSTALLED), 404
-    global is_deploying_tv
     if is_deploying_tv:
         return jsonify({"success": False, "message": "Deployment is already in progress..."})
 
@@ -242,16 +251,15 @@ def trigger_tv_deployment():
     t.start()
     return jsonify({
         "success": True,
-        "message": "Android TV deployment started in background" + (" (Force mode enabled)" if force_install else ".")
+        "message": "Android TV deployment started in background" + (" (Force mode enabled)" if force_install else "."),
     })
 
 
 @tv_updater_bp.route("/api/tv-updater/sync-upstream", methods=["POST"])
 def trigger_upstream_sync():
-    """Forces an immediate daily upstream check against GitHub and official releases"""
+    """Forces an immediate daily upstream check against GitHub and official releases."""
     if not tv_module_installed():
         return jsonify(NOT_INSTALLED), 404
-    global is_deploying_tv
     if is_deploying_tv:
         return jsonify({"success": False, "message": "Another task is already in progress..."})
 
@@ -262,7 +270,7 @@ def trigger_upstream_sync():
 
 @tv_updater_bp.route("/api/tv-updater/install-app", methods=["POST"])
 def trigger_single_app_install():
-    """Granular action: installs/updates a specific app on a specific TV with force support"""
+    """Granular action: installs/updates a specific app on a specific TV with force support."""
     if not tv_module_installed():
         return jsonify(NOT_INSTALLED), 404
     req_data = request.get_json(silent=True) or {}
@@ -284,7 +292,7 @@ def trigger_single_app_install():
                     cmd = ["python3", TV_UPDATER_PY, "--device", device_id, "--package", package]
                     if force:
                         cmd.append("--force")
-                    subprocess.run(cmd, check=False)
+                    subprocess.run(cmd, check=False, timeout=300)
             finally:
                 is_deploying_tv = False
                 telemetry_cache["last_fetched"] = 0
@@ -293,16 +301,15 @@ def trigger_single_app_install():
     t.start()
     return jsonify({
         "success": True,
-        "message": f"Deployment for '{package}' on '{device_id}' started" + (" (Force Mode: will update even if in foreground)" if force else ".")
+        "message": f"Deployment for '{package}' on '{device_id}' started" + (" (Force Mode: will update even if in foreground)" if force else "."),
     })
 
 
 @tv_updater_bp.route("/api/tv-updater/push-incoming", methods=["POST"])
 def trigger_push_incoming():
-    """Pushes manual APK drops from incoming_apks/ to all online target TVs"""
+    """Pushes manual APK drops from incoming_apks/ to all online target TVs."""
     if not tv_module_installed():
         return jsonify(NOT_INSTALLED), 404
-    global is_deploying_tv
     if is_deploying_tv:
         return jsonify({"success": False, "message": "Another task is already in progress..."})
 
@@ -313,17 +320,17 @@ def trigger_push_incoming():
 
 @tv_updater_bp.route("/api/tv-updater/log", methods=["GET"])
 def get_tv_updater_log():
-    """Returns the tail of the updater log for the 1-click modal"""
+    """Returns the tail of the updater log for the 1-click modal."""
     log_file = get_preferred_log_file()
     if not os.path.exists(log_file):
-        return jsonify({"log": f"Log file ({log_file}) not found or empty."})
+        return jsonify({"log_file": log_file, "log": f"Log file ({log_file}) not found or empty."})
 
     try:
         with open(log_file, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
             return jsonify({
                 "log_file": log_file,
-                "log": "".join(lines[-150:])
+                "log": "".join(lines[-150:]),
             })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

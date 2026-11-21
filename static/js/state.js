@@ -1,20 +1,17 @@
 /**
- * ServerFF Control Hub - Central Reactive State
+ * Control Hub - Central Reactive State
  */
 
 export const state = {
-  // Telemetry Refresh Stream Mode: "hover" (Eco/Hover-Only) vs "realtime" (Real-Time All)
-  streamMode: localStorage.getItem("serverff_stream_mode") || "hover",
-  
-  // Background interval timers
+  // Background visibility-aware interval timers
   realtimeTimers: {
-    speedo: null,
-    vitals: null,
-    sleep: null,
-    backup: null,
-    cron: null,
-    services: null
+    fast: null,
+    medium: null
   },
+
+  // Host Timezone
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  tzAbbr: "",
 
   // Sleep Guard
   sleepSkipActive: false,
@@ -22,8 +19,8 @@ export const state = {
 
   // Bandwidth & Unit Toggle
   currentUnit: "mbs", // "mbs" (MB/s) or "mbps" (Mbps)
-  lastWanDlMbs: 10.9,
-  lastWanUpMbs: 11.2,
+  lastWanDlMbs: 0.0,
+  lastWanUpMbs: 0.0,
   lastLanTotalMbs: 0.0,
   lastLanRxMbs: 0.0,
   lastLanTxMbs: 0.0,
@@ -31,7 +28,7 @@ export const state = {
   // Sparkline History
   wanHistory: [],
   lanHistory: [],
-  wanPeakMbs: 10.9,
+  wanPeakMbs: 0.0,
   lanPeakMbs: 0.0,
 
   // Torrents
@@ -40,6 +37,8 @@ export const state = {
   // Services
   servicesLoadedOnce: false,
   activeServiceFilter: "all",
+  dozzleInstalled: false,
+  cockpitInstalled: false,
 
   // Backup Sync Toast Debouncing
   userInitiatedSync: false,

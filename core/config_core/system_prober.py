@@ -212,7 +212,7 @@ def probe_timezone() -> str:
         except Exception:
             pass
 
-    return "Asia/Kolkata"
+    return os.getenv("TZ") or "UTC"
 
 
 def probe_docker_status() -> Dict[str, Any]:

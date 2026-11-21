@@ -1,17 +1,33 @@
 """
 Widget: Nightly Google Drive Sync (Noodle Gallery Cloud Backup)
-Monitors backup pipeline execution, Google Drive mirror quota, PostgreSQL dumps,
-and Immich facial recognition & asset census telemetry.
+Monitors backup pipeline execution via status.json (or log fallback),
+Drive mirror quota, PostgreSQL dumps, and Immich asset/face telemetry.
+Never returns invented fallback numbers when data cannot be read.
 """
 
-import os
-import time
 import json
-import threading
+import os
 import subprocess
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
+
 from flask import Blueprint, jsonify, request
 
-from config import BACKUP_LOG_FILE, BACKUP_DIR
+from config import (
+    APPDATA_DIR,
+    BACKUP_DIR,
+    BACKUP_LOG_FILE,
+    BACKUP_STATUS_FILE,
+    GDRIVE_REMOTE,
+    HDD_DATA,
+    HDD_MEMORIES,
+    STORAGE_SIZES_CACHE_FILE,
+    get_host_timezone,
+    get_tz_abbr,
+)
+from core.storage_sizes import get_storage_sizes
 
 backup_sync_bp = Blueprint("backup_sync", __name__)
 
@@ -20,28 +36,60 @@ is_syncing_backup = False
 
 immich_library_stats_cache = {
     "data": None,
-    "last_fetched": 0
+    "last_fetched": 0,
 }
 
+STAGE_LABELS = {
+    0: "Not Verified",
+    1: "1. Face XMP Export",
+    2: "2. Postgres Dump",
+    3: "3. Rclone Mirror",
+    4: "4. GDrive Verified",
+}
+
+STAGE_MESSAGES = {
+    1: "Exporting named faces to XMP sidecars...",
+    2: "Creating PostgreSQL database dump (pg_dumpall)...",
+    3: "Mirroring database dump & photo library to Google Drive...",
+    4: "Cloud backup verified & protected on Google Drive",
+}
+
+
+def _format_iso_display(iso_str):
+    if not iso_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_str)
+        return dt.strftime(f"%Y-%m-%d %H:%M {get_tz_abbr()}")
+    except ValueError:
+        return iso_str
+
+
+def _read_status_file():
+    path = Path(BACKUP_STATUS_FILE)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def run_backup_sync_thread():
-    """Executes the Google Drive backup script in background"""
+    """Executes the Google Drive backup script in background."""
     global is_syncing_backup
     with backup_sync_lock:
         is_syncing_backup = True
         try:
-            subprocess.run(["sudo", "/usr/local/sbin/immich_backup_gdrive.sh"], check=False)
+            subprocess.run(["sudo", "/usr/local/sbin/immich_backup_gdrive.sh"], check=False, timeout=14400)
         except Exception:
             pass
         finally:
             is_syncing_backup = False
 
-def fetch_immich_library_telemetry(force=False):
-    """Fetches Immich PostgreSQL metrics, local folder size, and rclone quota"""
-    now = time.time()
-    if not force and immich_library_stats_cache["data"] and (now - immich_library_stats_cache["last_fetched"] < 1800):
-        return immich_library_stats_cache["data"]
 
-    # 1. Query PostgreSQL inside immich_postgres
+def _query_immich_db():
     sql = """
     SELECT json_build_object(
         'total_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL),
@@ -53,60 +101,66 @@ def fetch_immich_library_telemetry(force=False):
         'total_face_instances', (SELECT COUNT(*) FROM asset_face)
     )::text;
     """
-    db_metrics = {
-        "total_assets": 35762,
-        "photos_count": 33497,
-        "videos_count": 2265,
-        "unhidden_people": 1623,
-        "named_people": 120,
-        "assets_with_named_faces": 18904,
-        "total_face_instances": 98813
-    }
     try:
         cmd = ["docker", "exec", "immich_postgres", "psql", "-U", "postgres", "-d", "immich", "-t", "-A", "-c", sql]
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=4)
         if proc.returncode == 0 and proc.stdout.strip():
-            db_metrics = json.loads(proc.stdout.strip())
-    except Exception:
-        pass
+            return json.loads(proc.stdout.strip()), None
+        reason = (proc.stderr or proc.stdout or "").strip() or "Immich database unavailable"
+        return None, reason[:140]
+    except Exception as exc:
+        return None, f"Immich database unavailable ({exc})"[:140]
 
-    # 2. Local Disk Size (/mnt/hdd/Memories)
-    disk_size = "265 GB"
-    try:
-        proc = subprocess.run(["du", "-sh", "/mnt/hdd/Memories"], stdout=subprocess.PIPE, text=True, timeout=2)
-        if proc.returncode == 0 and proc.stdout.strip():
-            raw_s = proc.stdout.strip().split()[0]
-            disk_size = raw_s if raw_s.endswith("B") else raw_s + "B"
-    except Exception:
-        pass
 
-    # 3. Google Drive Remote Usage (rclone about)
-    gdrive_usage = {
-        "total_gb": 5120.0,
-        "used_gb": 272.4,
-        "free_gb": 4847.6,
-        "used_percent": 5.3
-    }
-    try:
-        remote_name = os.getenv("GDRIVE_REMOTE", "gdrive:")
-        proc = subprocess.run(["sudo", "rclone", "about", remote_name, "--json"], stdout=subprocess.PIPE, text=True, timeout=4)
-        if proc.returncode == 0 and proc.stdout.strip():
-            ginfo = json.loads(proc.stdout.strip())
-            total_b = ginfo.get("total", 0)
-            used_b = ginfo.get("used", 0)
-            free_b = ginfo.get("free", 0)
-            if total_b > 0:
-                gdrive_usage = {
-                    "total_gb": round(total_b / (1024**3), 1),
-                    "used_gb": round(used_b / (1024**3), 1),
-                    "free_gb": round(free_b / (1024**3), 1),
-                    "used_percent": round((used_b / total_b) * 100, 1)
-                }
-    except Exception:
-        pass
+def _gdrive_from_status(status_data):
+    gdrive_raw = status_data.get("gdrive") if isinstance(status_data, dict) else None
+    if not isinstance(gdrive_raw, dict):
+        return None, "Drive quota not recorded yet (waiting for backup run)"
+    total_b = gdrive_raw.get("total_bytes")
+    used_b = gdrive_raw.get("used_bytes")
+    free_b = gdrive_raw.get("free_bytes")
+    if not total_b or total_b <= 0:
+        return None, "Drive quota unavailable"
+    used_b = used_b or 0
+    free_b = free_b if free_b is not None else max(0, total_b - used_b)
+    return {
+        "total_gb": round(total_b / (1024**3), 1),
+        "used_gb": round(used_b / (1024**3), 1),
+        "free_gb": round(free_b / (1024**3), 1),
+        "used_percent": round((used_b / total_b) * 100, 1),
+    }, None
 
-    # 4. Local DB Dump size
-    dump_size = "341.4 MB"
+
+def fetch_immich_library_telemetry(force=False):
+    """Fetches measured Immich DB metrics, local folder size, and Drive quota from status.json."""
+    now = time.time()
+    if not force and immich_library_stats_cache["data"] and (now - immich_library_stats_cache["last_fetched"] < 300):
+        return immich_library_stats_cache["data"]
+
+    db_metrics, db_reason = _query_immich_db()
+
+    sizes = get_storage_sizes(
+        cache_file=STORAGE_SIZES_CACHE_FILE,
+        media_path=HDD_DATA,
+        photos_path=HDD_MEMORIES,
+        appdata_path=APPDATA_DIR,
+        backup_path=BACKUP_DIR,
+        force=force,
+    )
+    disk_size = None
+    disk_reason = None
+    if sizes.get("photos_gb") is not None:
+        disk_size = f"{sizes['photos_gb']} GB"
+    elif sizes.get("measuring"):
+        disk_reason = "Measuring photo library size"
+    else:
+        disk_reason = sizes.get("reason") or "Photo directory size unavailable"
+
+    status_data = _read_status_file()
+    gdrive_usage, gdrive_reason = _gdrive_from_status(status_data)
+
+    dump_size = None
+    dump_reason = "No database dump found yet"
     try:
         if os.path.exists(BACKUP_DIR):
             dumps = [f for f in os.listdir(BACKUP_DIR) if f.startswith("immich_db_") and f.endswith(".sql.gz")]
@@ -114,15 +168,23 @@ def fetch_immich_library_telemetry(force=False):
                 dumps.sort(reverse=True)
                 size_bytes = os.path.getsize(os.path.join(BACKUP_DIR, dumps[0]))
                 dump_size = f"{round(size_bytes / (1024**2), 1)} MB"
-    except Exception:
-        pass
+                dump_reason = None
+    except Exception as exc:
+        dump_reason = str(exc)[:140]
 
     payload = {
         "disk_size": disk_size,
+        "disk_reason": disk_reason,
         "gdrive": gdrive_usage,
+        "gdrive_reason": gdrive_reason,
         "assets": db_metrics,
+        "assets_reason": db_reason,
         "db_dump_size": dump_size,
-        "last_updated": time.strftime("%I:%M %p IST")
+        "db_dump_reason": dump_reason,
+        "memories_dir": HDD_MEMORIES,
+        "gdrive_remote": (status_data or {}).get("remote") or GDRIVE_REMOTE or None,
+        "last_updated": time.strftime(f"%H:%M {get_tz_abbr()}"),
+        "timezone": get_host_timezone(),
     }
     immich_library_stats_cache["data"] = payload
     immich_library_stats_cache["last_fetched"] = now
@@ -131,7 +193,7 @@ def fetch_immich_library_telemetry(force=False):
 
 @backup_sync_bp.route("/api/backup/status", methods=["GET"])
 def get_backup_status():
-    """Checks Google Drive nightly backup status, active pipeline stage, and last log run"""
+    """Checks photo backup status from status.json (or log fallback), never returning fake numbers."""
     is_syncing = is_syncing_backup
     active_process_stage = 0
 
@@ -157,7 +219,7 @@ def get_backup_status():
     except Exception:
         pass
 
-    latest_db_size = "Unknown"
+    latest_db_size = None
     latest_db_name = None
     try:
         if os.path.exists(BACKUP_DIR):
@@ -170,117 +232,134 @@ def get_backup_status():
     except Exception:
         pass
 
-    last_sync_time = "Unknown"
-    backup_status = "synced"
-    log_stage = 0
-    last_message = "Backup pipeline ready"
-    is_error = False
+    status_data = _read_status_file()
+    last_sync_time = None
+    backup_status = "unknown"
+    current_stage = 0
+    last_message = "No backup run recorded yet"
+    reason = "No backup run yet"
 
-    if os.path.exists(BACKUP_LOG_FILE):
+    if status_data:
+        raw_status = status_data.get("status", "unknown")
+        current_stage = int(status_data.get("stage") or 0)
+        last_message = status_data.get("message") or last_message
+        last_sync_time = _format_iso_display(status_data.get("last_good_at") or status_data.get("completed_at") or status_data.get("started_at"))
+        if not latest_db_name and status_data.get("dump_file"):
+            latest_db_name = status_data.get("dump_file")
+        if latest_db_size is None and isinstance(status_data.get("dump_bytes"), (int, float)):
+            latest_db_size = f"{round(status_data['dump_bytes'] / (1024**2), 1)} MB"
+        if raw_status in ("synced", "error", "syncing", "unknown"):
+            backup_status = raw_status
+            reason = None if backup_status == "synced" else last_message
+    elif os.path.exists(BACKUP_LOG_FILE):
+        log_stage = 0
+        is_error = False
         try:
             with open(BACKUP_LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
 
             start_idx = -1
             for idx in range(len(lines) - 1, -1, -1):
-                if "Starting Immich / Noodle Backup:" in lines[idx]:
-                    start_idx = idx
-                    last_sync_time = lines[idx].split("Starting Immich / Noodle Backup:")[-1].strip()
+                for marker in ("Starting Immich Backup:", "Starting Immich / Noodle Backup:"):
+                    if marker in lines[idx]:
+                        start_idx = idx
+                        last_sync_time = lines[idx].split(marker, 1)[-1].strip()
+                        break
+                if start_idx != -1:
                     break
 
             recent_lines = lines[start_idx:] if start_idx != -1 else lines[-60:]
-
             for line in reversed(recent_lines):
                 line_str = line.strip()
                 if "Immich Backup Completed Successfully:" in line_str:
                     log_stage = 4
-                    completed_time = line_str.split("Immich Backup Completed Successfully:")[-1].strip()
+                    completed_time = line_str.split("Immich Backup Completed Successfully:", 1)[-1].strip()
                     if completed_time:
                         last_sync_time = completed_time
                     break
-                elif "[4/4] Syncing Memories library" in line_str or "[3/4] Uploading database dump" in line_str:
+                if "[4/4] Syncing" in line_str or "[3/4] Uploading" in line_str:
                     log_stage = 3
                     break
-                elif "[2/4] Creating PostgreSQL database dump" in line_str:
+                if "[2/4] Creating PostgreSQL" in line_str:
                     log_stage = 2
                     break
-                elif "[1/4] Running Face-to-XMP Exporter" in line_str:
+                if "[1/4] Running Face-to-XMP" in line_str:
                     log_stage = 1
                     break
-                elif "ERROR" in line_str or "Failed" in line_str:
+                if "ERROR" in line_str or "Failed" in line_str:
                     is_error = True
                     last_message = line_str
-        except Exception:
-            pass
+        except Exception as exc:
+            is_error = True
+            last_message = f"Could not read backup log ({exc})"
 
-    stage_labels = {
-        1: "1. Face XMP Export",
-        2: "2. Postgres Dump",
-        3: "3. Rclone Mirror",
-        4: "4. GDrive Verified"
-    }
-
-    stage_messages = {
-        1: "Exporting named faces to XMP sidecars...",
-        2: "Creating PostgreSQL database dump (pg_dumpall)...",
-        3: "Mirroring database dump & photo library to Google Drive...",
-        4: "Cloud backup verified & protected on Google Drive"
-    }
+        if is_error:
+            backup_status = "error"
+            current_stage = log_stage or 1
+            reason = last_message
+        elif log_stage == 4:
+            backup_status = "synced"
+            current_stage = 4
+            last_message = STAGE_MESSAGES[4]
+            reason = None
+        elif log_stage > 0:
+            backup_status = "error"
+            current_stage = log_stage
+            last_message = f"Previous backup run ended prematurely at Step {log_stage} ({STAGE_LABELS.get(log_stage, '')})"
+            reason = last_message
+        else:
+            backup_status = "unknown"
+            current_stage = 0
+            last_message = "Backup log has no completed runs yet"
+            reason = last_message
 
     if is_syncing:
         backup_status = "syncing"
-        current_stage = active_process_stage if active_process_stage > 0 else (log_stage if log_stage > 0 else 1)
-        last_message = stage_messages.get(current_stage, "Syncing to Google Drive...")
-    elif is_error:
-        backup_status = "error"
-        current_stage = log_stage if log_stage > 0 else 1
-    elif log_stage == 4:
-        backup_status = "synced"
-        current_stage = 4
-        last_message = stage_messages[4]
-    elif log_stage > 0:
-        backup_status = "error"
-        current_stage = log_stage
-        last_message = f"Previous backup run ended prematurely at Step {log_stage} ({stage_labels.get(log_stage, '')})"
-    else:
-        backup_status = "synced"
-        current_stage = 4
-        last_message = stage_messages[4]
+        current_stage = active_process_stage if active_process_stage > 0 else (current_stage or 1)
+        last_message = STAGE_MESSAGES.get(current_stage, "Syncing to Google Drive...")
+        reason = None
 
     lib_meta = fetch_immich_library_telemetry(force=False)
-    gdrive_info = lib_meta.get("gdrive", {})
-    asset_info = lib_meta.get("assets", {})
+    gdrive_info = lib_meta.get("gdrive") or {}
+    asset_info = lib_meta.get("assets") or {}
 
     return jsonify({
         "status": backup_status,
         "is_syncing": is_syncing,
         "current_stage": current_stage,
-        "current_stage_label": stage_labels.get(current_stage, "Ready"),
+        "current_stage_label": STAGE_LABELS.get(current_stage, "Not Verified"),
         "last_sync": last_sync_time,
         "db_size": latest_db_size,
         "latest_dump": latest_db_name,
         "message": last_message,
-        "schedule": "Nightly at 10:00 PM IST",
-        "disk_size": lib_meta.get("disk_size", "265 GB"),
-        "gdrive_used_gb": gdrive_info.get("used_gb", 272.4),
-        "gdrive_total_gb": gdrive_info.get("total_gb", 5120.0),
-        "gdrive_free_gb": gdrive_info.get("free_gb", 4847.6),
-        "gdrive_used_percent": gdrive_info.get("used_percent", 5.3),
-        "total_assets": asset_info.get("total_assets", 35762),
-        "photos_count": asset_info.get("photos_count", 33497),
-        "videos_count": asset_info.get("videos_count", 2265),
-        "named_people": asset_info.get("named_people", 120),
-        "unhidden_people": asset_info.get("unhidden_people", 1623),
-        "assets_with_named_faces": asset_info.get("assets_with_named_faces", 18904),
-        "total_face_instances": asset_info.get("total_face_instances", 98813)
+        "reason": reason,
+        "schedule": f"Daily 22:00 {get_tz_abbr()}",
+        "gdrive_remote": lib_meta.get("gdrive_remote"),
+        "log_file": BACKUP_LOG_FILE,
+        "memories_dir": HDD_MEMORIES,
+        "timezone": get_host_timezone(),
+        "disk_size": lib_meta.get("disk_size"),
+        "disk_reason": lib_meta.get("disk_reason"),
+        "gdrive_used_gb": gdrive_info.get("used_gb"),
+        "gdrive_total_gb": gdrive_info.get("total_gb"),
+        "gdrive_free_gb": gdrive_info.get("free_gb"),
+        "gdrive_used_percent": gdrive_info.get("used_percent"),
+        "gdrive_reason": lib_meta.get("gdrive_reason"),
+        "total_assets": asset_info.get("total_assets"),
+        "photos_count": asset_info.get("photos_count"),
+        "videos_count": asset_info.get("videos_count"),
+        "named_people": asset_info.get("named_people"),
+        "unhidden_people": asset_info.get("unhidden_people"),
+        "assets_with_named_faces": asset_info.get("assets_with_named_faces"),
+        "total_face_instances": asset_info.get("total_face_instances"),
+        "assets_reason": lib_meta.get("assets_reason"),
     })
 
 
 @backup_sync_bp.route("/api/backup/sync", methods=["POST"])
 def trigger_backup_sync():
-    """Triggers an immediate Immich/Noodle Gallery backup and Google Drive sync"""
-    global is_syncing_backup
-    res = subprocess.run(["pgrep", "-f", "immich_backup_gdrive.sh"], stdout=subprocess.PIPE, text=True)
+    """Triggers an immediate Immich/Noodle Gallery backup and Google Drive sync."""
+    res = subprocess.run(["pgrep", "-f", "immich_backup_gdrive.sh"], stdout=subprocess.PIPE, text=True, timeout=2)
     if is_syncing_backup or res.stdout.strip():
         return jsonify({"success": False, "message": "Google Drive sync is already in progress..."})
 
@@ -291,19 +370,19 @@ def trigger_backup_sync():
 
 @backup_sync_bp.route("/api/backup/log", methods=["GET"])
 def get_backup_log():
-    """Returns the tail of backup.log for the 1-click modal"""
+    """Returns the tail of backup.log for the 1-click modal."""
     if not os.path.exists(BACKUP_LOG_FILE):
-        return jsonify({"log": "Log file not found."})
+        return jsonify({"log_file": BACKUP_LOG_FILE, "log": f"Log file ({BACKUP_LOG_FILE}) not found yet."})
     try:
-        with open(BACKUP_LOG_FILE, "r") as f:
+        with open(BACKUP_LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
-            return jsonify({"log": "".join(lines[-100:])})
+            return jsonify({"log_file": BACKUP_LOG_FILE, "log": "".join(lines[-100:])})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @backup_sync_bp.route("/api/backup/library-stats", methods=["GET"])
 def get_library_stats():
-    """Returns detailed Noodle Gallery storage, assets, and facial recognition stats"""
+    """Returns detailed Noodle Gallery storage, assets, and facial recognition stats."""
     force = request.args.get("refresh", "false").lower() == "true"
     return jsonify(fetch_immich_library_telemetry(force=force))

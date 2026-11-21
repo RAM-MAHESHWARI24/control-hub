@@ -1,3 +1,3 @@
 """
-ServerFF Control Hub - Core Engine Package
+Control Hub - Core Engine Package
 """

@@ -1,10 +1,11 @@
 /**
- * ServerFF Control Hub - Frontend Configuration
- * Dynamic Hostname resolution (ensures LAN, Tailscale, ZeroTier all work flawlessly)
+ * Control Hub - Frontend Configuration
+ * Dynamic Hostname resolution (ensures LAN and Tailscale access work seamlessly)
  */
 
 export const HOSTNAME = window.location.hostname || "localhost";
 export const DOZZLE_BASE_URL = `http://${HOSTNAME}:8888`;
+export const COCKPIT_BASE_URL = `https://${HOSTNAME}:9090`;
 
 export const ENDPOINTS = {
   sleepStatus: "/api/sleep/status",

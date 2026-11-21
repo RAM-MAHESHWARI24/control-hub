@@ -4,7 +4,7 @@
  * active SMB client shares, and Jellyfin video playback streams.
  */
 
-import { $ } from "../shared/dom.js";
+import { $, setCardSummary } from "../shared/dom.js";
 import { escapeHtml } from "../shared/formatters.js";
 
 const storageCollectiveSpeed = $("storage-collective-speed");
@@ -14,11 +14,12 @@ const storageOpsList = $("storage-ops-list");
 export function renderStorageOps(sto = {}) {
   const totalIoMbs = sto.collective_mbs !== undefined ? sto.collective_mbs : 0.0;
   if (storageTotalMbps) storageTotalMbps.textContent = totalIoMbs.toFixed(2);
+  setCardSummary("storage-ops-panel", `Disk I/O: ${totalIoMbs.toFixed(2)} MB/s`);
 
   if (!storageOpsList) return;
 
-  const hdd = sto.hdd || { read_mbs: 0.0, write_mbs: 0.0, name: "Media HDD (/mnt/hdd - sda)" };
-  const ssd = sto.ssd || { read_mbs: 0.0, write_mbs: 0.0, name: "OS Root SSD (/ - sdb)" };
+  const hdd = sto.hdd || { read_mbs: 0.0, write_mbs: 0.0, name: "Media Storage" };
+  const ssd = sto.ssd || { read_mbs: 0.0, write_mbs: 0.0, name: "OS Root Disk" };
   const smb = sto.smb_clients || [];
   const streams = sto.jellyfin_streams || [];
 
@@ -79,13 +80,13 @@ export function renderStorageOps(sto = {}) {
         <div class="disk-badge-icon">DATA</div>
         <div>
           <div class="disk-label-name">
-            ${escapeHtml(hdd.name || 'Media Storage (/mnt/hdd)')}
+            ${escapeHtml(hdd.name || 'Data Pool')}
             <span class="disk-leds">
               <span class="hw-led led-r ${hddRead > 0.05 ? 'active' : ''}" title="${escapeHtml(hdd.device || 'Storage')} Read: ${hddRead.toFixed(2)} MB/s"></span>
               <span class="hw-led led-w ${hddWrite > 0.05 ? 'active' : ''}" title="${escapeHtml(hdd.device || 'Storage')} Write: ${hddWrite.toFixed(2)} MB/s"></span>
             </span>
           </div>
-          <div class="disk-label-sub">Block Device: ${escapeHtml(hdd.device || 'sda')} &bull; Active Storage</div>
+          <div class="disk-label-sub">${hdd.device ? `Block Device: ${escapeHtml(hdd.device)} &bull; ` : ''}Active Storage</div>
         </div>
       </div>
       <div class="storage-rates-group">
@@ -99,13 +100,13 @@ export function renderStorageOps(sto = {}) {
         <div class="disk-badge-icon ssd">ROOT</div>
         <div>
           <div class="disk-label-name">
-            ${escapeHtml(ssd.name || 'OS & System Engine (/)')}
+            ${escapeHtml(ssd.name || 'OS Root Disk')}
             <span class="disk-leds">
               <span class="hw-led led-r ${ssdRead > 0.05 ? 'active' : ''}" title="${escapeHtml(ssd.device || 'Root')} Read: ${ssdRead.toFixed(2)} MB/s"></span>
               <span class="hw-led led-w ${ssdWrite > 0.05 ? 'active' : ''}" title="${escapeHtml(ssd.device || 'Root')} Write: ${ssdWrite.toFixed(2)} MB/s"></span>
             </span>
           </div>
-          <div class="disk-label-sub">Block Device: ${escapeHtml(ssd.device || 'sdb')} &bull; OS Root</div>
+          <div class="disk-label-sub">${ssd.device ? `Block Device: ${escapeHtml(ssd.device)} &bull; ` : ''}OS Root</div>
         </div>
       </div>
       <div class="storage-rates-group">

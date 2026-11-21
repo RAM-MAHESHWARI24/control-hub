@@ -5,7 +5,9 @@
  */
 
 import { $ } from "../shared/dom.js";
+import { state } from "../state.js";
 import { ENDPOINTS, HOSTNAME } from "../config.js";
+import { closeModal, openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
 
 let currentConfigData = null;
@@ -49,7 +51,7 @@ function populateFormFields(cfg, sys) {
 
   if (cfgPuid) cfgPuid.value = cfg.puid || "1000";
   if (cfgPgid) cfgPgid.value = cfg.pgid || "1000";
-  if (cfgTimezone) cfgTimezone.value = cfg.timezone || "Asia/Kolkata";
+  if (cfgTimezone) cfgTimezone.value = cfg.timezone || state.timezone || "UTC";
 
   if (cfgQbitPass) cfgQbitPass.value = cfg.qbittorrent_pass || "";
   if (cfgRadarrKey) cfgRadarrKey.value = cfg.radarr_api_key || "";
@@ -268,7 +270,7 @@ export async function applyNetplanSafe() {
   const dnsRaw = cfgNetDns ? cfgNetDns.value : "1.1.1.1, 8.8.8.8";
   const dns = dnsRaw.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const confirmMsg = `WARNING: Are you sure you want to apply static IP ${ip} to interface ${iface}?\n\nSafety Guarantee: Netplan will automatically revert back if connection drops (45s rollback protection).`;
+  const confirmMsg = `WARNING: Are you sure you want to apply static IP ${ip} to interface ${iface}?\n\nSafety Guarantee: Netplan will automatically revert back if connection drops (120s rollback protection).`;
   if (!confirm(confirmMsg)) return;
 
   if (btnApplyNetplan) btnApplyNetplan.disabled = true;
@@ -277,7 +279,7 @@ export async function applyNetplanSafe() {
     const res = await fetch(ENDPOINTS.configNetplanApply, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ interface: iface, ip: ip, gateway: gw, dns: dns, timeout: 45 }),
+      body: JSON.stringify({ interface: iface, ip: ip, gateway: gw, dns: dns, timeout: 120 }),
     });
 
     const data = await res.json();
@@ -321,7 +323,7 @@ export async function saveConfiguration() {
     hdd_memories: cfgHddMemories ? cfgHddMemories.value.trim() : "/mnt/hdd/Memories",
     puid: cfgPuid ? parseInt(cfgPuid.value, 10) || 1000 : 1000,
     pgid: cfgPgid ? parseInt(cfgPgid.value, 10) || 1000 : 1000,
-    timezone: cfgTimezone ? cfgTimezone.value.trim() : "Asia/Kolkata",
+    timezone: cfgTimezone ? cfgTimezone.value.trim() : (state.timezone || "UTC"),
     qbittorrent_pass: cfgQbitPass ? cfgQbitPass.value.trim() : "",
     radarr_api_key: cfgRadarrKey ? cfgRadarrKey.value.trim() : "",
     sonarr_api_key: cfgSonarrKey ? cfgSonarrKey.value.trim() : "",
@@ -338,7 +340,7 @@ export async function saveConfiguration() {
     const data = await res.json();
     if (data.status === "success") {
       showToast("Configuration Saved", "Unified settings synchronized across master .env and all blueprint apps!", "💾");
-      if (configModal) configModal.style.display = "none";
+      if (configModal) closeModal(configModal);
     } else {
       showToast("Save Failed", data.message || "Unknown error saving configuration.", "⚠️");
     }
@@ -426,10 +428,14 @@ function setupConfigTabs() {
     btn.addEventListener("click", () => {
       const targetTab = btn.getAttribute("data-config-tab");
 
-      tabBtns.forEach((b) => b.classList.remove("active"));
+      tabBtns.forEach((b) => {
+        b.classList.remove("active");
+        b.setAttribute("aria-selected", "false");
+      });
       tabPanes.forEach((p) => p.classList.remove("active"));
 
       btn.classList.add("active");
+      btn.setAttribute("aria-selected", "true");
       const targetPane = $(`cfg-pane-${targetTab}`);
       if (targetPane) targetPane.classList.add("active");
 
@@ -465,45 +471,22 @@ export function setupConfigCenter() {
   const btnDetectUser = $("btn-detect-user");
   const btnLaunchWizard = $("btn-launch-setup-wizard");
 
-  // Open Config Modal
+  registerModal(configModal, { closeButtons: [configModalClose, configModalCancel] });
+  registerModal(aiModal, { closeButtons: [aiModalClose, aiModalDismiss] });
+
   if (btnOpenConfig) {
     btnOpenConfig.onclick = (e) => {
       e.preventDefault();
-      if (configModal) configModal.style.display = "flex";
+      if (configModal) openModal(configModal, btnOpenConfig);
       fetchCurrentConfig();
     };
   }
 
-  // Close Config Modal
-  if (configModalClose) {
-    configModalClose.onclick = () => {
-      if (configModal) configModal.style.display = "none";
-    };
-  }
-  if (configModalCancel) {
-    configModalCancel.onclick = () => {
-      if (configModal) configModal.style.display = "none";
-    };
-  }
-
-  // Open AI Copilot Modal
   if (btnOpenAi) {
     btnOpenAi.onclick = (e) => {
       e.preventDefault();
-      if (aiModal) aiModal.style.display = "flex";
+      if (aiModal) openModal(aiModal, btnOpenAi);
       fetchAiDiagnostics();
-    };
-  }
-
-  // Close AI Copilot Modal
-  if (aiModalClose) {
-    aiModalClose.onclick = () => {
-      if (aiModal) aiModal.style.display = "none";
-    };
-  }
-  if (aiModalDismiss) {
-    aiModalDismiss.onclick = () => {
-      if (aiModal) aiModal.style.display = "none";
     };
   }
 

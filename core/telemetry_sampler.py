@@ -1,5 +1,5 @@
 """
-ServerFF Control Hub - Telemetry Background Sampler
+Control Hub - Telemetry Background Sampler
 Continuous 1-second sampling of NIC throughput, qBittorrent bandwidth/queue,
 disk I/O operations (/proc/diskstats), SMB client sessions, and CPU utilization.
 """
@@ -253,7 +253,8 @@ def qb_login():
             data={"username": QBITTORRENT_USER, "password": QBITTORRENT_PASS},
             timeout=3
         )
-        if resp.status_code == 200 and "Ok." in resp.text:
+        # qBittorrent 5.3+ answers a successful login with HTTP 204 and QBT_SID cookie; 4.x returns 200 "Ok."
+        if resp.status_code in (200, 204):
             qb_logged_in = True
             return True
     except Exception:
@@ -278,19 +279,21 @@ def format_eta(seconds, state):
     return f"{hours}h {mins}m"
 
 def get_smb_sessions():
-    """Parses active Samba connections via smbstatus"""
+    """Parses active Samba share connections via smbstatus"""
     sessions = []
     try:
-        proc = subprocess.run(["sudo", "smbstatus", "-S"], stdout=subprocess.PIPE, text=True, timeout=1.5)
-        for line in proc.stdout.split("\n"):
-            if "RootFS" in line or "MediaDrive" in line:
-                parts = line.split()
-                if len(parts) >= 3:
-                    sessions.append({
-                        "share": parts[0],
-                        "ip": parts[2],
-                        "connected_at": " ".join(parts[3:7]) if len(parts) >= 7 else "Connected"
-                    })
+        proc = subprocess.run(["sudo", "smbstatus", "-S"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.5)
+        for line in proc.stdout.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("Service", "---", "Samba", "PID")):
+                continue
+            parts = stripped.split()
+            if len(parts) >= 3 and parts[1].isdigit() and parts[0] != "IPC$":
+                sessions.append({
+                    "share": parts[0],
+                    "ip": parts[2],
+                    "connected_at": " ".join(parts[3:7]) if len(parts) >= 7 else "Connected"
+                })
     except Exception:
         pass
     return sessions

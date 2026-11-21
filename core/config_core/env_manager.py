@@ -265,6 +265,9 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                 "QBITTORRENT_USER": qbit_user,
                 "QBITTORRENT_PASS": qbit_pass,
                 "HDD_DATA": data_dir,
+                "HDD_MEMORIES": memories_dir,
+                "GDRIVE_REMOTE": config.get("gdrive_remote", ""),
+                "TZ": tz,
                 # Set only when the TV module is part of this install; empty hides the TV card.
                 "TV_UPDATER_DIR": str(root_path / "apps" / "tv-autoupdater") if tv_enabled else "",
                 "TV_UPDATER_PY": str(root_path / "apps" / "tv-autoupdater" / "tv_updater.py") if tv_enabled else "",
