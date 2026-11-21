@@ -256,7 +256,13 @@ paths:
   /api/backup/status:
     get:
       summary: Google Drive Cloud Backup Status
-      description: Returns the last execution timestamp, sync state, and uploaded volume for the Rclone cloud backup job.
+      description: >-
+        Photo backup state read from the status.json the backup script writes. `health`
+        holds the computed state (unknown, syncing, synced, error, interrupted or stale:
+        no good run for more than BACKUP_STALE_HOURS, default 26), `is_red`, the last good
+        run and its age, the next run from /etc/cron.d/immich-backup, the pre-flight checks
+        of the last run, the last 7 runs, transfer totals and retention (kept, deleted by
+        the last run, deleted by the next run). Values that cannot be read are null.
       tags: [Backup]
       responses:
         '200':

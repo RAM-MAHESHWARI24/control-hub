@@ -11,7 +11,15 @@ import { openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
 
 const backupStatusBadge = $("backup-status-badge");
-const backupSchedule = $("backup-schedule");
+const backupSection = $("backup-section");
+const backupHealth = $("backup-health");
+const backupHealthTitle = $("backup-health-title");
+const backupHealthDetail = $("backup-health-detail");
+const backupNextRun = $("backup-next-run");
+const backupPreflight = $("backup-preflight");
+const backupHistory = $("backup-history");
+const backupHistoryCount = $("backup-history-count");
+const backupRetention = $("backup-retention");
 const backupLastTime = $("backup-last-time");
 const backupDbSize = $("backup-db-size");
 const backupRemoteMirror = $("backup-remote-mirror");
@@ -86,7 +94,7 @@ function updateSyncUiState(syncing) {
     btnSyncCard.classList.toggle("is-syncing", syncing);
     if (cardSyncSpinner) cardSyncSpinner.style.display = syncing ? "inline-block" : "none";
     if (cardSyncIcon) cardSyncIcon.style.display = syncing ? "none" : "inline-block";
-    if (cardSyncLabel) cardSyncLabel.textContent = syncing ? "Syncing..." : "Sync Now";
+    if (cardSyncLabel) cardSyncLabel.textContent = syncing ? "Backing up..." : "Run backup now";
   }
 
   if (btnModalTriggerSync) {
@@ -94,13 +102,13 @@ function updateSyncUiState(syncing) {
     btnModalTriggerSync.classList.toggle("is-syncing", syncing);
     if (modalSyncSpinner) modalSyncSpinner.style.display = syncing ? "inline-block" : "none";
     if (modalSyncIcon) modalSyncIcon.style.display = syncing ? "none" : "inline-block";
-    if (modalSyncBtnText) modalSyncBtnText.textContent = syncing ? "Syncing Noodle Gallery..." : "Sync Noodle Gallery Now";
+    if (modalSyncBtnText) modalSyncBtnText.textContent = syncing ? "Backing up..." : "Run backup now";
     if (modalSyncBanner) modalSyncBanner.classList.toggle("is-syncing", syncing);
     if (syncLiveTag) syncLiveTag.style.display = syncing ? "inline-block" : "none";
     if (modalSyncBannerText) {
       modalSyncBannerText.textContent = syncing
-        ? "Backup active: Exporting face XMP sidecars, dumping database, and syncing photos..."
-        : "Ready to sync Noodle Gallery (Faces, DB Dump & Photos) to Google Drive.";
+        ? "Backup running: the log below refreshes every few seconds."
+        : "Runs the same backup as the nightly job: pre-flight, face tags, database dump, photo mirror.";
     }
   }
 }
@@ -160,42 +168,157 @@ function renderBackupStepper(currentStage, status) {
   });
 }
 
+const BADGES = {
+  syncing: ["badge-status-syncing", "Running"],
+  synced: ["badge-status-synced", "Verified"],
+  error: ["badge-status-error", "Failed"],
+  stale: ["badge-status-error", "Stale"],
+  interrupted: ["badge-status-error", "Interrupted"],
+  unknown: ["badge-status-unknown", "Not run yet"],
+};
+
+const OUTCOME_TEXT = { synced: "Succeeded", error: "Failed" };
+
+function formatDuration(seconds) {
+  if (typeof seconds !== "number" || seconds < 0) return null;
+  if (seconds < 60) return `${seconds} s`;
+  const m = Math.floor(seconds / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+
+function renderHealth(health, data) {
+  const stateName = health ? health.state : (data.status || "unknown");
+  if (backupHealth) backupHealth.dataset.state = stateName;
+  if (backupSection) backupSection.classList.toggle("is-alert", Boolean(health && health.is_red));
+
+  if (backupHealthTitle) {
+    let title;
+    if (!health) title = data.reason || data.message || "No backup run recorded yet";
+    else if (health.state === "syncing") title = "Backup running";
+    else if (health.state === "synced") title = `Last good backup ${health.age || ""}`.trim();
+    else if (health.state === "unknown") title = "No backup run yet";
+    else title = health.message;
+    backupHealthTitle.textContent = title;
+  }
+  if (backupHealthDetail) {
+    let detail = "";
+    if (health && !["synced", "unknown", "syncing"].includes(health.state)) {
+      detail = health.last_good ? `Last good backup ${health.age}.` : "No good backup recorded yet.";
+    }
+    backupHealthDetail.textContent = detail;
+  }
+  if (backupNextRun) backupNextRun.textContent = (health && health.next_run) || data.schedule || "Not scheduled";
+
+  // Pre-flight: list the checks only when one of them failed.
+  if (backupPreflight) {
+    backupPreflight.replaceChildren();
+    const checks = (health && health.preflight && health.preflight.checks) || [];
+    const show = checks.some((c) => !c.ok) && health.state !== "syncing";
+    if (show) {
+      checks.forEach((c) => {
+        const li = el("li", c.ok ? "preflight-ok" : "preflight-fail");
+        li.append(el("span", "preflight-mark", c.ok ? "OK" : "Failed"), el("span", "preflight-name", c.name), el("span", "preflight-detail", c.detail));
+        backupPreflight.append(li);
+      });
+    }
+    backupPreflight.hidden = !show;
+  }
+
+  if (backupHistory) {
+    backupHistory.replaceChildren();
+    const runs = (health && health.history) || [];
+    runs.forEach((run) => {
+      const ok = run.outcome === "synced";
+      const li = el("li", `backup-run ${ok ? "run-ok" : "run-fail"}`);
+      const top = el("div", "backup-run-top");
+      top.append(el("span", "backup-run-outcome", OUTCOME_TEXT[run.outcome] || run.outcome || "Unknown"), el("span", "backup-run-when font-mono", run.when || ""));
+      const facts = [];
+      if (run.dump_size) facts.push(`dump ${run.dump_size}`);
+      if (typeof run.files === "number") facts.push(`${run.files} files${run.moved ? ` (${run.moved})` : ""} uploaded`);
+      const dur = formatDuration(run.duration_s);
+      if (dur) facts.push(dur);
+      li.append(top);
+      if (facts.length) li.append(el("div", "backup-run-facts", facts.join(" · ")));
+      if (!ok && run.message) li.append(el("div", "backup-run-msg", run.message));
+      backupHistory.append(li);
+    });
+    if (!runs.length) backupHistory.append(el("li", "backup-run", "No runs recorded yet."));
+    if (backupHistoryCount) backupHistoryCount.textContent = runs.length ? `(${runs.length})` : "";
+  }
+
+  if (backupRetention) {
+    const ret = health && health.retention;
+    if (ret && typeof ret.kept === "number") {
+      const next = ret.next_delete || [];
+      backupRetention.textContent = `Drive keeps ${ret.kept} database dumps (the newest nightly ones plus the first of each month). `
+        + `The last run deleted ${ret.deleted_last_run}; the next run deletes ${next.length ? next.join(", ") : "none"}.`;
+    } else {
+      backupRetention.textContent = "Retention has not run yet.";
+    }
+  }
+}
+
+let logPollTimer = null;
+
+function syncLogPolling(isSyncing) {
+  const modalOpen = Boolean(backupLogModal) && backupLogModal.style.display !== "none";
+  if (isSyncing && modalOpen && !logPollTimer) {
+    logPollTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (!backupLogModal || backupLogModal.style.display === "none") {
+        clearInterval(logPollTimer);
+        logPollTimer = null;
+        return;
+      }
+      refreshBackupLog(true);
+      fetchBackupStatus();
+    }, 3000);
+  } else if ((!isSyncing || !modalOpen) && logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+    if (modalOpen) refreshBackupLog(true);
+  }
+}
+
 export async function fetchBackupStatus() {
   try {
     const res = await fetch(ENDPOINTS.backupStatus);
     if (!res.ok) return;
     const data = await res.json();
 
-    const status = data.status || "unknown";
+    const health = data.health || null;
+    const status = health ? health.state : (data.status || "unknown");
     const isSyncing = Boolean(data.is_syncing || status === "syncing");
-    const isError = status === "error";
+    const isError = ["error", "stale", "interrupted"].includes(status);
     const isSynced = status === "synced";
     const stage = Number(data.current_stage || 0);
 
     updateSyncUiState(isSyncing);
-    renderBackupStepper(stage, isSyncing ? "syncing" : status);
+    renderBackupStepper(stage, isSyncing ? "syncing" : (status === "error" || status === "interrupted" ? "error" : status));
+    renderHealth(health, data);
+    syncLogPolling(isSyncing);
 
     if (backupStatusBadge) {
-      if (isSyncing) {
-        backupStatusBadge.className = "badge-status-syncing";
-        backupStatusBadge.textContent = "Syncing";
-      } else if (isError) {
-        backupStatusBadge.className = "badge-status-error";
-        backupStatusBadge.textContent = "Attention Needed";
-      } else if (isSynced) {
-        backupStatusBadge.className = "badge-status-synced";
-        backupStatusBadge.textContent = "Verified";
-      } else {
-        backupStatusBadge.className = "badge-status-unknown";
-        backupStatusBadge.textContent = "Not Verified";
-      }
+      const [cls, label] = BADGES[isSyncing ? "syncing" : status] || BADGES.unknown;
+      backupStatusBadge.className = cls;
+      backupStatusBadge.textContent = label;
     }
 
-    if (backupSchedule && data.schedule) backupSchedule.textContent = data.schedule;
-    if (backupLastTime) backupLastTime.textContent = data.last_sync || "Never";
+    if (backupLastTime) backupLastTime.textContent = (health && health.last_good) || "None yet";
     if (backupDbSize) backupDbSize.textContent = data.db_size || "Unknown";
     if (backupRemoteMirror) backupRemoteMirror.textContent = data.gdrive_remote || "Not configured";
-    if (backupStatusMsg) backupStatusMsg.textContent = data.message || data.reason || "No backup run yet";
+    if (backupStatusMsg) {
+      // The health box already states the outcome; this line only narrates a run in progress.
+      backupStatusMsg.textContent = isSyncing ? (data.message || "Backup running...") : "";
+      backupStatusMsg.hidden = !isSyncing;
+    }
 
     if (backupModalSubPath) {
       const logPart = data.log_file || "Unknown";
@@ -245,9 +368,9 @@ export async function fetchBackupStatus() {
 
     setCardSummary(
       "backup-section",
-      data.last_sync
-        ? `Backup: ${status} · ${data.last_sync}${data.db_size ? `, ${data.db_size}` : ""}`
-        : `Backup: ${data.reason || "No run yet"}`
+      health && health.last_good
+        ? `Backup: ${(BADGES[status] || BADGES.unknown)[1].toLowerCase()} · last good ${health.age}${data.db_size ? `, ${data.db_size}` : ""}`
+        : `Backup: ${(health && health.message) || data.reason || "No run yet"}`
     );
 
     if (modalSyncDot) {
@@ -263,8 +386,8 @@ export async function fetchBackupStatus() {
         state.lastSyncCompletionToastTime = nowTs;
         state.userInitiatedSync = false;
         showToast(
-          "Cloud Sync Complete",
-          `Noodle Gallery synced (${data.last_sync || "just now"}).`,
+          "Backup finished",
+          `Photo backup verified (${(health && health.last_good) || data.last_sync || "just now"}).`,
           "☁️"
         );
       }
@@ -282,7 +405,7 @@ export async function triggerBackupSync() {
     const res = await fetch(ENDPOINTS.backupSync, { method: "POST" });
     const data = await res.json();
     if (data.success) {
-      showToast("Cloud Sync Started", "Mirroring Noodle Gallery photos and PostgreSQL dump...", "☁️");
+      showToast("Backup started", "Pre-flight checks first, then face tags, database dump and photo mirror.", "☁️");
       await fetchBackupStatus();
       openBackupLogModal(btnViewBackupLog);
     } else {
@@ -299,11 +422,13 @@ export async function openBackupLogModal(triggerEl = null) {
   if (!backupLogModal) return;
   openModal(backupLogModal, triggerEl);
   await refreshBackupLog();
+  await fetchBackupStatus();
 }
 
-export async function refreshBackupLog() {
+export async function refreshBackupLog(quiet = false) {
   if (!backupLogContent) return;
-  backupLogContent.textContent = "Fetching backup log lines...";
+  const atBottom = backupLogContent.scrollHeight - backupLogContent.scrollTop - backupLogContent.clientHeight < 40;
+  if (!quiet) backupLogContent.textContent = "Fetching backup log lines...";
   try {
     const res = await fetch(ENDPOINTS.backupLog);
     const data = await res.json();
@@ -311,7 +436,7 @@ export async function refreshBackupLog() {
       backupModalSubPath.textContent = `Log: ${data.log_file}`;
     }
     backupLogContent.textContent = data.log || "No log content returned.";
-    backupLogContent.scrollTop = backupLogContent.scrollHeight;
+    if (!quiet || atBottom) backupLogContent.scrollTop = backupLogContent.scrollHeight;
   } catch (_) {
     backupLogContent.textContent = "Error loading backup log file.";
   }

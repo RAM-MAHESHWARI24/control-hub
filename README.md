@@ -42,7 +42,9 @@ Control Hub is organized into modular Python backend widgets (`widgets/`) and ma
 * 1-Click download queue pause and resume.
 
 ### 4. 📸 Immich & Noodle Backup Monitor (`widgets/backup_sync.py`)
-* Monitors nightly PostgreSQL database dumps and Google Drive cloud mirror progress.
+* Reads only `status.json` from the backup script (no `sudo rclone`): last good run and its age, next run, Drive usage, the last 7 runs, and what retention kept and will delete next.
+* Turns red when the last run failed, was interrupted, or the last good run is older than 26 hours (`BACKUP_STALE_HOURS`). A failed pre-flight lists each check and why it failed.
+* "Run backup now" starts the same script as the nightly job and shows its log live.
 * Displays master photo and video library storage consumption.
 
 ### 5. 📊 System Vitals & Hardware Gauges (`widgets/system_vitals.py`)

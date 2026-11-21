@@ -369,16 +369,21 @@
               <button type="button" id="btn-sync-card" class="btn-sync-primary">
                 <span class="btn-spinner" id="card-sync-spinner" style="display: none;" aria-hidden="true"></span>
                 <span id="card-sync-icon" aria-hidden="true">☁️</span>
-                <span id="card-sync-label">Sync Now</span>
+                <span id="card-sync-label">Run backup now</span>
               </button>
             </div>
           </div>
 
           <div class="card-body-collapse" id="backup-section-body">
+            <div class="backup-health" id="backup-health" data-state="unknown">
+              <p class="backup-health-title" id="backup-health-title">Checking the last backup...</p>
+              <p class="backup-health-detail" id="backup-health-detail"></p>
+            </div>
+
             <div class="meta-pills-row">
-              <span class="meta-pill" id="backup-schedule">Daily Schedule</span>
-              <span class="meta-pill">Last: <strong id="backup-last-time">No run yet</strong></span>
-              <span class="meta-pill">DB Dump: <strong id="backup-db-size">No dump yet</strong></span>
+              <span class="meta-pill">Last good: <strong id="backup-last-time">No run yet</strong></span>
+              <span class="meta-pill">Next run: <strong id="backup-next-run">Not scheduled</strong></span>
+              <span class="meta-pill">DB dump: <strong id="backup-db-size">No dump yet</strong></span>
               <span class="meta-pill">Remote: <strong id="backup-remote-mirror">Not configured</strong></span>
             </div>
 
@@ -412,6 +417,13 @@
             </div>
 
             <p class="status-note-text" id="backup-status-msg">Checking backup script state and status.json...</p>
+            <ul class="backup-preflight" id="backup-preflight" aria-label="Pre-flight checks of the last run" hidden></ul>
+
+            <details class="backup-history-wrap" id="backup-history-wrap">
+              <summary class="backup-history-summary">Recent runs <span class="text-dim" id="backup-history-count"></span></summary>
+              <ol class="backup-history" id="backup-history" aria-label="Recent backup runs, newest first"></ol>
+              <p class="status-note-text" id="backup-retention"></p>
+            </details>
           </div>
         </section>
 
@@ -710,7 +722,7 @@
           <button type="button" id="btn-modal-trigger-sync" class="btn-sync-primary">
             <span class="btn-spinner" id="modal-sync-spinner" style="display: none;" aria-hidden="true"></span>
             <span id="modal-sync-icon" aria-hidden="true">☁️</span>
-            <span id="modal-sync-btn-text">Sync Noodle Gallery Now</span>
+            <span id="modal-sync-btn-text">Run backup now</span>
           </button>
         </div>
         <pre id="backup-log-content" class="modal-log-viewer font-mono">Loading log...</pre>

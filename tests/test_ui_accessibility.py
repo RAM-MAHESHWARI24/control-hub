@@ -14,6 +14,7 @@ CI_REQUIRE_PLAYWRIGHT=1 is set.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -130,6 +131,24 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         for p in cls._patches:
             p.start()
 
+        # A failed pre-flight after one good run: the busiest state of the backup card.
+        backups = root / "backups"
+        backups.mkdir(parents=True, exist_ok=True)
+        (backups / "status.json").write_text(json.dumps({
+            "status": "error", "stage": 0, "stage_label": "0. Pre-flight",
+            "message": "Pre-flight: the remote gdrive: did not answer (token expired).",
+            "started_at": "2026-11-22T22:00:01+05:30", "completed_at": "2026-11-22T22:00:09+05:30",
+            "last_good_at": "2026-11-21T22:06:01+05:30", "remote": "gdrive:",
+            "preflight": {"ok": False, "checks": [
+                {"name": "remote", "ok": False, "detail": "gdrive: did not answer: token expired"}]},
+            "retention": {"kept": 17, "delete": ["immich_db_20261001_220001.sql.gz"], "next_delete": ["immich_db_20261108_220001.sql.gz"]},
+            "history": [
+                {"started_at": "2026-11-22T22:00:01+05:30", "outcome": "error", "message": "Pre-flight: the remote gdrive: did not answer (token expired).", "duration_s": 8},
+                {"started_at": "2026-11-21T22:00:01+05:30", "outcome": "synced", "dump_file": "immich_db_20261121_220001.sql.gz",
+                 "dump_bytes": 356271570, "files": 12, "bytes": 48000000, "duration_s": 360},
+            ],
+        }), encoding="utf-8")
+
         cls.password = "PlaywrightTestPass1!"
         auth_password.set_password(cls.password, path=pw_file)
 
@@ -215,7 +234,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 const sw = document.documentElement.scrollWidth;
                 const offenders = [];
                 const clipped = [];
-                const selector = 'button, a[href], input:not([type="checkbox"]):not([type="radio"]), select';
+                const selector = 'button, a[href], summary, input:not([type="checkbox"]):not([type="radio"]), select';
                 document.querySelectorAll(selector).forEach((el) => {
                     const st = window.getComputedStyle(el);
                     if (st.display === 'none' || st.visibility === 'hidden' || el.offsetParent === null) return;
@@ -291,6 +310,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                     svc_btn.click()
                     page.wait_for_selector("#services-matrix:not(.is-collapsed) .service-row", timeout=5000)
 
+                page.evaluate("() => { const d = document.getElementById('backup-history-wrap'); if (d) d.open = true; }")
                 self._assert_layout_and_touch_targets(page, width)
                 self._assert_axe_wcag_aa(page, f"dashboard@{width}x{height}")
 
@@ -299,6 +319,30 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 self.assertEqual(unexpected_console, [], f"Console errors at {width}px: {unexpected_console}")
             finally:
                 context.close()
+
+    def test_backup_card_shows_failed_preflight_history_and_retention(self) -> None:
+        context, page, _, page_errors = self._new_authenticated_page(360, 800)
+        try:
+            page.wait_for_function("() => document.getElementById('backup-history').children.length === 2", timeout=10000)
+            if "is-collapsed" in (page.get_attribute("#backup-section", "class") or ""):
+                page.click("#backup-section .card-collapse-btn")
+            self.assertEqual(page.get_attribute("#backup-health", "data-state"), "error")
+            self.assertIn("did not answer", page.inner_text("#backup-health-title"))
+            self.assertIn("Last good backup", page.inner_text("#backup-health-detail"))
+            self.assertIn("2026-11-21 22:06", page.inner_text("#backup-last-time"))
+            self.assertIn("is-alert", page.get_attribute("#backup-section", "class"))
+            self.assertEqual(page.inner_text("#backup-status-badge"), "Failed")
+            self.assertTrue(page.is_visible("#backup-preflight .preflight-fail"))
+            page.click("#backup-history-wrap summary")
+            runs = page.locator("#backup-history .backup-run")
+            self.assertIn("Failed", runs.nth(0).inner_text())
+            self.assertIn("339.8 MB", runs.nth(1).inner_text())
+            self.assertIn("next run deletes immich_db_20261108_220001.sql.gz", page.inner_text("#backup-retention"))
+            self._assert_layout_and_touch_targets(page, 360)
+            self._assert_axe_wcag_aa(page, "backup-card@360x800")
+            self.assertEqual(page_errors, [])
+        finally:
+            context.close()
 
     def test_modal_keyboard_focus_trap_escape_and_axe(self) -> None:
         context, page, _, page_errors = self._new_authenticated_page(1366, 900)

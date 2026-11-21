@@ -17,8 +17,10 @@ from flask import Blueprint, jsonify, request
 
 from config import (
     APPDATA_DIR,
+    BACKUP_CRON_FILE,
     BACKUP_DIR,
     BACKUP_LOG_FILE,
+    BACKUP_STALE_HOURS,
     BACKUP_STATUS_FILE,
     GDRIVE_REMOTE,
     HDD_DATA,
@@ -27,6 +29,7 @@ from config import (
     get_host_timezone,
     get_tz_abbr,
 )
+from core import backup_health
 from core.storage_sizes import get_storage_sizes
 
 backup_sync_bp = Blueprint("backup_sync", __name__)
@@ -40,7 +43,7 @@ immich_library_stats_cache = {
 }
 
 STAGE_LABELS = {
-    0: "Not Verified",
+    0: "0. Pre-flight",
     1: "1. Face XMP Export",
     2: "2. Postgres Dump",
     3: "3. Rclone Mirror",
@@ -48,6 +51,7 @@ STAGE_LABELS = {
 }
 
 STAGE_MESSAGES = {
+    0: "Checking the remote, its folders and free space...",
     1: "Exporting named faces to XMP sidecars...",
     2: "Creating PostgreSQL database dump (pg_dumpall)...",
     3: "Mirroring database dump & photo library to Google Drive...",
@@ -63,6 +67,13 @@ def _format_iso_display(iso_str):
         return dt.strftime(f"%Y-%m-%d %H:%M {get_tz_abbr()}")
     except ValueError:
         return iso_str
+
+
+def _schedule_text():
+    hm = backup_health.cron_time(BACKUP_CRON_FILE)
+    if not hm:
+        return "Not scheduled"
+    return f"Daily {hm[0]:02d}:{hm[1]:02d} {get_tz_abbr()}"
 
 
 def _read_status_file():
@@ -239,18 +250,24 @@ def get_backup_status():
     last_message = "No backup run recorded yet"
     reason = "No backup run yet"
 
+    health = None
     if status_data:
-        raw_status = status_data.get("status", "unknown")
-        current_stage = int(status_data.get("stage") or 0)
-        last_message = status_data.get("message") or last_message
-        last_sync_time = _format_iso_display(status_data.get("last_good_at") or status_data.get("completed_at") or status_data.get("started_at"))
+        health = backup_health.summarize(
+            status_data,
+            running=is_syncing,
+            schedule=backup_health.cron_time(BACKUP_CRON_FILE),
+            tz_abbr=get_tz_abbr(),
+            stale_after_hours=BACKUP_STALE_HOURS,
+        )
+        backup_status = health["state"]
+        current_stage = health["stage"]
+        last_message = health["message"]
+        last_sync_time = health["last_good"] or _format_iso_display(status_data.get("completed_at") or status_data.get("started_at"))
         if not latest_db_name and status_data.get("dump_file"):
             latest_db_name = status_data.get("dump_file")
         if latest_db_size is None and isinstance(status_data.get("dump_bytes"), (int, float)):
             latest_db_size = f"{round(status_data['dump_bytes'] / (1024**2), 1)} MB"
-        if raw_status in ("synced", "error", "syncing", "unknown"):
-            backup_status = raw_status
-            reason = None if backup_status == "synced" else last_message
+        reason = None if backup_status == "synced" else last_message
     elif os.path.exists(BACKUP_LOG_FILE):
         log_stage = 0
         is_error = False
@@ -313,7 +330,7 @@ def get_backup_status():
             last_message = "Backup log has no completed runs yet"
             reason = last_message
 
-    if is_syncing:
+    if is_syncing and health is None:
         backup_status = "syncing"
         current_stage = active_process_stage if active_process_stage > 0 else (current_stage or 1)
         last_message = STAGE_MESSAGES.get(current_stage, "Syncing to Google Drive...")
@@ -333,7 +350,8 @@ def get_backup_status():
         "latest_dump": latest_db_name,
         "message": last_message,
         "reason": reason,
-        "schedule": f"Daily 22:00 {get_tz_abbr()}",
+        "schedule": _schedule_text(),
+        "health": health,
         "gdrive_remote": lib_meta.get("gdrive_remote"),
         "log_file": BACKUP_LOG_FILE,
         "memories_dir": HDD_MEMORIES,

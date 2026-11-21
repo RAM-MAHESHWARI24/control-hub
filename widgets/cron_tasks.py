@@ -8,16 +8,16 @@ there is no Watchtower job.
 """
 
 import datetime
-import json
 import os
 import subprocess
 import threading
-from pathlib import Path
 
 from flask import Blueprint, jsonify
 
 from config import (
+    BACKUP_CRON_FILE,
     BACKUP_LOG_FILE,
+    BACKUP_STALE_HOURS,
     BACKUP_STATUS_FILE,
     IMMICH_ML_LOG_FILE,
     RECYCLARR_LOG_FILE,
@@ -25,6 +25,7 @@ from config import (
     SUSPEND_SKIP_FILE,
     get_tz_abbr,
 )
+from core import backup_health
 from widgets.backup_sync import is_syncing_backup, trigger_backup_sync
 from widgets.sleep_guard import toggle_sleep
 from widgets.tv_updater import (
@@ -39,6 +40,11 @@ cron_tasks_bp = Blueprint("cron_tasks", __name__)
 
 CRON_RUNNING_LOCK = threading.Lock()
 cron_running_jobs = set()
+
+
+def _backup_schedule_text(tz_abbr):
+    hm = backup_health.cron_time(BACKUP_CRON_FILE)
+    return f"Daily at {hm[0]:02d}:{hm[1]:02d} {tz_abbr}" if hm else "Not scheduled"
 
 
 @cron_tasks_bp.route("/api/cron/status", methods=["GET"])
@@ -56,29 +62,25 @@ def get_cron_tasks_status():
             pass
 
     gdrive_last_run = "Never"
+    gdrive_summary = None
     gdrive_status_text = "Not Run Yet"
-    status_path = Path(BACKUP_STATUS_FILE)
-    if status_path.exists():
-        try:
-            st = json.loads(status_path.read_text(encoding="utf-8"))
-            ts_str = st.get("last_good_at") or st.get("completed_at") or st.get("started_at")
-            if ts_str:
-                try:
-                    dt = datetime.datetime.fromisoformat(ts_str)
-                    gdrive_last_run = dt.strftime(f"%b %d, %H:%M {tz_abbr}")
-                except ValueError:
-                    gdrive_last_run = ts_str
-            raw_st = st.get("status")
-            if raw_st == "synced":
-                gdrive_status_text = "Synced"
-            elif raw_st == "error":
-                gdrive_status_text = "Error"
-            elif raw_st == "syncing":
-                gdrive_status_text = "Syncing..."
-            else:
-                gdrive_status_text = "Unknown"
-        except Exception:
-            pass
+    backup_state = backup_health.read_status(BACKUP_STATUS_FILE)
+    if backup_state is not None:
+        health = backup_health.summarize(
+            backup_state, running=gdrive_running, tz_abbr=tz_abbr, stale_after_hours=BACKUP_STALE_HOURS,
+            schedule=backup_health.cron_time(BACKUP_CRON_FILE),
+        )
+        ts = health["last_good_at"] or backup_state.get("completed_at") or backup_state.get("started_at")
+        if ts:
+            try:
+                gdrive_last_run = datetime.datetime.fromisoformat(ts).strftime(f"%b %d, %H:%M {tz_abbr}")
+            except ValueError:
+                gdrive_last_run = ts
+        gdrive_status_text = {
+            "synced": "Synced", "error": "Error", "syncing": "Syncing...",
+            "stale": "Stale", "interrupted": "Interrupted",
+        }.get(health["state"], "Unknown")
+        gdrive_summary = health["message"]
     elif os.path.exists(BACKUP_LOG_FILE):
         try:
             with open(BACKUP_LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
@@ -166,12 +168,13 @@ def get_cron_tasks_status():
             "id": "immich_backup",
             "name": "Google Drive Cloud Backup",
             "description": "Noodle Gallery media, face XMP sidecars & PostgreSQL dump",
-            "schedule": f"Daily at 22:00 {tz_abbr}",
+            "schedule": _backup_schedule_text(tz_abbr),
             "is_running": gdrive_running,
             "status_text": gdrive_status_text,
             "last_run": gdrive_last_run,
+            "summary": gdrive_summary,
             "can_run": True,
-            "run_label": "Sync Now",
+            "run_label": "Run backup now",
             "icon": "cloud",
         },
         {
