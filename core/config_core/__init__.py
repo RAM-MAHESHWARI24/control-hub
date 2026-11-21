@@ -46,6 +46,14 @@ from .netplan_manager import (
     netplan_change_status,
     backup_netplan_configs,
 )
+from .auth_password import (
+    PASSWORD_FILE,
+    MIN_PASSWORD_LENGTH,
+    hash_password,
+    verify_password,
+    read_password_hash,
+    set_password,
+)
 from .env_manager import (
     load_env_file,
     write_env_file,
@@ -87,6 +95,12 @@ __all__ = [
     "confirm_netplan_change",
     "netplan_change_status",
     "backup_netplan_configs",
+    "PASSWORD_FILE",
+    "MIN_PASSWORD_LENGTH",
+    "hash_password",
+    "verify_password",
+    "read_password_hash",
+    "set_password",
     "load_env_file",
     "write_env_file",
     "update_env_variables",

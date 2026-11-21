@@ -19,9 +19,11 @@ servers:
         description: LAN IP of the target homelab server
 
 # Every route except the public probes (/api/health, /api/livez, /api/readyz,
-# /api/docs, /api/openapi.yaml) requires `Authorization: Bearer <token>`.
-# The token lives in /etc/homelab/control-hub.token (shown by `./setup.sh token`);
-# whoever holds it controls a daemon that is root-equivalent on the host.
+# /api/docs, /api/openapi.yaml) and /api/auth/login + /api/auth/status needs
+# either the `hub_session` cookie (set by POST /api/auth/login with the dashboard
+# password) or `Authorization: Bearer <token>`. The token lives in
+# /etc/homelab/control-hub.token (shown by `./setup.sh token`) and is meant for
+# scripts. Whoever signs in controls a daemon that is root-equivalent on the host.
 security:
   - bearerToken: []
 
@@ -310,10 +312,55 @@ paths:
         '403':
           description: Environment directory is root-owned; apply the change through setup.sh
 
+  /api/auth/login:
+    post:
+      summary: Sign in with the dashboard password
+      description: Sets the HttpOnly `hub_session` cookie (SameSite=Strict, about 400 days). The API token is also accepted as the password. 10 wrong attempts in 5 minutes from one address answer 429.
+      tags: [Auth]
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { password: { type: string } } }
+      responses:
+        '200': { description: Signed in; cookie set }
+        '401': { description: Wrong password }
+        '409': { description: No dashboard password set (run `sudo ./setup.sh password`) }
+        '429': { description: Too many wrong attempts }
+  /api/auth/status:
+    get:
+      summary: Whether this request is signed in and whether a password is set
+      tags: [Auth]
+      security: []
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: { type: object, properties: { authenticated: { type: boolean }, password_set: { type: boolean } } }
+  /api/auth/logout:
+    post:
+      summary: Sign this browser out (clears the cookie)
+      tags: [Auth]
+      responses:
+        '200': { description: Signed out }
+  /api/auth/password:
+    post:
+      summary: Change the dashboard password
+      description: Needs the current password. Signs out every other browser; this one stays signed in.
+      tags: [Auth]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { current: { type: string }, new: { type: string, minLength: 8 } } }
+      responses:
+        '200': { description: Changed }
+        '400': { description: New password shorter than 8 characters }
+        '403': { description: Current password wrong }
   /api/auth/check:
     get:
-      summary: Validate the bearer token
-      description: Returns 200 when the Authorization header carries the daemon's token, 401 otherwise.
+      summary: Validate the session cookie or bearer token
+      description: Returns 200 when the request is signed in (cookie or token), 401 otherwise.
       tags: [Auth]
       responses:
         '200':

@@ -14,6 +14,10 @@ sys.path.insert(0, str(HUB_ROOT))
 
 TEST_TOKEN = "standalone-test-token-0123456789"
 os.environ["CONTROL_HUB_TOKEN"] = TEST_TOKEN
+import tempfile  # noqa: E402
+
+_PW_DIR = tempfile.mkdtemp(prefix="hub_pw_")
+os.environ["CONTROL_HUB_PASSWORD_FILE"] = os.path.join(_PW_DIR, "password")
 
 from flask.testing import FlaskClient
 from server import create_app
@@ -44,6 +48,47 @@ class TestControlHubStandalone(unittest.TestCase):
         self.assertEqual(anon.get("/api/system/vitals").status_code, 401)
         self.assertEqual(anon.get("/api/system/vitals", headers={"Authorization": "Bearer nope"}).status_code, 401)
         self.assertEqual(self.client.get("/api/auth/check").status_code, 200)
+
+    def test_password_sign_in(self):
+        """A browser signs in with the password, gets a cookie, can change the password and sign out"""
+        from core import auth
+        from core.config_core.auth_password import PASSWORD_FILE, set_password
+
+        auth._failures.clear()
+        if PASSWORD_FILE.exists():
+            PASSWORD_FILE.unlink()
+        anon = FlaskClient(self.app)
+        self.assertEqual(anon.post("/api/auth/login", json={"password": "whatever1"}).status_code, 409)
+        set_password("first-pass-1")
+        self.assertFalse(anon.get("/api/auth/status").get_json()["authenticated"])
+        self.assertEqual(anon.post("/api/auth/login", json={"password": "wrong-pass"}).status_code, 401)
+        self.assertEqual(anon.get("/api/system/vitals").status_code, 401)
+
+        browser = FlaskClient(self.app, use_cookies=True)
+        res = browser.post("/api/auth/login", json={"password": "first-pass-1"})
+        self.assertEqual(res.status_code, 200)
+        cookie = res.headers.get("Set-Cookie", "")
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Strict", cookie)
+        self.assertEqual(browser.get("/api/auth/check").status_code, 200)
+
+        other = FlaskClient(self.app, use_cookies=True)
+        self.assertEqual(other.post("/api/auth/login", json={"password": TEST_TOKEN}).status_code, 200)  # token still works
+
+        self.assertEqual(browser.post("/api/auth/password", json={"current": "nope-nope", "new": "second-pass-2"}).status_code, 403)
+        self.assertEqual(browser.post("/api/auth/password", json={"current": "first-pass-1", "new": "short"}).status_code, 400)
+        self.assertEqual(browser.post("/api/auth/password", json={"current": "first-pass-1", "new": "second-pass-2"}).status_code, 200)
+        self.assertEqual(browser.get("/api/auth/check").status_code, 200)   # this browser stays signed in
+        self.assertEqual(other.get("/api/auth/check").status_code, 401)     # the other one is signed out
+
+        browser.post("/api/auth/logout")
+        self.assertEqual(browser.get("/api/auth/check").status_code, 401)
+
+        auth._failures.clear()
+        for _ in range(auth.LOGIN_MAX_FAILURES):
+            anon.post("/api/auth/login", json={"password": "bad-guess"})
+        self.assertEqual(anon.post("/api/auth/login", json={"password": "second-pass-2"}).status_code, 429)
+        auth._failures.clear()
 
     def test_indexer_picker_hidden_without_prowlarr_key(self):
         """The indexer picker reports installed=false (and hides itself) when no Prowlarr key exists"""
