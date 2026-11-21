@@ -109,6 +109,14 @@ def _ensure_secret(config: Dict[str, Any], key: str, generator) -> str:
     return value
 
 
+def _external_mount_path(config: Dict[str, Any]) -> str:
+    """Container path for the photo external library; an unusable value falls back to /mnt/media."""
+    path = str(config.get("photo_external_mount_path") or "/mnt/media").strip().rstrip("/")
+    if not path.startswith("/") or ":" in path or any(c.isspace() for c in path) or path in ("", "/data"):
+        return "/mnt/media"
+    return path
+
+
 def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Optional[str] = None) -> Dict[str, Any]:
     """
     Renders every module's environment file from its .env.example template.
@@ -231,6 +239,8 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                 "THUMBS_LOCATION": config.get("photo_thumbs_dir", f"{photo_state}/thumbs"),
                 "ENCODED_VIDEO_LOCATION": config.get("photo_video_dir", f"{photo_state}/encoded-video"),
                 "EXTERNAL_LIBRARY_LOCATION": memories_dir,
+                "EXTERNAL_LIBRARY_MOUNT_PATH": _external_mount_path(config),
+                "EXTERNAL_LIBRARY_MOUNT_MODE": "rw" if str(config.get("photo_external_mount_mode", "ro")).strip() == "rw" else "ro",
                 "GALLERY_PORT": config.get("gallery_port", 2283),
                 "TZ": tz,
                 "DB_PASSWORD": pg_pass,
