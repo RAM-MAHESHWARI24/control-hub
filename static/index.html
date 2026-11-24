@@ -14,13 +14,17 @@
           : (pref === "light" ? "light" : "dark");
         document.documentElement.dataset.theme = resolved;
         document.documentElement.dataset.themePref = pref;
+        var sbPref = localStorage.getItem("hub_sidebar_collapsed");
+        var sbCollapsed = sbPref === "true" || (sbPref === null && window.innerWidth >= 600 && window.innerWidth < 1024);
+        document.documentElement.dataset.sidebarCollapsed = sbCollapsed ? "true" : "false";
       } catch (_) {
         document.documentElement.dataset.theme = "dark";
         document.documentElement.dataset.themePref = "dark";
+        document.documentElement.dataset.sidebarCollapsed = "false";
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=33" />
+  <link rel="stylesheet" href="css/style.css?v=34" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -132,28 +136,35 @@
   </header>
 
   <div class="hub-shell">
-    <!-- 5 Focused Workspace Views: Bottom Bar (<=599px) / Rail (600..1023px) / Sidebar (>=1024px) -->
+    <!-- 5 Focused Workspace Views: Bottom Bar (<=599px) / Collapsible Icon Rail (>=600px) -->
     <nav id="hub-nav" class="hub-nav" aria-label="Workspace navigation">
-      <a href="#/overview" class="hub-nav-item is-active" id="nav-item-overview" data-view-link="overview" aria-current="page">
+      <a href="#/overview" class="hub-nav-item is-active" id="nav-item-overview" data-view-link="overview" title="Overview" aria-label="Overview" aria-current="page">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-overview"></use></svg>
         <span class="nav-label">Overview</span>
       </a>
-      <a href="#/apps" class="hub-nav-item" id="nav-item-apps" data-view-link="apps">
+      <a href="#/apps" class="hub-nav-item" id="nav-item-apps" data-view-link="apps" title="Apps" aria-label="Apps">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-apps"></use></svg>
         <span class="nav-label">Apps</span>
       </a>
-      <a href="#/backups" class="hub-nav-item" id="nav-item-backups" data-view-link="backups">
+      <a href="#/backups" class="hub-nav-item" id="nav-item-backups" data-view-link="backups" title="Backups" aria-label="Backups">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cloud"></use></svg>
         <span class="nav-label">Backups</span>
       </a>
-      <a href="#/tvs" class="hub-nav-item" id="nav-item-tvs" data-view-link="tvs">
+      <a href="#/tvs" class="hub-nav-item" id="nav-item-tvs" data-view-link="tvs" title="TVs" aria-label="TVs">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
         <span class="nav-label">TVs</span>
       </a>
-      <a href="#/system" class="hub-nav-item" id="nav-item-system" data-view-link="system">
+      <a href="#/system" class="hub-nav-item" id="nav-item-system" data-view-link="system" title="System" aria-label="System">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cpu"></use></svg>
         <span class="nav-label">System</span>
       </a>
+
+      <div class="hub-nav-footer">
+        <button type="button" id="btn-sidebar-toggle" class="sidebar-toggle-btn" aria-controls="hub-nav" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">
+          <svg class="ui-icon sidebar-toggle-icon" id="sidebar-toggle-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-arrow-left"></use></svg>
+          <span class="sidebar-toggle-label">Collapse</span>
+        </button>
+      </div>
     </nav>
 
     <main id="main-content" class="dashboard-main" tabindex="-1">

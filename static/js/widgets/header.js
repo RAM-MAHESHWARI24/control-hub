@@ -7,6 +7,7 @@ import { $ } from "../shared/dom.js";
 import { state } from "../state.js";
 
 const THEME_STORAGE_KEY = "hub_theme";
+const SIDEBAR_STORAGE_KEY = "hub_sidebar_collapsed";
 
 const liveClock = $("live-clock");
 const liveClockMobile = $("live-clock-mobile");
@@ -23,6 +24,10 @@ const btnThemeToggle = $("btn-theme-toggle");
 const themeToggleIcon = $("theme-toggle-icon");
 const btnHeaderMenu = $("btn-header-menu");
 const headerActionsMenu = $("header-actions-menu");
+const btnSidebarToggle = $("btn-sidebar-toggle");
+const sidebarToggleIcon = $("sidebar-toggle-icon");
+const sidebarToggleLabel = document.querySelector(".sidebar-toggle-label");
+const mainContent = $("main-content");
 
 const sleepCountdown = $("sleep-countdown");
 const sleepCurrentNeedle = $("sleep-current-needle");
@@ -193,6 +198,33 @@ export function setMenuOpen(open) {
   btnHeaderMenu.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
+export function setSidebarCollapsed(collapsed, persist = true) {
+  const isCollapsed = Boolean(collapsed);
+  document.documentElement.dataset.sidebarCollapsed = isCollapsed ? "true" : "false";
+  if (persist) {
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, isCollapsed ? "true" : "false");
+    } catch (_) {
+      /* ignore storage errors */
+    }
+  }
+
+  if (btnSidebarToggle) {
+    btnSidebarToggle.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+    btnSidebarToggle.setAttribute("aria-label", isCollapsed ? "Expand sidebar" : "Collapse sidebar");
+    btnSidebarToggle.setAttribute("title", isCollapsed ? "Expand sidebar" : "Collapse sidebar");
+  }
+  if (sidebarToggleIcon) {
+    const useEl = sidebarToggleIcon.querySelector("use");
+    if (useEl) {
+      useEl.setAttribute("href", `/img/icons/ui-sprite.svg#${isCollapsed ? "icon-arrow-right" : "icon-arrow-left"}`);
+    }
+  }
+  if (sidebarToggleLabel) {
+    sidebarToggleLabel.textContent = isCollapsed ? "Expand" : "Collapse";
+  }
+}
+
 export function setupHeader() {
   // Initialize theme from pre-boot dataset or localStorage
   const initialPref = document.documentElement.dataset.themePref || "dark";
@@ -270,4 +302,27 @@ export function setupHeader() {
       if (target) target.click();
     });
   });
+
+  // Collapsible sidebar (expand -> / collapse <- button + auto-collapse on main-content click)
+  const initialCollapsed = document.documentElement.dataset.sidebarCollapsed === "true";
+  setSidebarCollapsed(initialCollapsed, false);
+
+  if (btnSidebarToggle) {
+    btnSidebarToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const currentlyCollapsed = document.documentElement.dataset.sidebarCollapsed === "true";
+      setSidebarCollapsed(!currentlyCollapsed, true);
+    });
+  }
+
+  if (mainContent) {
+    mainContent.addEventListener("click", () => {
+      if (window.innerWidth < 600) return;
+      const sel = window.getSelection ? window.getSelection().toString() : "";
+      if (sel && sel.length > 0) return;
+      if (document.documentElement.dataset.sidebarCollapsed !== "true") {
+        setSidebarCollapsed(true, true);
+      }
+    });
+  }
 }

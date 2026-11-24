@@ -636,6 +636,47 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         finally:
             context.close()
 
+    def test_sidebar_collapses_on_main_click_and_toggles_with_arrow(self) -> None:
+        context, page, _, page_errors, _ = self._new_authenticated_page(1366, 900)
+        try:
+            nav = page.locator("#hub-nav")
+            toggle = page.locator("#btn-sidebar-toggle")
+
+            # Desktop starts expanded with visible labels and Collapse button (<-)
+            self.assertGreater(nav.bounding_box()["width"], 150)
+            self.assertEqual(toggle.get_attribute("aria-expanded"), "true")
+            self.assertEqual(page.evaluate("() => document.documentElement.dataset.sidebarCollapsed"), "false")
+
+            # Clicking inside right-side #main-content collapses the sidebar to icons only
+            page.click("#overview-apps-heading")
+            page.wait_for_function("() => document.documentElement.dataset.sidebarCollapsed === 'true'", timeout=3000)
+            page.wait_for_timeout(160)
+            self.assertLessEqual(nav.bounding_box()["width"], 80)
+            self.assertEqual(toggle.get_attribute("aria-expanded"), "false")
+
+            # Hovering a collapsed icon reveals its module name tooltip
+            apps_item = page.locator("#nav-item-apps")
+            apps_label = page.locator("#nav-item-apps .nav-label")
+            self.assertEqual(apps_item.get_attribute("title"), "Apps")
+            apps_item.hover()
+            self.assertTrue(apps_label.is_visible())
+            self._assert_layout_and_touch_targets(page, 1366, "collapsed-sidebar-hover")
+            self._assert_axe_wcag_aa(page, "collapsed-sidebar@1366x900")
+
+            # Clicking the bottom Expand arrow (->) restores full sidebar width
+            toggle.click()
+            page.wait_for_function("() => document.documentElement.dataset.sidebarCollapsed === 'false'", timeout=3000)
+            page.wait_for_timeout(160)
+            self.assertGreater(nav.bounding_box()["width"], 150)
+            self.assertEqual(toggle.get_attribute("aria-expanded"), "true")
+
+            # Clicking the bottom Collapse arrow (<-) collapses it back cleanly
+            toggle.click()
+            page.wait_for_function("() => document.documentElement.dataset.sidebarCollapsed === 'true'", timeout=3000)
+            self.assertEqual(page_errors, [])
+        finally:
+            context.close()
+
 
 if __name__ == "__main__":
     unittest.main()
