@@ -22,6 +22,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -189,12 +190,14 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
         media_dir = root / "media-backups"
         media_dir.mkdir(parents=True, exist_ok=True)
+        media_start = (datetime.now(timezone.utc) - timedelta(hours=2, minutes=1)).isoformat()
+        media_end = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
         (media_dir / "status.json").write_text(json.dumps({
             "status": "synced", "stage": 4, "message": "Media settings backed up to gdrive:Media_Backup",
-            "started_at": "2026-11-22T21:30:01+05:30", "completed_at": "2026-11-22T21:30:09+05:30",
-            "last_good_at": "2026-11-22T21:30:09+05:30", "remote": "gdrive:",
-            "dump_file": "media_config_20261122_213001.tar.zst", "dump_bytes": 19454318,
-            "history": [{"started_at": "2026-11-22T21:30:01+05:30", "outcome": "synced", "duration_s": 8}],
+            "started_at": media_start, "completed_at": media_end,
+            "last_good_at": media_end, "remote": "gdrive:",
+            "dump_file": "media_config_recent.tar.zst", "dump_bytes": 19454318,
+            "history": [{"started_at": media_start, "outcome": "synced", "duration_s": 8}],
         }), encoding="utf-8")
 
         (root / "units").mkdir(exist_ok=True)

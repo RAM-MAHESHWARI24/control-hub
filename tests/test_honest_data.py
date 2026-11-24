@@ -13,6 +13,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -214,13 +215,15 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
         bak_dir = self.root / "photo-backups"
         bak_dir.mkdir()
         status_path = bak_dir / "status.json"
+        recent_start = (datetime.now(timezone.utc) - timedelta(hours=2, minutes=12)).isoformat()
+        recent_end = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
         status_payload = {
             "status": "synced",
             "stage": 4,
             "message": "Completed cleanly",
-            "started_at": "2026-11-21T03:00:00+00:00",
-            "completed_at": "2026-11-21T03:12:00+00:00",
-            "last_good_at": "2026-11-21T03:12:00+00:00",
+            "started_at": recent_start,
+            "completed_at": recent_end,
+            "last_good_at": recent_end,
             "dump_file": "immich_db_20261121.sql.gz",
             "dump_bytes": 10 * 1024 * 1024,
             "remote": "gdrive:immich-backup",
