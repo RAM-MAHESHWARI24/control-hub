@@ -20,7 +20,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=32" />
+  <link rel="stylesheet" href="css/style.css?v=33" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -218,12 +218,12 @@
       </section>
 
       <!-- =================================================================== -->
-      <!-- VIEW 1: OVERVIEW (Default — App Launcher, KPI Row, Adaptive Activity) -->
+      <!-- VIEW 1: OVERVIEW (Console Dispatch Bench: Apps, Vitals, Activity)   -->
       <!-- =================================================================== -->
       <div class="hub-view is-active" id="view-overview" data-view="overview">
-        <!-- Quick-Launch Installed Apps -->
-        <section class="panel-card" id="overview-apps-card" aria-labelledby="overview-apps-heading">
-          <div class="panel-header">
+        <!-- Quick-Launch Installed Apps (Flush Hairline Matrix) -->
+        <section class="panels console-sheet" id="overview-apps-card" aria-labelledby="overview-apps-heading">
+          <div class="panel panel-head-strip">
             <div class="panel-title-group">
               <h2 id="overview-apps-heading">Quick Launch</h2>
               <span class="panel-subtitle" id="overview-apps-subtitle">Discovering installed apps&hellip;</span>
@@ -240,14 +240,14 @@
           </div>
         </section>
 
-        <!-- 4 At-a-Glance Vitals KPI Cards -->
-        <section class="kpi-grid" aria-label="At-a-glance server metrics">
+        <!-- 4-Cell Single-Surface Console Instrument Bench -->
+        <section class="kpi-grid panels" aria-label="At-a-glance server metrics">
           <a href="#/system" class="kpi-card" id="kpi-compute">
             <div class="kpi-head">
               <span class="kpi-label">Compute</span>
               <svg class="ui-icon kpi-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cpu"></use></svg>
             </div>
-            <div class="kpi-primary font-mono" id="kpi-cpu-val">--%</div>
+            <div class="kpi-primary reading font-mono" id="kpi-cpu-val">--%</div>
             <div class="kpi-secondary" id="kpi-ram-sub">RAM: -- / -- GiB</div>
             <div class="kpi-bar"><div class="kpi-bar-fill fill-accent" id="kpi-cpu-bar" style="width: 0%;"></div></div>
           </a>
@@ -257,7 +257,7 @@
               <span class="kpi-label">Storage</span>
               <svg class="ui-icon kpi-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-hard-drive"></use></svg>
             </div>
-            <div class="kpi-primary font-mono" id="kpi-storage-val">-- GB free</div>
+            <div class="kpi-primary reading font-mono" id="kpi-storage-val">-- GB free</div>
             <div class="kpi-secondary" id="kpi-storage-sub">OS Root: --%</div>
             <div class="kpi-bar"><div class="kpi-bar-fill fill-success" id="kpi-storage-bar" style="width: 0%;"></div></div>
           </a>
@@ -267,7 +267,7 @@
               <span class="kpi-label">Network</span>
               <svg class="ui-icon kpi-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-activity"></use></svg>
             </div>
-            <div class="kpi-primary font-mono" id="kpi-net-val">0.00 MB/s</div>
+            <div class="kpi-primary reading font-mono" id="kpi-net-val">0.00 MB/s</div>
             <div class="kpi-secondary" id="kpi-net-sub">Detecting NIC&hellip;</div>
           </a>
 
@@ -281,31 +281,48 @@
           </a>
         </section>
 
-        <!-- Adaptive Live Activity Strip -->
-        <section class="panel-card" id="overview-activity-card" aria-labelledby="overview-activity-heading">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <h2 id="overview-activity-heading">Live Activity</h2>
+        <!-- Bottom Split Sheet: Live Activity Ledger + Recent Audit Trail -->
+        <div class="panels overview-split-bench">
+          <section class="panel" id="overview-activity-card" aria-labelledby="overview-activity-heading">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h2 id="overview-activity-heading">Live Activity</h2>
+              </div>
+              <div class="panel-actions">
+                <a href="#/apps" class="btn-ghost" id="overview-activity-link">Downloads &amp; Apps</a>
+              </div>
             </div>
-            <div class="panel-actions">
-              <a href="#/apps" class="btn-ghost" id="overview-activity-link">Downloads &amp; Apps</a>
+            <div id="overview-activity-body" class="activity-strip-body">
+              <div class="activity-quiet">
+                <span class="status-dot is-ok" aria-hidden="true"></span>
+                <span>Checking active downloads, streams, and background jobs&hellip;</span>
+              </div>
             </div>
-          </div>
-          <div id="overview-activity-body" class="activity-strip-body">
-            <div class="activity-quiet">
-              <span class="status-dot is-ok" aria-hidden="true"></span>
-              <span>Checking active downloads, streams, and background jobs&hellip;</span>
+          </section>
+
+          <section class="panel" id="overview-audit-card" aria-labelledby="overview-audit-heading">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h2 id="overview-audit-heading">Host Record</h2>
+                <span class="panel-subtitle">Latest subsystem state</span>
+              </div>
             </div>
-          </div>
-        </section>
+            <ol id="overview-audit-trail" class="trail audit-trail-list">
+              <li class="audit-trail-item">
+                <span class="audit-trail-label">Telemetry</span>
+                <span class="audit-trail-meta font-mono">Initializing&hellip;</span>
+              </li>
+            </ol>
+          </section>
+        </div>
       </div>
 
       <!-- =================================================================== -->
-      <!-- VIEW 2: APPS & MEDIA (Services Matrix + Active Downloads)           -->
+      <!-- VIEW 2: APPS & MEDIA (Ruled Service Ledger + Active Downloads)      -->
       <!-- =================================================================== -->
       <div class="hub-view" id="view-apps" data-view="apps" hidden>
-        <section class="panel-card" id="services-matrix">
-          <div class="panel-header panel-header-wrap">
+        <section class="panels console-sheet" id="services-matrix">
+          <div class="panel panel-head-strip panel-header-wrap">
             <div class="panel-title-group">
               <h2>Installed Services</h2>
               <span class="panel-subtitle card-summary">Discovering installed containers&hellip;</span>
@@ -318,7 +335,7 @@
             </div>
           </div>
 
-          <div class="services-toolbar">
+          <div class="panel panel-toolbar-strip services-toolbar">
             <div class="service-filter-group" id="service-filter-group" role="group" aria-label="Filter services by category">
               <button type="button" class="pill-btn active" data-filter="all" aria-pressed="true">All (0)</button>
               <button type="button" class="pill-btn" data-filter="media" aria-pressed="false">Media (0)</button>
@@ -340,13 +357,13 @@
             </div>
           </div>
 
-          <div class="services-grid" id="services-grid">
+          <div class="services-grid services-ledger-host" id="services-grid">
             <div class="empty-state">Probing installed Docker services&hellip;</div>
           </div>
         </section>
 
-        <section class="panel-card" id="torrent-downloads-panel">
-          <div class="panel-header panel-header-wrap">
+        <section class="panels console-sheet" id="torrent-downloads-panel">
+          <div class="panel panel-head-strip panel-header-wrap">
             <div class="panel-title-group">
               <h2>Current Downloads</h2>
               <span class="panel-subtitle card-summary">Checking qBittorrent queue&hellip;</span>

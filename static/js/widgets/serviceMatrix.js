@@ -142,7 +142,7 @@ function applyClientFilters() {
     const hay = row.dataset.search || "";
     const matchCat = filterCat === "all" || cat === filterCat;
     const matchSearch = !q || hay.includes(q);
-    row.style.display = matchCat && matchSearch ? "flex" : "none";
+    row.hidden = !(matchCat && matchSearch);
   });
 }
 
@@ -164,10 +164,28 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
   }
   lastServicesSignature = sig;
 
+  let tbody = servicesGrid.querySelector("tbody.service-ledger-body");
+  if (!tbody) {
+    servicesGrid.innerHTML = `
+      <table class="service-ledger">
+        <thead>
+          <tr>
+            <th scope="col">Service</th>
+            <th scope="col">Group</th>
+            <th scope="col" class="num-col">Port</th>
+            <th scope="col">Health</th>
+            <th scope="col" class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="service-ledger-body"></tbody>
+      </table>
+    `;
+    tbody = servicesGrid.querySelector("tbody.service-ledger-body");
+  }
+
   // Keyed patching to avoid disrupting hover/focus during 15s polling
-  if (servicesGrid.querySelector(".empty-state")) servicesGrid.replaceChildren();
   const existing = new Map();
-  servicesGrid.querySelectorAll(".service-row[data-service-id]").forEach((el) => {
+  tbody.querySelectorAll(".service-row[data-service-id]").forEach((el) => {
     existing.set(el.dataset.serviceId, el);
   });
 
@@ -176,6 +194,7 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
     seenIds.add(svc.id);
     const { cls: badgeClass, label: badgeText } = serviceVisualBadge(svc);
     const category = svc.category || "system";
+    const catLabel = category.charAt(0).toUpperCase() + category.slice(1);
     const hasUi = svc.has_web_ui !== false && Boolean(svc.port);
     const protocol = svc.port === 9090 ? "https:" : "http:";
     const targetUrl = hasUi ? `${protocol}//${HOSTNAME}:${svc.port}` : null;
@@ -189,11 +208,11 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
 
     let row = existing.get(svc.id);
     if (!row) {
-      row = document.createElement("div");
+      row = document.createElement("tr");
       row.className = `service-row tile-${svc.id}`;
       row.id = `tile-${svc.id}`;
       row.dataset.serviceId = svc.id;
-      servicesGrid.appendChild(row);
+      tbody.appendChild(row);
     }
 
     row.dataset.category = category;
@@ -218,27 +237,33 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
     ` : "";
 
     row.innerHTML = `
-      <div class="service-row-main">
-        <span class="status-dot-sm ${badgeClass}" aria-hidden="true"></span>
-        <div class="service-row-icon" aria-hidden="true">${getBrandLogoHtml(svc.id)}</div>
-        <div class="service-row-info">
-          <div class="service-row-title-line">
+      <td class="ledger-cell-service">
+        <div class="service-row-main">
+          <span class="status-dot-sm ${badgeClass}" aria-hidden="true"></span>
+          <div class="service-row-icon" aria-hidden="true">${getBrandLogoHtml(svc.id)}</div>
+          <div class="service-row-info">
             <span class="service-row-name">${safeName}</span>
-            ${svc.port ? `<span class="tile-port font-mono">:${svc.port}</span>` : `<span class="tile-port font-mono">Internal</span>`}
+            <span class="service-row-desc">${safeStatus}</span>
           </div>
-          <span class="service-row-desc">${safeStatus}</span>
         </div>
-      </div>
-
-      <div class="service-row-actions">
+      </td>
+      <td class="ledger-cell-group">${escapeHtml(catLabel)}</td>
+      <td class="ledger-cell-port num-col">
+        ${svc.port ? `<span class="tile-port font-mono">:${svc.port}</span>` : `<span class="tile-port font-mono">Internal</span>`}
+      </td>
+      <td class="ledger-cell-health">
         <span class="tile-badge ${badgeClass}">${escapeHtml(badgeText)}</span>
-        ${hasUi ? `
-          <a href="${targetUrl}" target="_blank" rel="noopener" class="btn-tile-launch" id="btn-launch-${escapeHtml(svc.id)}" aria-label="Open ${safeName} on port ${svc.port}">
-            Open ${uiIcon("external")}
-          </a>
-        ` : ""}
-        ${actionBtnsHtml}
-      </div>
+      </td>
+      <td class="ledger-cell-actions actions-col">
+        <div class="service-row-actions">
+          ${hasUi ? `
+            <a href="${targetUrl}" target="_blank" rel="noopener" class="btn-tile-launch" id="btn-launch-${escapeHtml(svc.id)}" aria-label="Open ${safeName} on port ${svc.port}">
+              Open ${uiIcon("external")}
+            </a>
+          ` : ""}
+          ${actionBtnsHtml}
+        </div>
+      </td>
     `;
   });
 
@@ -246,10 +271,10 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
     if (!seenIds.has(id)) node.remove();
   });
 
-  servicesGrid.querySelectorAll(".btn-tile-logs").forEach((btn) => {
+  tbody.querySelectorAll(".btn-tile-logs").forEach((btn) => {
     btn.onclick = () => openContainerLogs(btn.dataset.logId, btn.dataset.logName, btn.dataset.dockerId, btn);
   });
-  servicesGrid.querySelectorAll("[data-action]").forEach((btn) => {
+  tbody.querySelectorAll("[data-action]").forEach((btn) => {
     btn.onclick = () => performContainerAction(btn.dataset.svcId, btn.dataset.svcName, btn.dataset.action, btn);
   });
 

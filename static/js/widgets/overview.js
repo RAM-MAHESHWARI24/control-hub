@@ -25,6 +25,7 @@ const BRAND_ICON_MAP = {
 
 let lastAppsKey = "";
 let lastActivityKey = "";
+let lastAuditKey = "";
 
 export function renderOverviewApps() {
   const grid = $("overview-apps-grid");
@@ -243,8 +244,84 @@ export function renderOverviewActivity() {
   `).join("");
 }
 
+export function renderOverviewAuditTrail() {
+  const list = $("overview-audit-trail");
+  if (!list) return;
+
+  const entries = [];
+  const allServices = state.servicesList || [];
+  if (state.servicesLoadedOnce) {
+    const up = allServices.filter((s) => s.is_up).length;
+    const unhealthy = allServices.filter((s) => s.health === "unhealthy").length;
+    entries.push({
+      tone: unhealthy > 0 || (allServices.length > 0 && up === 0) ? "bad" : "ok",
+      label: "Containers",
+      detail: unhealthy > 0 ? `${unhealthy} unhealthy` : `${up}/${allServices.length} up`,
+      meta: unhealthy > 0 ? "Needs check" : "Nominal",
+    });
+  }
+
+  if (state.modules.backups && state.backupSnapshot) {
+    const bak = state.backupSnapshot;
+    const h = bak.health || {};
+    const st = h.state || bak.status || "unknown";
+    const tone = st === "synced" ? "ok" : (st === "syncing" ? "cool" : (st === "error" || st === "stale" ? "bad" : "muted"));
+    entries.push({
+      tone,
+      label: "Photo Backup",
+      detail: st === "synced" ? "Verified" : (st === "syncing" ? "Syncing" : (st.charAt(0).toUpperCase() + st.slice(1))),
+      meta: h.age ? `Last good ${h.age}` : (bak.db_size || "No completed run"),
+    });
+  }
+
+  if (state.modules.tvs && state.tvSnapshot) {
+    const tv = state.tvSnapshot;
+    const online = Number(tv.online_devices || 0);
+    const total = Number(tv.total_devices || 0);
+    const pending = Number(tv.pending_updates_count || 0);
+    entries.push({
+      tone: tv.is_deploying ? "cool" : (pending > 0 ? "accent" : (online > 0 ? "ok" : "muted")),
+      label: "TV Fleet",
+      detail: `${online}/${total} online`,
+      meta: pending > 0 ? `${pending} APK update${pending === 1 ? "" : "s"}` : "Up to date",
+    });
+  }
+
+  if (state.modules.sleepGuard) {
+    entries.push({
+      tone: state.sleepSkipActive ? "accent" : (state.sleepInstalled && state.sleepEnabled ? "cool" : "muted"),
+      label: "Sleep Guard",
+      detail: state.sleepSkipActive ? "Skip active" : (state.sleepInstalled ? state.sleepLabel : "Not installed"),
+      meta: state.sleepSkipActive ? "Operator override" : (state.sleepInstalled && state.sleepEnabled ? "RTC window" : "Always-on"),
+    });
+  }
+
+  const key = JSON.stringify(entries);
+  if (key === lastAuditKey && list.children.length > 0) return;
+  lastAuditKey = key;
+
+  if (entries.length === 0) {
+    list.innerHTML = `<li class="audit-trail-item"><span class="audit-trail-label">Telemetry</span><span class="audit-trail-meta font-mono">Waiting for polls&hellip;</span></li>`;
+    return;
+  }
+
+  list.innerHTML = entries.map((e) => `
+    <li class="audit-trail-item is-${e.tone}">
+      <div class="audit-trail-main">
+        <span class="audit-trail-dot" aria-hidden="true"></span>
+        <span class="audit-trail-label">${escapeHtml(e.label)}</span>
+      </div>
+      <div class="audit-trail-right">
+        <span class="audit-trail-val font-mono">${escapeHtml(e.detail)}</span>
+        <span class="audit-trail-meta font-mono">${escapeHtml(e.meta)}</span>
+      </div>
+    </li>
+  `).join("");
+}
+
 export function renderOverview() {
   renderOverviewApps();
   renderOverviewKpis();
   renderOverviewActivity();
+  renderOverviewAuditTrail();
 }
