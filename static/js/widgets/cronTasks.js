@@ -9,7 +9,8 @@ import { ENDPOINTS } from "../config.js";
 import { escapeHtml } from "../shared/formatters.js";
 import { openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
-import { toggleSleepMode } from "./sleepGuard.js";
+import { state } from "../state.js";
+import { renderSleepCronPins, toggleSleepMode } from "./sleepGuard.js";
 
 const cronGrid = $("cron-grid");
 const cronSubtitle = $("cron-card-subtitle");
@@ -42,6 +43,8 @@ export async function fetchCronTasks() {
     if (!res.ok) return false;
     const data = await res.json();
     const jobs = data.jobs || [];
+    state.cronJobs = jobs;
+    renderSleepCronPins(jobs);
 
     if (cronSubtitle) {
       cronSubtitle.textContent = `cron.d & systemd timers · ${jobs.length} installed`;

@@ -253,38 +253,61 @@ function renderFleetPreview(devices) {
     return;
   }
 
-  tvFleetPreview.innerHTML = devices.map((dev) => {
-    const isOnline = Boolean(dev.is_online);
-    const fgName = isOnline ? escapeHtml(dev.foreground_app_name || "Idle / Launcher") : null;
-    const isFgManaged = isOnline && (dev.apps || []).some((a) => a.is_foreground);
-    const hasPending = (dev.apps || []).some((a) => !a.is_up_to_date || !a.is_installed);
-
-    let statusPillClass = "synced";
-    let statusPillText = "Up to Date";
-    if (!isOnline) {
-      statusPillClass = "offline";
-      statusPillText = "Standby";
-    } else if (hasPending) {
-      statusPillClass = "pending";
-      statusPillText = "Pending Updates";
-    }
-
-    return `
-      <div class="fleet-item ${isOnline ? "fleet-online" : "fleet-offline"}">
-        <div class="fleet-item-top">
-          ${nameButton(dev, "card")}
-          <span class="fleet-device-ip font-mono">${escapeHtml(dev.ip)}:${escapeHtml(dev.port)}</span>
-        </div>
-        <div class="fleet-item-bottom">
-          <span class="fleet-app-tag ${isFgManaged ? "text-amber" : (isOnline ? "text-cyan" : "text-muted")}">
-            ${isOnline ? `Active: ${fgName}` : "Standby / Offline"}
-          </span>
-          <span class="fleet-status-pill ${statusPillClass}">${statusPillText}</span>
-        </div>
-        ${deviceInfoPanel(dev, "card")}
+  tvFleetPreview.innerHTML = `
+    <div class="fleet-ledger-table">
+      <div class="fleet-ledger-head" aria-hidden="true">
+        <span>Device &amp; Model</span>
+        <span>ADB Endpoint</span>
+        <span>Foreground &amp; Packages</span>
+        <span>ADB State</span>
       </div>
-    `;
-  }).join("");
+      ${devices.map((dev) => {
+        const isOnline = Boolean(dev.is_online);
+        const fgName = isOnline ? escapeHtml(dev.foreground_app_name || "Idle / Launcher") : null;
+        const isFgManaged = isOnline && (dev.apps || []).some((a) => a.is_foreground);
+        const hasPending = (dev.apps || []).some((a) => !a.is_up_to_date || !a.is_installed);
+
+        let statusPillClass = "synced";
+        let statusPillText = "Up to Date";
+        if (!isOnline) {
+          statusPillClass = "offline";
+          statusPillText = "Standby / Offline";
+        } else if (hasPending) {
+          statusPillClass = "pending";
+          statusPillText = "Pending Updates";
+        }
+
+        const pkgSummary = (dev.apps || []).map((a) => {
+          const ver = a.installed_name ? `v${escapeHtml(a.installed_name)}` : (a.installed_code > 0 ? `#${a.installed_code}` : "not installed");
+          return `<span class="fleet-pkg-tag font-mono">${escapeHtml(a.name)}: ${ver}</span>`;
+        }).join("");
+
+        return `
+          <div class="fleet-item ${isOnline ? "fleet-online" : "fleet-offline"}">
+            <div class="fleet-row-grid">
+              <div class="fleet-col-device">
+                ${nameButton(dev, "card")}
+                <span class="fleet-model-sub">${escapeHtml(dev.model_label || "Model not probed")}</span>
+              </div>
+              <div class="fleet-col-endpoint">
+                <span class="fleet-device-ip font-mono">${escapeHtml(dev.ip)}:${escapeHtml(dev.port)}</span>
+              </div>
+              <div class="fleet-col-apps">
+                <span class="fleet-app-tag ${isFgManaged ? "text-amber" : (isOnline ? "text-cool" : "text-muted")}">
+                  ${isOnline ? `Active: ${fgName}` : "Standby / Offline"}
+                </span>
+                ${pkgSummary ? `<div class="fleet-pkg-list">${pkgSummary}</div>` : ""}
+              </div>
+              <div class="fleet-col-status">
+                <span class="fleet-status-pill ${statusPillClass}">${statusPillText}</span>
+              </div>
+            </div>
+            ${deviceInfoPanel(dev, "card")}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
   wireDeviceInfo(tvFleetPreview);
 }
 

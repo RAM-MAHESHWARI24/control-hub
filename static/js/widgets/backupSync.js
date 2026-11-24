@@ -262,16 +262,21 @@ function renderHealth(health, data) {
     const runs = (health && health.history) || [];
     runs.forEach((run) => {
       const ok = run.outcome === "synced";
-      const li = el("li", `backup-run ${ok ? "run-ok" : "run-fail"}`);
+      const li = el("li", `backup-run ${ok ? "run-ok row--plus" : "run-fail row--minus"}`);
       const top = el("div", "backup-run-top");
-      top.append(el("span", "backup-run-outcome", OUTCOME_TEXT[run.outcome] || run.outcome || "Unknown"), el("span", "backup-run-when font-mono", run.when || ""));
+      const titleWrap = el("div", "backup-run-status");
+      titleWrap.append(
+        el("span", `audit-trail-dot ${ok ? "is-ok" : "is-bad"}`),
+        el("span", "backup-run-outcome", OUTCOME_TEXT[run.outcome] || run.outcome || "Unknown")
+      );
+      top.append(titleWrap, el("span", "backup-run-when font-mono", run.when || ""));
       const facts = [];
       if (run.dump_size) facts.push(`dump ${run.dump_size}`);
       if (typeof run.files === "number") facts.push(`${run.files} files${run.moved ? ` (${run.moved})` : ""} uploaded`);
       const dur = formatDuration(run.duration_s);
       if (dur) facts.push(dur);
       li.append(top);
-      if (facts.length) li.append(el("div", "backup-run-facts", facts.join(" · ")));
+      if (facts.length) li.append(el("div", "backup-run-facts font-mono", facts.join(" · ")));
       if (!ok && run.message) li.append(el("div", "backup-run-msg", run.message));
       backupHistory.append(li);
     });
@@ -283,8 +288,13 @@ function renderHealth(health, data) {
     const ret = health && health.retention;
     if (ret && typeof ret.kept === "number") {
       const next = ret.next_delete || [];
-      backupRetention.textContent = `Remote keeps ${ret.kept} database dumps (newest nightly + first of each month). `
-        + `Last run deleted ${ret.deleted_last_run}; next run deletes ${next.length ? next.join(", ") : "none"}.`;
+      backupRetention.replaceChildren();
+      backupRetention.append(
+        el("span", "retention-keep row--plus font-mono", `+${ret.kept} kept`),
+        document.createTextNode(" database dumps · "),
+        el("span", `font-mono ${ret.deleted_last_run ? "row--minus" : ""}`, `${ret.deleted_last_run} deleted last run`),
+        document.createTextNode(` · next run deletes ${next.length ? next.join(", ") : "none"}.`)
+      );
     } else {
       backupRetention.textContent = "Retention has not run yet.";
     }

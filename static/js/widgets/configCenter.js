@@ -333,7 +333,21 @@ export async function previewNetplan() {
     });
     const data = await res.json();
     if (preview) {
-      preview.textContent = data.yaml || "No YAML generated";
+      const yamlText = data.yaml || "No YAML generated";
+      preview.replaceChildren();
+      yamlText.split("\n").forEach((line, idx, arr) => {
+        const span = document.createElement("span");
+        const trimmed = line.trim();
+        let cls = "yaml-line";
+        if (/^(addresses:|gateway4:|via:|nameservers:|routes:|\-\s+\d+\.\d+)/.test(trimmed)) {
+          cls += " row--plus";
+        } else if (/^dhcp[46]:\s*(false|no)/.test(trimmed)) {
+          cls += " row--minus";
+        }
+        span.className = cls;
+        span.textContent = idx < arr.length - 1 ? `${line}\n` : line;
+        preview.append(span);
+      });
       preview.style.display = "block";
     }
     showToast("Netplan YAML Ready", `Preview generated for ${iface || "active NIC"}.`, "info");

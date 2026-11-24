@@ -21,6 +21,8 @@ const sleepBtnText = $("sleep-btn-text");
 const sleepBtnSpinner = $("sleep-btn-spinner");
 const sleepWindowZone = $("sleep-window-zone");
 const sleepWindowZoneWrap = $("sleep-window-zone-wrap");
+const sleepCronPins = $("sleep-cron-pins");
+const sleepAxisCallout = $("sleep-axis-callout");
 const sleepTimeline = $("sleep-timeline-container");
 const sleepOverridePill = $("sleep-override-pill");
 const sleepOverrideText = $("sleep-override-text");
@@ -217,6 +219,27 @@ export async function sendSchedulePermanent(payload) {
   }
 }
 
+function parseScheduleMinutes(scheduleText) {
+  const m = String(scheduleText || "").match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if (!m) return null;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
+export function renderSleepCronPins(jobs = state.cronJobs || []) {
+  if (!sleepCronPins) return;
+  sleepCronPins.replaceChildren();
+  (jobs || []).forEach((job) => {
+    const mins = parseScheduleMinutes(job.schedule);
+    if (mins === null) return;
+    const leftPct = Math.max(0.4, Math.min(99.6, (mins / 1440) * 100));
+    const pin = document.createElement("span");
+    pin.className = `timeline-cron-pin${job.is_running ? " is-running" : ""}`;
+    pin.style.left = `${leftPct.toFixed(2)}%`;
+    pin.title = `${job.name} (${job.schedule})`;
+    sleepCronPins.append(pin);
+  });
+}
+
 function renderTimelineSegments(data) {
   if (!sleepWindowZone) return;
   const segs = Array.isArray(data.window_segments) && data.window_segments.length
@@ -245,6 +268,25 @@ function renderTimelineSegments(data) {
       sleepWindowZoneWrap.hidden = true;
     }
   }
+
+  const needle = $("sleep-current-needle");
+  if (needle && typeof data.current_pct === "number") {
+    needle.style.left = `${Math.max(0, Math.min(100, data.current_pct))}%`;
+  }
+
+  if (sleepAxisCallout) {
+    if (data.skip_active) {
+      sleepAxisCallout.textContent = "Override: skip tonight";
+      sleepAxisCallout.hidden = false;
+    } else if (data.tonight_override && data.tonight_override.active) {
+      sleepAxisCallout.textContent = `Shift: ${data.tonight_override.sleep_time}→${data.tonight_override.wake_time}`;
+      sleepAxisCallout.hidden = false;
+    } else {
+      sleepAxisCallout.hidden = true;
+    }
+  }
+
+  renderSleepCronPins();
 }
 
 export async function fetchSleepStatus() {

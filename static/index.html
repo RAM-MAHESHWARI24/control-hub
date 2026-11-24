@@ -24,7 +24,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=34" />
+  <link rel="stylesheet" href="css/style.css?v=35" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -399,13 +399,13 @@
       </div>
 
       <!-- =================================================================== -->
-      <!-- VIEW 3: BACKUPS & PHOTOS (Clean 3-Panel Layout)                     -->
+      <!-- VIEW 3: BACKUPS & PHOTOS (Console Verification Bench & Audit Trail) -->
       <!-- =================================================================== -->
       <div class="hub-view" id="view-backups" data-view="backups" hidden>
         <div class="view-grid-backups">
-          <!-- Panel 1: Photo Cloud Backup Health & History -->
-          <section class="panel-card" id="backup-section">
-            <div class="panel-header panel-header-wrap">
+          <!-- Panel 1: Photo Cloud Backup Health & 7-Run Audit Trail -->
+          <section class="panels console-sheet" id="backup-section">
+            <div class="panel panel-head-strip panel-header-wrap">
               <div class="panel-title-group">
                 <h2>Photo Cloud Backup</h2>
                 <span class="panel-subtitle card-summary">Checking cloud backup state&hellip;</span>
@@ -421,81 +421,105 @@
               </div>
             </div>
 
-            <div class="backup-health" id="backup-health" data-state="unknown">
-              <p class="backup-health-title" id="backup-health-title">Checking the last backup&hellip;</p>
-              <p class="backup-health-detail" id="backup-health-detail"></p>
+            <div class="panel backup-health-panel">
+              <div class="well backup-health" id="backup-health" data-state="unknown">
+                <p class="backup-health-title" id="backup-health-title">Checking the last backup&hellip;</p>
+                <p class="backup-health-detail" id="backup-health-detail"></p>
+              </div>
             </div>
 
-            <div class="meta-pills-row">
-              <span class="meta-pill">Last good: <strong id="backup-last-time" class="font-mono">No run yet</strong></span>
-              <span class="meta-pill">Next run: <strong id="backup-next-run" class="font-mono">Not scheduled</strong></span>
-              <span class="meta-pill">DB dump: <strong id="backup-db-size" class="font-mono">No dump yet</strong></span>
-              <span class="meta-pill">Remote: <strong id="backup-remote-mirror" class="font-mono">Not configured</strong></span>
-              <button type="button" class="btn-secondary" id="btn-change-remote" hidden>Change remote</button>
+            <div class="panels backup-meta-bench">
+              <div class="panel backup-meta-cell">
+                <span class="lib-stat-label">Last Verified</span>
+                <strong id="backup-last-time" class="font-mono backup-meta-val">No run yet</strong>
+              </div>
+              <div class="panel backup-meta-cell">
+                <span class="lib-stat-label">Next Schedule</span>
+                <strong id="backup-next-run" class="font-mono backup-meta-val">Not scheduled</strong>
+              </div>
+              <div class="panel backup-meta-cell">
+                <span class="lib-stat-label">PG Dump</span>
+                <strong id="backup-db-size" class="font-mono backup-meta-val">No dump yet</strong>
+              </div>
+              <div class="panel backup-meta-cell">
+                <span class="lib-stat-label">Off-Site Remote</span>
+                <div class="backup-remote-row">
+                  <strong id="backup-remote-mirror" class="font-mono backup-meta-val">Not configured</strong>
+                  <button type="button" class="btn-secondary btn-compact" id="btn-change-remote" hidden>Change</button>
+                </div>
+              </div>
             </div>
 
-            <div class="pipeline-stepper" id="sync-stepper" aria-label="Backup pipeline progress" hidden>
-              <div class="step-item" id="step-face"><div class="step-circle">1</div><span class="step-label">Face XMP</span></div>
-              <div class="step-connector" id="step-conn-1"></div>
-              <div class="step-item" id="step-dump"><div class="step-circle">2</div><span class="step-label">PG Dump</span></div>
-              <div class="step-connector" id="step-conn-2"></div>
-              <div class="step-item" id="step-rclone"><div class="step-circle">3</div><span class="step-label">Cloud Sync</span></div>
-              <div class="step-connector" id="step-conn-3"></div>
-              <div class="step-item" id="step-verify"><div class="step-circle">4</div><span class="step-label">Verified</span></div>
+            <div class="panel pipeline-stepper-panel" id="sync-stepper" aria-label="Backup pipeline progress" hidden>
+              <div class="pipeline-stepper">
+                <div class="step-item" id="step-face"><div class="step-circle">1</div><span class="step-label">Face XMP</span></div>
+                <div class="step-connector" id="step-conn-1"></div>
+                <div class="step-item" id="step-dump"><div class="step-circle">2</div><span class="step-label">PG Dump</span></div>
+                <div class="step-connector" id="step-conn-2"></div>
+                <div class="step-item" id="step-rclone"><div class="step-circle">3</div><span class="step-label">Cloud Sync</span></div>
+                <div class="step-connector" id="step-conn-3"></div>
+                <div class="step-item" id="step-verify"><div class="step-circle">4</div><span class="step-label">Verified</span></div>
+              </div>
             </div>
 
-            <p class="status-note-text" id="backup-status-msg" hidden>Checking backup script state&hellip;</p>
-            <ul class="backup-preflight" id="backup-preflight" aria-label="Pre-flight checks of the last run" hidden></ul>
+            <p class="panel status-note-text" id="backup-status-msg" hidden>Checking backup script state&hellip;</p>
+            <ul class="panel backup-preflight" id="backup-preflight" aria-label="Pre-flight checks of the last run" hidden></ul>
 
-            <details class="backup-history-wrap" id="backup-history-wrap">
-              <summary class="backup-history-summary">Recent runs <span class="text-muted" id="backup-history-count"></span></summary>
-              <ol class="backup-history" id="backup-history" aria-label="Recent backup runs, newest first"></ol>
-              <p class="status-note-text" id="backup-retention"></p>
-            </details>
+            <div class="panel backup-history-panel">
+              <details class="backup-history-wrap" id="backup-history-wrap">
+                <summary class="backup-history-summary">Audit trail &amp; recent runs <span class="text-muted" id="backup-history-count"></span></summary>
+                <ol class="trail backup-history" id="backup-history" aria-label="Recent backup runs, newest first"></ol>
+                <p class="well status-note-text" id="backup-retention"></p>
+              </details>
+            </div>
           </section>
 
           <div class="backups-side-stack">
-            <!-- Panel 2: Photo Library & Restore Test -->
-            <section class="panel-card" id="backup-library-panel">
-              <div class="panel-header">
+            <!-- Panel 2: Photo Library Quota & Restore Verification -->
+            <section class="panels console-sheet" id="backup-library-panel">
+              <div class="panel panel-head-strip panel-header-wrap">
                 <div class="panel-title-group">
                   <h2>Photo Library &amp; Verification</h2>
+                  <span class="panel-subtitle">Local store, off-site quota &amp; restore check</span>
+                </div>
+                <div class="panel-actions">
+                  <button type="button" class="btn-secondary" id="btn-open-library-details">Quota Details</button>
                 </div>
               </div>
 
-              <button type="button" class="library-stats-grid" id="btn-open-library-details" aria-label="Open photo library and cloud quota breakdown">
-                <span class="lib-stat-cell">
+              <div class="library-stats-grid panels">
+                <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Photo Store</span>
-                  <span class="lib-stat-value font-mono" id="lib-val-disk">Measuring&hellip;</span>
-                </span>
-                <span class="lib-stat-cell">
+                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-disk">Measuring&hellip;</span>
+                </div>
+                <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Cloud Mirror</span>
-                  <span class="lib-stat-value font-mono" id="lib-val-gdrive">Unknown</span>
-                </span>
-                <span class="lib-stat-cell">
+                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-gdrive">Unknown</span>
+                </div>
+                <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Assets</span>
-                  <span class="lib-stat-value font-mono" id="lib-val-assets">Unknown</span>
-                </span>
-                <span class="lib-stat-cell">
+                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-assets">Unknown</span>
+                </div>
+                <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Face Tags</span>
-                  <span class="lib-stat-value font-mono" id="lib-val-faces">Unknown</span>
-                </span>
-              </button>
+                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-faces">Unknown</span>
+                </div>
+              </div>
 
               <p class="inline-callout is-warning" id="lib-partial-warning" hidden></p>
 
-              <div class="restore-test" id="restore-test" hidden>
+              <div class="panel restore-test" id="restore-test" hidden>
                 <div class="restore-test-body">
-                  <strong>Monthly Restore Test</strong>
+                  <strong>Monthly Restore Verification</strong>
                   <p class="restore-test-line" id="restore-test-text">Not run yet</p>
                 </div>
-                <button type="button" class="btn-secondary" id="btn-restore-test-run">Run restore test now</button>
+                <button type="button" class="btn-secondary" id="btn-restore-test-run">Run restore test</button>
               </div>
             </section>
 
             <!-- Panel 3: Media App Settings Backup -->
-            <section class="panel-card" id="media-backup" hidden>
-              <div class="panel-header panel-header-wrap">
+            <section class="panels console-sheet" id="media-backup" hidden>
+              <div class="panel panel-head-strip panel-header-wrap">
                 <div class="panel-title-group">
                   <h2>Media App Settings Backup</h2>
                   <span class="panel-subtitle">Jellyfin, Seerr &amp; *arr database archive</span>
@@ -505,19 +529,21 @@
                   <button type="button" class="btn-secondary" id="btn-media-backup-run" hidden>Back up now</button>
                 </div>
               </div>
-              <p class="media-backup-line" id="media-backup-line"></p>
-              <p class="status-note-text" id="media-backup-msg" hidden></p>
+              <div class="panel media-backup-panel">
+                <p class="media-backup-line font-mono" id="media-backup-line"></p>
+                <p class="status-note-text" id="media-backup-msg" hidden></p>
+              </div>
             </section>
           </div>
         </div>
       </div>
 
       <!-- =================================================================== -->
-      <!-- VIEW 4: TVS (Full Android TV Fleet Workspace)                       -->
+      <!-- VIEW 4: TVS (Ruled Android TV ADB Fleet & Package Matrix)           -->
       <!-- =================================================================== -->
       <div class="hub-view" id="view-tvs" data-view="tvs" hidden>
-        <section class="panel-card" id="tv-updater-section">
-          <div class="panel-header panel-header-wrap">
+        <section class="panels console-sheet" id="tv-updater-section">
+          <div class="panel panel-head-strip panel-header-wrap">
             <div class="panel-title-group">
               <h2>Android TV Fleet</h2>
               <span class="panel-subtitle card-summary">Checking configured ADB devices&hellip;</span>
@@ -525,7 +551,7 @@
             <div class="panel-actions">
               <span class="badge badge-neutral" id="tv-status-badge">Checking</span>
               <button type="button" id="btn-view-tv-log" class="btn-secondary">Log</button>
-              <button type="button" id="btn-open-tv-details-header" class="btn-secondary">App Matrix</button>
+              <button type="button" id="btn-open-tv-details" class="btn-secondary">App Matrix</button>
               <button type="button" id="btn-deploy-card" class="btn-primary">
                 <span class="btn-spinner" id="tv-card-deploy-spinner" style="display: none;" aria-hidden="true"></span>
                 <svg class="ui-icon" id="tv-card-deploy-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
@@ -534,92 +560,98 @@
             </div>
           </div>
 
-          <div class="meta-pills-row">
-            <span class="meta-pill" id="tv-schedule-val">Checking schedule</span>
-            <span class="meta-pill">Last sync: <strong id="tv-last-sync" class="font-mono">No run yet</strong></span>
-            <span class="meta-pill" id="tv-cluster-count">0 Devices</span>
-            <button type="button" id="btn-tv-sync-inline" class="btn-ghost">Sync GitHub APKs</button>
-            <button type="button" id="btn-tv-scan-inline" class="btn-ghost">Scan TVs</button>
+          <div class="panel panel-toolbar-strip tv-toolbar-strip">
+            <div class="tv-toolbar-meta">
+              <span class="well toolbar-stat font-mono" id="tv-schedule-val">Checking schedule</span>
+              <span class="well toolbar-stat">Last sync: <strong id="tv-last-sync" class="font-mono">No run yet</strong></span>
+              <span class="well toolbar-stat font-mono" id="tv-cluster-count">0 Devices</span>
+            </div>
+            <div class="tv-toolbar-btns">
+              <button type="button" id="btn-tv-sync-inline" class="btn-ghost">Sync GitHub APKs</button>
+              <button type="button" id="btn-tv-scan-inline" class="btn-ghost">Scan TVs</button>
+            </div>
           </div>
 
-          <button type="button" class="library-stats-grid tv-summary-grid" id="btn-open-tv-details" aria-label="Open Android TV Fleet App Matrix">
-            <span class="lib-stat-cell">
+          <div class="library-stats-grid tv-summary-grid panels" id="tv-summary-bench">
+            <div class="panel lib-stat-cell">
               <span class="lib-stat-label">TVs Online</span>
-              <span class="lib-stat-value font-mono" id="tv-val-online">0/0</span>
-            </span>
-            <span class="lib-stat-cell">
+              <span class="lib-stat-value reading reading-sm font-mono" id="tv-val-online">0/0</span>
+            </div>
+            <div class="panel lib-stat-cell">
               <span class="lib-stat-label" id="tv-label-app-1">SmartTube</span>
-              <span class="lib-stat-value font-mono" id="tv-val-st">Unknown</span>
-            </span>
-            <span class="lib-stat-cell">
+              <span class="lib-stat-value reading reading-sm font-mono" id="tv-val-st">Unknown</span>
+            </div>
+            <div class="panel lib-stat-cell">
               <span class="lib-stat-label" id="tv-label-app-2">CloudStream Beta</span>
-              <span class="lib-stat-value font-mono" id="tv-val-cs">Unknown</span>
-            </span>
-          </button>
-
-          <div class="pipeline-stepper" id="tv-stepper" aria-label="TV updater pipeline" hidden>
-            <div class="step-item" id="step-tv-upstream"><div class="step-circle">1</div><span class="step-label">Upstream</span></div>
-            <div class="step-connector" id="step-tv-conn-1"></div>
-            <div class="step-item" id="step-tv-discovery"><div class="step-circle">2</div><span class="step-label">ADB Scan</span></div>
-            <div class="step-connector" id="step-tv-conn-2"></div>
-            <div class="step-item" id="step-tv-safety"><div class="step-circle">3</div><span class="step-label">Safety Guard</span></div>
-            <div class="step-connector" id="step-tv-conn-3"></div>
-            <div class="step-item" id="step-tv-push"><div class="step-circle">4</div><span class="step-label">Push APKs</span></div>
+              <span class="lib-stat-value reading reading-sm font-mono" id="tv-val-cs">Unknown</span>
+            </div>
           </div>
 
-          <p class="status-note-text" id="tv-status-msg" hidden>Checking configured ADB devices&hellip;</p>
+          <div class="panel pipeline-stepper-panel" id="tv-stepper" aria-label="TV updater pipeline" hidden>
+            <div class="pipeline-stepper">
+              <div class="step-item" id="step-tv-upstream"><div class="step-circle">1</div><span class="step-label">Upstream</span></div>
+              <div class="step-connector" id="step-tv-conn-1"></div>
+              <div class="step-item" id="step-tv-discovery"><div class="step-circle">2</div><span class="step-label">ADB Scan</span></div>
+              <div class="step-connector" id="step-tv-conn-2"></div>
+              <div class="step-item" id="step-tv-safety"><div class="step-circle">3</div><span class="step-label">Safety Guard</span></div>
+              <div class="step-connector" id="step-tv-conn-3"></div>
+              <div class="step-item" id="step-tv-push"><div class="step-circle">4</div><span class="step-label">Push APKs</span></div>
+            </div>
+          </div>
+
+          <p class="panel status-note-text" id="tv-status-msg" hidden>Checking configured ADB devices&hellip;</p>
 
           <div id="tv-fleet-preview" class="tv-fleet-preview">
             <div class="empty-state">Loading Android TV cluster state&hellip;</div>
           </div>
 
-          <div class="panel-footer-row">
+          <div class="panel panel-footer-row">
             <button type="button" id="btn-open-tv-details-card" class="btn-secondary">Manage All TVs &amp; APKs</button>
           </div>
         </section>
       </div>
 
       <!-- =================================================================== -->
-      <!-- VIEW 5: SYSTEM (Vitals, Disk I/O, Network, Sleep Guard, Cron)       -->
+      <!-- VIEW 5: SYSTEM (Console Instrument Bench, Pin Axis & Automations)   -->
       <!-- =================================================================== -->
       <div class="hub-view" id="view-system" data-view="system" hidden>
         <!-- 5.1 Hardware Vitals & Storage Pools -->
-        <section class="panel-card" id="vitals-section">
-          <div class="panel-header panel-header-wrap">
+        <section class="panels console-sheet" id="vitals-section">
+          <div class="panel panel-head-strip panel-header-wrap">
             <div class="panel-title-group">
               <h2>System Vitals &amp; Storage</h2>
               <span class="panel-subtitle card-summary" id="vitals-card-subtitle">Host CPU, RAM &amp; storage pools</span>
             </div>
             <div class="panel-actions">
-              <span class="meta-pill font-mono" id="cpu-temp-badge">CPU: --%</span>
+              <span class="well toolbar-stat font-mono" id="cpu-temp-badge">CPU: --%</span>
             </div>
           </div>
 
-          <div class="vitals-grid">
-            <div class="vital-box">
+          <div class="vitals-grid panels">
+            <div class="panel vital-box">
               <div class="vital-top">
                 <h3 id="vitals-cpu-title">Host Processor</h3>
-                <span class="vital-stat font-mono" id="cpu-stat">--% Load</span>
+                <span class="vital-stat reading reading-sm font-mono" id="cpu-stat">--% Load</span>
               </div>
               <div class="vital-progress-track">
                 <div class="vital-progress-fill fill-accent" id="cpu-progress" style="width: 0%;"></div>
               </div>
             </div>
 
-            <div class="vital-box">
+            <div class="panel vital-box">
               <div class="vital-top">
                 <h3 id="vitals-ram-title">System Memory</h3>
-                <span class="vital-stat font-mono" id="ram-stat">-- / -- GiB</span>
+                <span class="vital-stat reading reading-sm font-mono" id="ram-stat">-- / -- GiB</span>
               </div>
               <div class="vital-progress-track">
                 <div class="vital-progress-fill fill-info" id="ram-progress" style="width: 0%;"></div>
               </div>
             </div>
 
-            <div class="vital-box">
+            <div class="panel vital-box">
               <div class="vital-top">
                 <h3 id="vitals-ssd-title">OS Root Storage (/)</h3>
-                <span class="vital-stat font-mono" id="ssd-stat">-- GB Free</span>
+                <span class="vital-stat reading reading-sm font-mono" id="ssd-stat">-- GB Free</span>
               </div>
               <div class="vital-progress-track">
                 <div class="vital-progress-fill fill-success" id="ssd-progress" style="width: 0%;"></div>
@@ -627,10 +659,10 @@
               <p class="status-note-text" id="ssd-breakdown-note" hidden></p>
             </div>
 
-            <div class="vital-box" id="vitals-hdd-box">
+            <div class="panel vital-box" id="vitals-hdd-box">
               <div class="vital-top">
                 <h3 id="vitals-hdd-title">Media Pool Storage</h3>
-                <span class="vital-stat font-mono" id="hdd-stat">Checking&hellip;</span>
+                <span class="vital-stat reading reading-sm font-mono" id="hdd-stat">Checking&hellip;</span>
               </div>
               <div class="segmented-storage-bar" id="hdd-segmented-bar">
                 <div class="seg-segment seg-media" id="seg-media" style="width: 0%;"></div>
@@ -651,8 +683,8 @@
 
         <!-- 5.2 Disk I/O & Active Sessions + Network & Speedtest -->
         <div class="system-two-col">
-          <section class="panel-card" id="storage-ops-panel">
-            <div class="panel-header panel-header-wrap">
+          <section class="panels console-sheet" id="storage-ops-panel">
+            <div class="panel panel-head-strip panel-header-wrap">
               <div class="panel-title-group">
                 <h2>Disk I/O &amp; Active Sessions</h2>
                 <span class="panel-subtitle card-summary">Measuring disk throughput &amp; connections&hellip;</span>
@@ -668,8 +700,8 @@
             </div>
           </section>
 
-          <section class="panel-card" id="speedometers">
-            <div class="panel-header panel-header-wrap">
+          <section class="panels console-sheet" id="speedometers">
+            <div class="panel panel-head-strip panel-header-wrap">
               <div class="panel-title-group">
                 <h2>Network &amp; Speedtest</h2>
               </div>
@@ -681,9 +713,9 @@
               </div>
             </div>
 
-            <div class="net-stack">
+            <div class="net-stack panels">
               <!-- Live Server Interface (LAN) -->
-              <div class="sub-panel">
+              <div class="panel sub-panel">
                 <div class="sub-panel-top">
                   <div>
                     <h3>Live Server Interface</h3>
@@ -696,8 +728,8 @@
                 </div>
 
                 <div class="speedo-main-value">
-                  <span class="speedo-number font-mono" id="lan-total-mbps">0.00</span>
-                  <span class="speedo-unit" id="lan-unit-label">MB/s</span>
+                  <span class="speedo-number reading font-mono" id="lan-total-mbps">0.00</span>
+                  <span class="speedo-unit reading__unit" id="lan-unit-label">MB/s</span>
                 </div>
 
                 <div class="speedo-metrics-row font-mono">
@@ -707,7 +739,7 @@
                 </div>
 
                 <div class="sparkline-wrap">
-                  <div class="sparkline-canvas-box">
+                  <div class="sparkline-canvas-box well">
                     <canvas id="lan-sparkline-canvas" aria-label="Live interface throughput sparkline"></canvas>
                   </div>
                   <div class="sparkline-scale font-mono" aria-hidden="true">
@@ -727,7 +759,7 @@
               </div>
 
               <!-- Broadband Benchmark (On-Demand Speedtest — NEVER mixed with live traffic) -->
-              <div class="sub-panel">
+              <div class="panel sub-panel">
                 <div class="sub-panel-top">
                   <div>
                     <h3>Broadband Benchmark</h3>
@@ -736,16 +768,16 @@
                   <span class="badge badge-neutral" id="internet-isp-name">Not tested yet</span>
                 </div>
 
-                <div class="speedtest-kpi-row">
-                  <div class="st-kpi">
+                <div class="speedtest-kpi-row panels">
+                  <div class="panel st-kpi">
                     <span class="st-kpi-label">Download</span>
                     <span class="st-kpi-val font-mono" id="wan-dl-val">Not tested</span>
                   </div>
-                  <div class="st-kpi">
+                  <div class="panel st-kpi">
                     <span class="st-kpi-label">Upload</span>
                     <span class="st-kpi-val font-mono" id="wan-up-val">Not tested</span>
                   </div>
-                  <div class="st-kpi">
+                  <div class="panel st-kpi">
                     <span class="st-kpi-label">Ping</span>
                     <span class="st-kpi-val font-mono" id="wan-ping-val">--</span>
                   </div>
@@ -766,9 +798,9 @@
           </section>
         </div>
 
-        <!-- 5.3 Sleep Guard Power Automation -->
-        <section class="panel-card" id="sleep-guard-card">
-          <div class="panel-header panel-header-wrap">
+        <!-- 5.3 Sleep Guard 24-Hour Horizontal Pin Axis -->
+        <section class="panels console-sheet" id="sleep-guard-card">
+          <div class="panel panel-head-strip panel-header-wrap">
             <div class="panel-title-group">
               <div class="title-with-icon">
                 <svg class="ui-icon sleep-state-svg" id="sleep-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-moon"></use></svg>
@@ -777,19 +809,24 @@
               <span class="panel-subtitle card-summary" id="sleep-subtext">Checking automatic suspend schedule&hellip;</span>
             </div>
             <div class="panel-actions">
-              <span class="meta-pill font-mono" id="sleep-countdown-pill"><span id="sleep-countdown">Checking&hellip;</span></span>
-              <span class="meta-pill is-accent" id="sleep-override-pill" style="display: none;">
+              <span class="well toolbar-stat font-mono" id="sleep-countdown-pill"><span id="sleep-countdown">Checking&hellip;</span></span>
+              <span class="well toolbar-stat is-accent" id="sleep-override-pill" style="display: none;">
                 <span id="sleep-override-text">Override Active</span>
                 <button type="button" id="btn-clear-hero-override" class="pill-clear-btn" aria-label="Clear tonight's sleep override">&times;</button>
               </span>
             </div>
           </div>
 
-          <div id="sleep-guard-body" class="sleep-controls-layout">
-            <div class="sleep-timeline-container" id="sleep-timeline-container" aria-hidden="true">
+          <div id="sleep-guard-body" class="panel sleep-controls-layout">
+            <div class="well sleep-timeline-container" id="sleep-timeline-container" aria-hidden="true">
+              <div class="timeline-axis-head">
+                <span class="timeline-axis-caption font-mono">24h host schedule &amp; suspend axis</span>
+                <span class="timeline-axis-callout font-mono" id="sleep-axis-callout" hidden></span>
+              </div>
               <div class="timeline-track">
                 <div class="timeline-sleep-zone" id="sleep-window-zone"></div>
                 <div class="timeline-sleep-zone" id="sleep-window-zone-wrap" hidden></div>
+                <div class="timeline-cron-pins" id="sleep-cron-pins"></div>
                 <div class="timeline-current-needle" id="sleep-current-needle"></div>
               </div>
               <div class="timeline-labels font-mono">
@@ -814,8 +851,8 @@
         </section>
 
         <!-- 5.4 Scheduled Automations -->
-        <section class="panel-card" id="automation-section">
-          <div class="panel-header panel-header-wrap">
+        <section class="panels console-sheet" id="automation-section">
+          <div class="panel panel-head-strip panel-header-wrap">
             <div class="panel-title-group">
               <h2>Scheduled Automations</h2>
               <span class="panel-subtitle card-summary" id="cron-card-subtitle">cron.d &amp; systemd timers</span>
@@ -824,35 +861,48 @@
               <button type="button" id="btn-refresh-cron" class="btn-secondary" aria-label="Refresh scheduled tasks">Refresh Tasks</button>
             </div>
           </div>
-          <div class="cron-grid" id="cron-grid">
+          <div class="cron-grid panels" id="cron-grid">
             <div class="empty-state">Loading installed cron jobs and timers&hellip;</div>
           </div>
         </section>
 
-        <!-- 5.5 Node Management Shortcuts -->
-        <section class="panel-card" aria-labelledby="node-tools-heading">
-          <div class="panel-header">
+        <!-- 5.5 Node Administration -->
+        <section class="panels console-sheet" aria-labelledby="node-tools-heading">
+          <div class="panel panel-head-strip">
             <div class="panel-title-group">
               <h2 id="node-tools-heading">Node Administration</h2>
+              <span class="panel-subtitle">Configuration, alert channels, diagnostics &amp; operator credentials</span>
             </div>
           </div>
-          <div class="tools-shortcut-grid">
-            <button type="button" class="tool-shortcut-btn" data-proxy-click="btn-open-config-center">
-              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-settings"></use></svg>
-              <span><strong>Server Config &amp; Netplan</strong><small>Paths, hardlinks, ports &amp; static IP</small></span>
-            </button>
-            <button type="button" class="tool-shortcut-btn" data-proxy-click="btn-open-alerts">
-              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-bell"></use></svg>
-              <span><strong>Alerts &amp; Channels</strong><small>ntfy, Telegram, Discord, Email &amp; rules</small></span>
-            </button>
-            <button type="button" class="tool-shortcut-btn" data-proxy-click="btn-open-ai-copilot">
-              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-sparkles"></use></svg>
-              <span><strong>AI Copilot Snapshot</strong><small>Copy token-compact host diagnostics</small></span>
-            </button>
-            <button type="button" class="tool-shortcut-btn" data-open-account="true">
-              <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-user"></use></svg>
-              <span><strong>Dashboard Account</strong><small>Change password or sign out</small></span>
-            </button>
+          <div class="tools-shortcut-grid panels">
+            <div class="panel tool-shortcut-row">
+              <div class="tool-shortcut-meta">
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-settings"></use></svg>
+                <span><strong>Server Config &amp; Netplan</strong><small>Paths, hardlinks, ports &amp; static IP</small></span>
+              </div>
+              <button type="button" class="btn-secondary" data-proxy-click="btn-open-config-center">Configure</button>
+            </div>
+            <div class="panel tool-shortcut-row">
+              <div class="tool-shortcut-meta">
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-bell"></use></svg>
+                <span><strong>Alerts &amp; Channels</strong><small>ntfy, Telegram, Discord, Email &amp; rules</small></span>
+              </div>
+              <button type="button" class="btn-secondary" data-proxy-click="btn-open-alerts">Alerts</button>
+            </div>
+            <div class="panel tool-shortcut-row">
+              <div class="tool-shortcut-meta">
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-sparkles"></use></svg>
+                <span><strong>AI Copilot Snapshot</strong><small>Copy token-compact host diagnostics</small></span>
+              </div>
+              <button type="button" class="btn-secondary" data-proxy-click="btn-open-ai-copilot">Diagnostics</button>
+            </div>
+            <div class="panel tool-shortcut-row">
+              <div class="tool-shortcut-meta">
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-user"></use></svg>
+                <span><strong>Dashboard Account</strong><small>Change password or sign out</small></span>
+              </div>
+              <button type="button" class="btn-secondary" data-open-account="true">Account</button>
+            </div>
           </div>
         </section>
       </div>
@@ -1043,8 +1093,8 @@
         <button type="button" class="modal-close" id="immich-modal-close" aria-label="Close photo library details">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="lib-detail-grid">
-          <div class="detail-panel">
+        <div class="lib-detail-grid panels">
+          <div class="panel detail-panel">
             <h3>Local &amp; Cloud Footprint</h3>
             <div class="kv-row"><span>Photo Library Path:</span><strong class="font-mono" id="modal-lib-disk-label">Configured folder</strong></div>
             <div class="kv-row"><span>Local Size:</span><strong class="font-mono" id="modal-lib-disk">Measuring&hellip;</strong></div>
@@ -1057,7 +1107,7 @@
             </div>
           </div>
 
-          <div class="detail-panel">
+          <div class="panel detail-panel">
             <h3>Library Assets &amp; Face Recognition</h3>
             <div class="kv-row"><span>Total Assets:</span><strong class="font-mono" id="modal-lib-total-assets">Unknown</strong></div>
             <div class="kv-row"><span>Photos:</span><strong class="font-mono" id="modal-lib-photos">Unknown</strong></div>
@@ -1324,7 +1374,7 @@
             <p class="modal-sub">Live IPv4 socket status across blueprint services.</p>
             <button type="button" id="btn-refresh-ports" class="btn-secondary">Re-Probe Host Ports</button>
           </div>
-          <div id="ports-matrix-grid" class="ports-matrix-grid">
+          <div id="ports-matrix-grid" class="ports-matrix-grid panels">
             <div class="empty-state">Click Re-Probe Host Ports or open tab to scan sockets&hellip;</div>
           </div>
         </div>
