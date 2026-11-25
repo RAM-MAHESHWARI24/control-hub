@@ -2590,6 +2590,61 @@ td.ledger-cell-group {
   color: var(--text-muted);
 }
 
+.tv-crud-actions,
+.tv-brand-tabs,
+.tv-wiz-scan-results,
+.tv-wiz-apps-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.tv-brand-tab[aria-selected="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.tv-wizard-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.tv-wiz-figure {
+  padding: var(--space-md) 0;
+  margin: var(--space-xs) 0;
+  display: flex;
+  justify-content: center;
+}
+
+.tv-wiz-app-btn[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.tv-wiz-port {
+  max-width: 110px;
+}
+
+.tv-wiz-connect-actions {
+  margin-top: var(--space-md);
+}
+
+.tv-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .tv-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .tv-devices-container {
   display: flex;
   flex-direction: column;

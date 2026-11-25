@@ -577,6 +577,7 @@
             </div>
             <div class="panel-actions">
               <span class="badge badge-neutral" id="tv-status-badge">Checking</span>
+              <button type="button" id="btn-add-tv" class="btn-secondary">Add a TV</button>
               <button type="button" id="btn-view-tv-log" class="btn-secondary">Log</button>
               <button type="button" id="btn-open-tv-details" class="btn-secondary">App Matrix</button>
               <button type="button" id="btn-deploy-card" class="btn-primary">
@@ -1210,6 +1211,84 @@
       <div class="modal-footer">
         <button type="button" class="btn-secondary" id="tv-log-modal-refresh">Refresh Log</button>
         <button type="button" class="btn-ghost" id="tv-log-modal-dismiss">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Guided Add a TV Wizard Modal (Phase 2D) -->
+  <div class="modal-overlay" id="add-tv-wizard-modal" role="dialog" aria-modal="true" aria-labelledby="add-tv-modal-title" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div>
+          <h2 id="add-tv-modal-title">Add an Android TV</h2>
+          <p class="modal-sub">Connect a TV over Wi-Fi/Ethernet ADB in 5 phone-friendly steps.</p>
+        </div>
+        <button type="button" class="modal-close" id="add-tv-modal-close" aria-label="Close Add a TV wizard">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tv-wizard-steps" aria-label="Setup steps">
+          <span class="badge badge-info" id="tv-wiz-step-badge">Step 1 of 5</span>
+          <span class="font-mono text-muted" id="tv-wiz-step-label">Enable Developer Options</span>
+        </div>
+
+        <div class="tv-brand-tabs" role="tablist" aria-label="TV brand guide">
+          <button type="button" role="tab" class="btn-secondary tv-brand-tab" data-brand="google" aria-selected="true">Google TV</button>
+          <button type="button" role="tab" class="btn-secondary tv-brand-tab" data-brand="fire" aria-selected="false">Fire TV</button>
+          <button type="button" role="tab" class="btn-secondary tv-brand-tab" data-brand="xiaomi" aria-selected="false">Android TV / Mi</button>
+          <button type="button" role="tab" class="btn-secondary tv-brand-tab" data-brand="sony" aria-selected="false">Sony / TCL</button>
+        </div>
+
+        <div id="tv-wiz-figure" class="tv-wiz-figure" aria-hidden="true"></div>
+
+        <div class="tv-wiz-panel" id="tv-wiz-panel-1">
+          <h3 id="tv-wiz-step1-title">1. Turn on Developer Options</h3>
+          <p id="tv-wiz-step1-desc">Open <strong>Settings &rarr; System &rarr; About</strong> and select <strong>Android TV OS build</strong> 7 times until &ldquo;You are now a developer!&rdquo; appears.</p>
+        </div>
+
+        <div class="tv-wiz-panel" id="tv-wiz-panel-2" hidden>
+          <h3>2. Turn on USB &amp; Network Debugging</h3>
+          <p id="tv-wiz-step2-desc">Return to Settings, open <strong>Developer options</strong>, and turn on <strong>USB debugging</strong> and <strong>Network debugging</strong> (ADB over network).</p>
+        </div>
+
+        <div class="tv-wiz-panel" id="tv-wiz-panel-3" hidden>
+          <h3>3. Find your TV&rsquo;s IP Address</h3>
+          <p>Check <strong>Settings &rarr; Network &amp; Internet</strong> on your TV, or scan the local network for open ADB ports:</p>
+          <div class="tv-wiz-ip-row">
+            <label for="tv-wiz-ip-input">TV IP Address</label>
+            <div class="tv-rename-row">
+              <input type="text" id="tv-wiz-ip-input" class="form-input font-mono" placeholder="192.168.1.150" autocomplete="off" />
+              <input type="number" id="tv-wiz-port-input" class="form-input font-mono tv-wiz-port" value="5555" min="1" max="65535" aria-label="ADB port" />
+              <button type="button" id="btn-tv-wiz-scan" class="btn-secondary">Scan LAN</button>
+            </div>
+          </div>
+          <div id="tv-wiz-scan-results" class="tv-wiz-scan-results"></div>
+          <div class="inline-callout is-info">Tip: Set a static IP (DHCP reservation) for this TV in your router so power outages never change its address and interrupt updates.</div>
+        </div>
+
+        <div class="tv-wiz-panel" id="tv-wiz-panel-4" hidden>
+          <h3>4. Pair &amp; Authorize on the TV Screen</h3>
+          <p>Tap <strong>Connect to TV</strong> below. On first connection, look at your TV screen and choose <strong>Always allow from this computer</strong>.</p>
+          <div id="tv-wiz-connect-status" class="inline-callout" hidden></div>
+          <div class="tv-wiz-connect-actions">
+            <button type="button" id="btn-tv-wiz-connect" class="btn-primary">Connect to TV</button>
+          </div>
+        </div>
+
+        <div class="tv-wiz-panel" id="tv-wiz-panel-5" hidden>
+          <h3>5. Name Your TV &amp; Pick Managed Apps</h3>
+          <p class="font-mono" id="tv-wiz-detected-summary">Detected TV metadata will appear here.</p>
+          <div class="tv-rename-form">
+            <label for="tv-wiz-name-input">TV Display Name</label>
+            <input type="text" id="tv-wiz-name-input" class="form-input" maxlength="40" placeholder="Living Room TV" autocomplete="off" />
+          </div>
+          <div id="tv-wiz-apps-list" class="tv-wiz-apps-list"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" id="btn-tv-wiz-back" disabled>Back</button>
+        <button type="button" class="btn-primary" id="btn-tv-wiz-next">Next Step</button>
+        <button type="button" class="btn-primary" id="btn-tv-wiz-save" hidden>Save TV</button>
+        <button type="button" class="btn-ghost" id="add-tv-modal-dismiss">Cancel</button>
       </div>
     </div>
   </div>

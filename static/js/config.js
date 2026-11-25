@@ -53,6 +53,8 @@ export const ENDPOINTS = {
   tvUpdaterLog: "/api/tv-updater/log",
   tvUpdaterPushIncoming: "/api/tv-updater/push-incoming",
   tvUpdaterDevices: "/api/tv-updater/devices",
+  tvUpdaterScanLan: "/api/tv-updater/scan-lan",
+  tvUpdaterConnect: "/api/tv-updater/connect",
   indexersStatus: "/api/indexers/status",
   indexersAvailable: "/api/indexers/available",
   indexersAdd: "/api/indexers/add",

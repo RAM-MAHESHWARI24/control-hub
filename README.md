@@ -165,6 +165,12 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/updates/job` | Polls active or most recent app/blueprint update job status |
 | `GET` | `/api/tv-updater/status` | Android TV fleet ADB update status |
 | `PUT` | `/api/tv-updater/devices/<id>/nickname` | Give a TV a nickname (empty shows the detected model) |
+| `POST` | `/api/tv-updater/scan-lan` | Scan the LAN subnet for open ADB TCP endpoints |
+| `POST` | `/api/tv-updater/connect` | Pair ADB, detect model/Android version, or surface authorization prompt |
+| `POST` | `/api/tv-updater/devices` | Add a managed TV profile to `/var/lib/homelab/tv-autoupdater/tv_profiles.json` |
+| `PATCH` | `/api/tv-updater/devices/<id>` | Update TV name, IP/port, pause toggle, or selected apps |
+| `POST` | `/api/tv-updater/devices/<id>/test` | Test live ADB connection for a TV |
+| `DELETE` | `/api/tv-updater/devices/<id>` | Remove a TV profile from the fleet |
 
 ### Power Management Endpoints
 

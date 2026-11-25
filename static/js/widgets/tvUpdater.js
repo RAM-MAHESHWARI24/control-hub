@@ -160,30 +160,41 @@ function infoRow(label, value) {
 function deviceInfoPanel(dev, scope) {
   const d = dev.details || {};
   const key = `${scope}-${dev.id}`;
-  const inputId = `tv-nick-${key}`;
+  const nameInputId = `tv-nick-${key}`;
+  const ipInputId = `tv-edit-ip-${key}`;
   const android = d.android ? `${d.android}${d.sdk ? ` (API ${d.sdk})` : ""}` : "";
+  const isPaused = Boolean(dev.paused);
   return `
     <div class="tv-info-panel" id="tv-info-${escapeHtml(key)}" ${openInfo.has(key) ? "" : "hidden"}>
       <dl class="tv-info-list">
-        ${infoRow("Nickname", dev.nickname || (dev.model_label ? "None (showing the model)" : "None (showing the profile name)"))}
+        ${infoRow("Name", dev.name)}
         ${infoRow("Model", dev.model_label || "Not detected yet: the TV has not been online since this was added")}
         ${infoRow("Manufacturer", d.manufacturer)}
         ${infoRow("Codename", d.codename)}
         ${infoRow("Android", android)}
         ${infoRow("Name on the TV", d.device_name)}
         ${infoRow("Address", `${dev.ip}:${dev.port}`)}
-        ${infoRow("Status", dev.is_online ? "Online" : (d.last_seen ? `Offline, last seen ${d.last_seen}` : "Offline, never seen"))}
+        ${infoRow("Status", isPaused ? "Paused (auto-updates skipped)" : (dev.is_online ? "Online" : (d.last_seen ? `Offline, last seen ${d.last_seen}` : "Offline, never seen")))}
+        ${infoRow("Last Update", dev.last_update_str || "No update applied yet")}
+        ${infoRow("Last Error", dev.last_error)}
         ${infoRow("Profile", dev.profile_name)}
       </dl>
       <form class="tv-rename-form" data-device="${escapeHtml(dev.id)}">
-        <label for="${escapeHtml(inputId)}">Nickname</label>
-        <div class="tv-rename-row">
-          <input type="text" id="${escapeHtml(inputId)}" class="form-input" maxlength="40" autocomplete="off"
-                 value="${escapeHtml(dev.nickname || "")}" placeholder="${escapeHtml(dev.model_label || dev.profile_name || "")}" />
-          <button type="submit" class="btn-secondary">Save name</button>
+        <div class="tv-edit-grid">
+          <input type="text" id="${escapeHtml(nameInputId)}" data-field="name" class="form-input" maxlength="40" autocomplete="off"
+                 aria-label="TV display name for ${escapeHtml(dev.name)}"
+                 value="${escapeHtml(dev.name || "")}" placeholder="${escapeHtml(dev.model_label || dev.profile_name || "")}" />
+          <input type="text" id="${escapeHtml(ipInputId)}" data-field="ip" class="form-input font-mono" maxlength="32" autocomplete="off"
+                 aria-label="TV IP address for ${escapeHtml(dev.name)}"
+                 value="${escapeHtml(dev.ip || "")}" placeholder="192.168.1.150" />
+          <button type="submit" class="btn-secondary">Save TV</button>
         </div>
-        <p class="tv-rename-hint">Leave it empty to show the model name.</p>
       </form>
+      <div class="tv-crud-actions">
+        <button type="button" class="btn-secondary btn-tv-test" data-device="${escapeHtml(dev.id)}">Test Connection</button>
+        <button type="button" class="btn-secondary btn-tv-pause" data-device="${escapeHtml(dev.id)}" data-paused="${isPaused ? "true" : "false"}">${isPaused ? "Resume Updates" : "Pause Updates"}</button>
+        <button type="button" class="btn-ghost btn-tv-remove" data-device="${escapeHtml(dev.id)}">Remove TV</button>
+      </div>
     </div>`;
 }
 
@@ -199,29 +210,101 @@ function isEditingIn(container) {
   return Boolean(active && container.contains(active) && active.closest(".tv-rename-form") && active.tagName === "INPUT");
 }
 
-async function saveNickname(form) {
-  const input = form.querySelector("input");
+async function saveTvEdits(form) {
+  const nameInput = form.querySelector('input[data-field="name"]');
+  const ipInput = form.querySelector('input[data-field="ip"]');
   const button = form.querySelector("button[type=submit]");
   const deviceId = form.dataset.device;
   if (button) button.disabled = true;
   try {
-    const res = await fetch(`${ENDPOINTS.tvUpdaterDevices}/${encodeURIComponent(deviceId)}/nickname`, {
-      method: "PUT",
+    const payload = {
+      name: nameInput ? nameInput.value : "",
+      ip: ipInput ? ipInput.value : "",
+    };
+    const res = await fetch(`${ENDPOINTS.tvUpdaterDevices}/${encodeURIComponent(deviceId)}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: input ? input.value : "" }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
-      showToast("Name not saved", data.message || "Try again.", "warning");
+      showToast("TV Not Updated", data.message || "Try again.", "warning");
       return;
     }
-    showToast("TV renamed", data.nickname ? `Now shown as "${data.nickname}".` : "Showing the model name again.", "success");
-    if (input) input.blur();
+    showToast("TV Updated", `Saved settings for "${data.device?.name || deviceId}".`, "success");
+    if (nameInput) nameInput.blur();
+    if (ipInput) ipInput.blur();
     await fetchTvUpdaterStatus(true);
   } catch (_) {
-    showToast("Name not saved", "The Control Hub did not answer.", "danger");
+    showToast("TV Not Updated", "The Control Hub did not answer.", "danger");
   } finally {
     if (button) button.disabled = false;
+  }
+}
+
+async function testTvConnection(deviceId, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${ENDPOINTS.tvUpdaterDevices}/${encodeURIComponent(deviceId)}/test`, { method: "POST" });
+    const data = await res.json();
+    showToast(
+      data.ok ? "TV Connected" : (data.needs_auth ? "Allow on TV Screen" : "TV Unreachable"),
+      data.message || (data.ok ? "ADB reachable." : "Connection failed."),
+      data.ok ? "success" : "warning"
+    );
+    await fetchTvUpdaterStatus(true);
+  } catch (_) {
+    showToast("Test Failed", "Could not reach Control Hub.", "danger");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function toggleTvPaused(deviceId, currentlyPaused, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${ENDPOINTS.tvUpdaterDevices}/${encodeURIComponent(deviceId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paused: !currentlyPaused }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showToast("Update Failed", data.message || "Try again.", "warning");
+      return;
+    }
+    showToast(!currentlyPaused ? "TV Updates Paused" : "TV Updates Resumed", data.device?.name || deviceId, "info");
+    await fetchTvUpdaterStatus(true);
+  } catch (_) {
+    showToast("Update Failed", "Could not reach Control Hub.", "danger");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function removeTvDevice(deviceId, btn) {
+  if (!btn) return;
+  if (btn.dataset.confirmPending !== "true") {
+    btn.dataset.confirmPending = "true";
+    btn.textContent = "Confirm Remove";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${ENDPOINTS.tvUpdaterDevices}/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showToast("Remove Failed", data.message || "Could not remove TV.", "warning");
+      return;
+    }
+    openInfo.delete(`card-${deviceId}`);
+    openInfo.delete(`modal-${deviceId}`);
+    showToast("TV Removed", "Removed TV profile from fleet.", "success");
+    await fetchTvUpdaterStatus(true);
+  } catch (_) {
+    showToast("Remove Failed", "Could not reach Control Hub.", "danger");
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -240,8 +323,17 @@ function wireDeviceInfo(container) {
   container.querySelectorAll(".tv-rename-form").forEach((form) => {
     form.addEventListener("submit", (e) => {
       e.preventDefault();
-      saveNickname(form);
+      saveTvEdits(form);
     });
+  });
+  container.querySelectorAll(".btn-tv-test").forEach((btn) => {
+    btn.addEventListener("click", () => testTvConnection(btn.dataset.device, btn));
+  });
+  container.querySelectorAll(".btn-tv-pause").forEach((btn) => {
+    btn.addEventListener("click", () => toggleTvPaused(btn.dataset.device, btn.dataset.paused === "true", btn));
+  });
+  container.querySelectorAll(".btn-tv-remove").forEach((btn) => {
+    btn.addEventListener("click", () => removeTvDevice(btn.dataset.device, btn));
   });
 }
 
@@ -683,6 +775,7 @@ export async function refreshTvLog() {
 export function setupTvUpdater() {
   registerModal(tvDetailModal, { closeButtons: [tvModalClose, tvModalDismiss] });
   registerModal(tvLogModal, { closeButtons: [tvLogModalClose, tvLogModalDismiss] });
+  setupAddTvWizard();
 
   if (btnDeployCard) btnDeployCard.addEventListener("click", () => triggerTvDeployment(false));
   if (btnViewTvLog) btnViewTvLog.addEventListener("click", () => openTvLogModal(btnViewTvLog));
@@ -715,6 +808,277 @@ export function setupTvUpdater() {
           : "Safety guard active: updates pause while media plays or app is in foreground.",
         forceUpdateEnabled ? "warning" : "success"
       );
+    });
+  }
+}
+
+const BRAND_GUIDES = {
+  google: {
+    step1: "Open <strong>Settings &rarr; System &rarr; About</strong> and tap <strong>Android TV OS build</strong> 7 times until &ldquo;You are now a developer!&rdquo; shows.",
+    step2: "Open <strong>Settings &rarr; System &rarr; Developer options</strong> and turn on <strong>USB debugging</strong> and <strong>Network debugging</strong>.",
+  },
+  fire: {
+    step1: "Open <strong>Settings &rarr; My Fire TV &rarr; About</strong> and click your Fire TV model name <strong>7 times</strong> until &ldquo;No need, you are already a developer.&rdquo; appears.",
+    step2: "Open <strong>Settings &rarr; My Fire TV &rarr; Developer options</strong> and turn on <strong>ADB Debugging</strong>.",
+  },
+  xiaomi: {
+    step1: "Open <strong>Settings &rarr; Device Preferences &rarr; About</strong> and tap <strong>Build</strong> 7 times.",
+    step2: "Open <strong>Developer options</strong> and turn on <strong>USB debugging</strong> and <strong>Network debugging (ADB over network)</strong>.",
+  },
+  sony: {
+    step1: "Open <strong>Settings &rarr; System (or Device Preferences) &rarr; About</strong> and select <strong>Build / Android TV OS build</strong> 7 times.",
+    step2: "Open <strong>Developer options</strong> and turn on <strong>ADB debugging / USB debugging</strong> (plus Network debugging if listed).",
+  },
+};
+
+const WIZ_STEP_LABELS = [
+  "Enable Developer Options",
+  "Enable ADB over Network",
+  "Enter IP or Scan LAN",
+  "Connect & Authorize on TV",
+  "Name TV & Pick Apps",
+];
+
+function wizardFigureSvg(step) {
+  const caption = WIZ_STEP_LABELS[step - 1] || "";
+  const badges = [
+    `<rect x="18" y="14" width="184" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="110" y="39" text-anchor="middle" fill="currentColor" font-size="11" font-family="monospace">Settings &gt; About</text><text x="110" y="59" text-anchor="middle" fill="var(--color-accent)" font-size="12" font-family="monospace">Build [x7]</text>`,
+    `<rect x="18" y="14" width="184" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="110" y="38" text-anchor="middle" fill="currentColor" font-size="11" font-family="monospace">Developer Options</text><text x="110" y="59" text-anchor="middle" fill="var(--color-accent)" font-size="12" font-family="monospace">ADB Debug: ON</text>`,
+    `<rect x="18" y="14" width="184" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="110" y="38" text-anchor="middle" fill="currentColor" font-size="11" font-family="monospace">Network IP :5555</text><text x="110" y="59" text-anchor="middle" fill="var(--color-accent)" font-size="12" font-family="monospace">192.168.1.xxx</text>`,
+    `<rect x="18" y="14" width="184" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="110" y="37" text-anchor="middle" fill="currentColor" font-size="11" font-family="monospace">Allow USB Debugging?</text><text x="110" y="59" text-anchor="middle" fill="var(--color-accent)" font-size="12" font-family="monospace">[Always Allow]</text>`,
+    `<rect x="18" y="14" width="184" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="110" y="38" text-anchor="middle" fill="currentColor" font-size="11" font-family="monospace">Model + Apps</text><text x="110" y="59" text-anchor="middle" fill="var(--color-accent)" font-size="12" font-family="monospace">Ready to Sync</text>`,
+  ];
+  return `<svg width="220" height="90" viewBox="0 0 220 90" role="img" aria-label="${escapeHtml(caption)}">${badges[step - 1] || badges[0]}</svg>`;
+}
+
+function setupAddTvWizard() {
+  const modal = $("add-tv-wizard-modal");
+  const btnOpen = $("btn-add-tv");
+  const btnClose = $("add-tv-modal-close");
+  const btnDismiss = $("add-tv-modal-dismiss");
+  const btnBack = $("btn-tv-wiz-back");
+  const btnNext = $("btn-tv-wiz-next");
+  const btnSave = $("btn-tv-wiz-save");
+  const btnScan = $("btn-tv-wiz-scan");
+  const btnConnect = $("btn-tv-wiz-connect");
+  const stepBadge = $("tv-wiz-step-badge");
+  const stepLabel = $("tv-wiz-step-label");
+  const figure = $("tv-wiz-figure");
+  const ipInput = $("tv-wiz-ip-input");
+  const portInput = $("tv-wiz-port-input");
+  const scanResults = $("tv-wiz-scan-results");
+  const connectStatus = $("tv-wiz-connect-status");
+  const detectedSummary = $("tv-wiz-detected-summary");
+  const nameInput = $("tv-wiz-name-input");
+  const appsList = $("tv-wiz-apps-list");
+  if (!modal || !btnOpen) return;
+
+  registerModal(modal, { closeButtons: [btnClose, btnDismiss] });
+
+  let step = 1;
+  let brand = "google";
+  let probeData = null;
+  let selectedApps = new Set(["org.smarttube.stable", "com.lagradost.cloudstream3.prerelease"]);
+
+  const renderBrandGuide = () => {
+    const guide = BRAND_GUIDES[brand] || BRAND_GUIDES.google;
+    const s1 = $("tv-wiz-step1-desc");
+    const s2 = $("tv-wiz-step2-desc");
+    if (s1) s1.innerHTML = guide.step1;
+    if (s2) s2.innerHTML = guide.step2;
+    modal.querySelectorAll(".tv-brand-tab").forEach((tab) => {
+      tab.setAttribute("aria-selected", String(tab.dataset.brand === brand));
+    });
+  };
+
+  const renderStep = () => {
+    for (let i = 1; i <= 5; i++) {
+      const p = $(`tv-wiz-panel-${i}`);
+      if (p) p.hidden = i !== step;
+    }
+    if (stepBadge) stepBadge.textContent = `Step ${step} of 5`;
+    if (stepLabel) stepLabel.textContent = WIZ_STEP_LABELS[step - 1] || "";
+    if (figure) figure.innerHTML = wizardFigureSvg(step);
+    if (btnBack) btnBack.disabled = step === 1;
+    if (btnNext) btnNext.hidden = step >= 5;
+    if (btnSave) btnSave.hidden = step !== 5;
+  };
+
+  const renderAppsChooser = (apps) => {
+    if (!appsList) return;
+    const catalog = Array.isArray(apps) && apps.length ? apps : [
+      { id: "smarttube", package: "org.smarttube.stable", name: "SmartTube" },
+      { id: "cloudstream", package: "com.lagradost.cloudstream3.prerelease", name: "CloudStream Beta" },
+    ];
+    appsList.innerHTML = catalog.map((app) => {
+      const pressed = selectedApps.has(app.package);
+      return `<button type="button" class="btn-secondary tv-wiz-app-btn" data-pkg="${escapeHtml(app.package)}" aria-pressed="${pressed}">${escapeHtml(app.name)}: ${pressed ? "On" : "Off"}</button>`;
+    }).join("");
+    appsList.querySelectorAll(".tv-wiz-app-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const pkg = btn.dataset.pkg;
+        if (selectedApps.has(pkg)) selectedApps.delete(pkg);
+        else selectedApps.add(pkg);
+        renderAppsChooser(catalog);
+      });
+    });
+  };
+
+  modal.querySelectorAll(".tv-brand-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      brand = tab.dataset.brand || "google";
+      renderBrandGuide();
+    });
+  });
+
+  btnOpen.addEventListener("click", () => {
+    step = 1;
+    probeData = null;
+    if (scanResults) scanResults.innerHTML = "";
+    if (connectStatus) connectStatus.hidden = true;
+    renderBrandGuide();
+    renderAppsChooser(state.tvSnapshot?.managed_apps || []);
+    renderStep();
+    openModal(modal, btnOpen);
+  });
+
+  if (btnBack) {
+    btnBack.addEventListener("click", () => {
+      if (step > 1) {
+        step -= 1;
+        renderStep();
+      }
+    });
+  }
+
+  if (btnNext) {
+    btnNext.addEventListener("click", () => {
+      if (step === 3 && ipInput && !ipInput.value.trim()) {
+        showToast("Enter TV IP", "Type the TV IP address or tap Scan LAN first.", "warning");
+        return;
+      }
+      if (step < 5) {
+        step += 1;
+        renderStep();
+      }
+    });
+  }
+
+  if (btnScan) {
+    btnScan.addEventListener("click", async () => {
+      btnScan.disabled = true;
+      btnScan.textContent = "Scanning...";
+      try {
+        const res = await fetch(ENDPOINTS.tvUpdaterScanLan, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ port: Number(portInput?.value || 5555) }),
+        });
+        const data = await res.json();
+        const found = Array.isArray(data.candidates) ? data.candidates : [];
+        if (!scanResults) return;
+        if (found.length === 0) {
+          scanResults.innerHTML = `<span class="text-muted">No open ADB ports found on the LAN subnet. Enter IP manually.</span>`;
+        } else {
+          scanResults.innerHTML = found.map((c) => {
+            const label = c.already_added ? `${c.ip} (${c.name || "Added"})` : `${c.ip} (New TV)`;
+            return `<button type="button" class="btn-secondary tv-scan-pick" data-ip="${escapeHtml(c.ip)}">${escapeHtml(label)}</button>`;
+          }).join("");
+          scanResults.querySelectorAll(".tv-scan-pick").forEach((b) => {
+            b.addEventListener("click", () => {
+              if (ipInput) ipInput.value = b.dataset.ip || "";
+            });
+          });
+        }
+      } catch (_) {
+        showToast("Scan Failed", "Could not scan LAN.", "warning");
+      } finally {
+        btnScan.disabled = false;
+        btnScan.textContent = "Scan LAN";
+      }
+    });
+  }
+
+  if (btnConnect) {
+    btnConnect.addEventListener("click", async () => {
+      const ip = ipInput?.value.trim() || "";
+      const port = Number(portInput?.value || 5555);
+      if (!ip) {
+        step = 3;
+        renderStep();
+        showToast("Enter TV IP", "Provide the TV IP before connecting.", "warning");
+        return;
+      }
+      btnConnect.disabled = true;
+      btnConnect.textContent = "Connecting...";
+      try {
+        const res = await fetch(ENDPOINTS.tvUpdaterConnect, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ip, port }),
+        });
+        const data = await res.json();
+        if (connectStatus) {
+          connectStatus.hidden = false;
+          connectStatus.textContent = data.message || "Checking ADB...";
+          connectStatus.className = data.ok ? "inline-callout is-success" : (data.needs_auth ? "inline-callout is-warning" : "inline-callout is-error");
+        }
+        if (data.needs_auth) {
+          btnConnect.textContent = "Retry Connection";
+        } else if (data.ok) {
+          probeData = data;
+          if (nameInput) nameInput.value = data.suggested_name || "Android TV";
+          if (detectedSummary) {
+            const bits = [data.manufacturer, data.model, data.android ? `Android ${data.android}` : null].filter(Boolean);
+            detectedSummary.textContent = bits.length ? `Detected: ${bits.join(" · ")} (${data.ip}:${data.port})` : `Endpoint: ${data.ip}:${data.port}`;
+          }
+          renderAppsChooser(data.apps || []);
+          step = 5;
+          renderStep();
+          btnConnect.textContent = "Connect to TV";
+        } else {
+          btnConnect.textContent = "Retry Connection";
+        }
+      } catch (_) {
+        showToast("Connect Failed", "Could not query Control Hub.", "danger");
+        btnConnect.textContent = "Retry Connection";
+      } finally {
+        btnConnect.disabled = false;
+      }
+    });
+  }
+
+  if (btnSave) {
+    btnSave.addEventListener("click", async () => {
+      const name = nameInput?.value.trim() || "";
+      const ip = ipInput?.value.trim() || "";
+      const port = Number(portInput?.value || 5555);
+      btnSave.disabled = true;
+      try {
+        const res = await fetch(ENDPOINTS.tvUpdaterDevices, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            ip,
+            port,
+            apps: Array.from(selectedApps),
+            probe: probeData || {},
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showToast("Save Failed", data.message || "Could not save TV.", "warning");
+          return;
+        }
+        showToast("TV Added", `"${data.device?.name || name}" added to fleet.`, "success");
+        if (btnDismiss) btnDismiss.click();
+        await fetchTvUpdaterStatus(true);
+      } catch (_) {
+        showToast("Save Failed", "Control Hub did not respond.", "danger");
+      } finally {
+        btnSave.disabled = false;
+      }
     });
   }
 }

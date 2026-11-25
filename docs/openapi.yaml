@@ -448,6 +448,52 @@ paths:
       responses:
         '200':
           description: "{success, device_id, nickname}"
+
+  /api/tv-updater/scan-lan:
+    post:
+      summary: Scan LAN subnet for TVs with ADB network port open
+      tags: [Fleet Management]
+      responses:
+        '200':
+          description: "{success, candidates}"
+
+  /api/tv-updater/connect:
+    post:
+      summary: Connect to an ADB TV endpoint and read model & Android version
+      tags: [Fleet Management]
+      responses:
+        '200':
+          description: "{success, connected, needs_auth, suggested_name, apps, message}"
+
+  /api/tv-updater/devices:
+    post:
+      summary: Add a new managed Android TV profile
+      tags: [Fleet Management]
+      responses:
+        '201':
+          description: "{success, device}"
+
+  /api/tv-updater/devices/{device_id}:
+    patch:
+      summary: Update TV name, IP/port, paused state, or app selection
+      tags: [Fleet Management]
+      responses:
+        '200':
+          description: "{success, device}"
+    delete:
+      summary: Remove a TV profile from the fleet
+      tags: [Fleet Management]
+      responses:
+        '200':
+          description: "{success, removed}"
+
+  /api/tv-updater/devices/{device_id}/test:
+    post:
+      summary: Test ADB connectivity to a configured TV
+      tags: [Fleet Management]
+      responses:
+        '200':
+          description: "{success, connected, needs_auth, message}"
         '400':
           description: Name too long or contains control characters
         '404':

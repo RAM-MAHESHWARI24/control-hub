@@ -427,6 +427,112 @@ def set_tv_nickname(device_id):
     return jsonify({"success": True, "device_id": device_id, "nickname": stored})
 
 
+@tv_updater_bp.route("/api/tv-updater/scan-lan", methods=["POST"])
+def scan_lan_for_tvs():
+    """Scans the LAN /24 subnet for devices with ADB network port open."""
+    if not tv_module_installed() or tv_updater is None:
+        return jsonify(NOT_INSTALLED), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        port = int(body.get("port", 5555))
+        candidates = tv_updater.scan_lan_adb_devices(port=port)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)[:200]}), 500
+    return jsonify({"success": True, "candidates": candidates})
+
+
+@tv_updater_bp.route("/api/tv-updater/connect", methods=["POST"])
+def connect_new_tv():
+    """Connects to an ADB endpoint, detects TV model/Android version, or prompts for authorization."""
+    if not tv_module_installed() or tv_updater is None:
+        return jsonify(NOT_INSTALLED), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        res = tv_updater.connect_adb_tv(body.get("ip", ""), port=body.get("port", 5555))
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    status_code = 200 if res.get("ok") else (200 if res.get("needs_auth") else 400)
+    return jsonify({"success": bool(res.get("ok")), **res}), status_code
+
+
+@tv_updater_bp.route("/api/tv-updater/devices", methods=["POST"])
+def add_tv_device():
+    """Creates a new TV profile from the guided wizard."""
+    if not tv_module_installed() or tv_updater is None:
+        return jsonify(NOT_INSTALLED), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        profile = tv_updater.add_tv_profile(
+            name=body.get("name", ""),
+            ip=body.get("ip", ""),
+            port=body.get("port", 5555),
+            apps=body.get("apps"),
+            probe=body.get("probe") or {},
+        )
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"success": False, "message": f"Could not save TV profile: {exc}"}), 500
+    with _telemetry_lock:
+        telemetry_cache["last_fetched"] = 0.0
+    return jsonify({"success": True, "device": profile}), 201
+
+
+@tv_updater_bp.route("/api/tv-updater/devices/<device_id>", methods=["PATCH", "DELETE"])
+def modify_or_remove_tv_device(device_id):
+    """Updates (rename, change IP/port, pause/resume, app filter) or deletes a TV profile."""
+    if not tv_module_installed() or tv_updater is None:
+        return jsonify(NOT_INSTALLED), 404
+    if request.method == "DELETE":
+        try:
+            tv_updater.remove_tv_profile(device_id)
+        except KeyError:
+            return jsonify({"success": False, "message": f"Unknown TV '{device_id}'."}), 404
+        except OSError as exc:
+            return jsonify({"success": False, "message": f"Could not remove TV: {exc}"}), 500
+        with _telemetry_lock:
+            telemetry_cache["last_fetched"] = 0.0
+        return jsonify({"success": True, "removed": device_id})
+
+    body = request.get_json(silent=True) or {}
+    try:
+        updated = tv_updater.update_tv_profile(
+            device_id,
+            name=body["name"] if "name" in body else None,
+            ip=body["ip"] if "ip" in body else None,
+            port=body["port"] if "port" in body else None,
+            paused=body["paused"] if "paused" in body else None,
+            apps=body["apps"] if "apps" in body else None,
+        )
+    except KeyError:
+        return jsonify({"success": False, "message": f"Unknown TV '{device_id}'."}), 404
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"success": False, "message": f"Could not update TV: {exc}"}), 500
+    with _telemetry_lock:
+        telemetry_cache["last_fetched"] = 0.0
+    return jsonify({"success": True, "device": updated})
+
+
+@tv_updater_bp.route("/api/tv-updater/devices/<device_id>/test", methods=["POST"])
+def test_tv_device_connection(device_id):
+    """Tests live ADB connection to a configured TV and updates its last_error/device info."""
+    if not tv_module_installed() or tv_updater is None:
+        return jsonify(NOT_INSTALLED), 404
+    try:
+        res = tv_updater.test_tv_connection(device_id)
+    except KeyError:
+        return jsonify({"success": False, "message": f"Unknown TV '{device_id}'."}), 404
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    with _telemetry_lock:
+        telemetry_cache["last_fetched"] = 0.0
+    return jsonify({"success": bool(res.get("ok")), **res})
+
+
 @tv_updater_bp.route("/api/tv-updater/push-incoming", methods=["POST"])
 def trigger_push_incoming():
     """Pushes manual APK drops from incoming_apks/ to all online target TVs."""

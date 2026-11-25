@@ -628,6 +628,25 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         finally:
             context.close()
 
+    def test_add_tv_wizard_modal_steps_brands_and_axe(self) -> None:
+        context, page, _, page_errors, _ = self._new_authenticated_page(390, 844)
+        try:
+            self._navigate_view(page, "tvs")
+            page.click("#btn-add-tv")
+            wiz = page.locator("#add-tv-wizard-modal")
+            wiz.wait_for(state="visible", timeout=5000)
+            self.assertIn("Step 1 of 5", page.inner_text("#tv-wiz-step-badge"))
+            # Brand switcher changes menu guide text honestly
+            page.click('.tv-brand-tab[data-brand="fire"]')
+            self.assertIn("My Fire TV", page.inner_text("#tv-wiz-step1-desc"))
+            self._assert_axe_wcag_aa(page, "add-tv-wizard@390x844")
+            self._assert_layout_and_touch_targets(page, 390, "add-tv-wizard")
+            page.click("#add-tv-modal-close")
+            wiz.wait_for(state="hidden", timeout=5000)
+            self.assertEqual(page_errors, [])
+        finally:
+            context.close()
+
     def test_uninstalled_optional_module_hides_nav_and_redirects_deep_link(self) -> None:
         self.__class__.mock_tv_installed = False
         try:
