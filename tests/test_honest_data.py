@@ -26,6 +26,7 @@ from core import storage_sizes  # noqa: E402
 from core.config_core import auth_password  # noqa: E402
 import server  # noqa: E402
 from widgets import backup_sync, cron_tasks, network_speed, system_vitals, tv_updater  # noqa: E402
+from widgets import updates as updates_widget  # noqa: E402
 
 BANNED_FALLBACKS = (
     "35762",
@@ -117,6 +118,8 @@ class _IsolatedEnvMixin:
             mock.patch.object(cron_tasks, "BACKUP_STATUS_FILE", missing_status_file),
             mock.patch.object(tv_updater, "TV_UPDATER_PY", ""),
             mock.patch.object(tv_updater, "TV_UPDATER_STATE_FILE", ""),
+            mock.patch.object(updates_widget, "UPDATES_CACHE_FILE", str(root / "updates_cache.json")),
+            mock.patch.object(updates_widget, "UPDATES_AUTO_CHECK", False),
         ]
         for p in self._patches:
             p.start()
@@ -176,6 +179,7 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
                 "/api/cron/status",
                 "/api/services/status",
                 "/api/sleep/status",
+                "/api/updates",
             ]
             for ep in endpoints:
                 resp = self.client.get(ep, headers=self.headers)

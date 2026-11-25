@@ -62,6 +62,7 @@ DEFAULT_CONFIG: Dict = {
         "cpu_temp": {"enabled": True, "celsius": 80, "minutes": 2},
         "tv_update_failed": {"enabled": True},
         "signin_failures": {"enabled": True},
+        "app_updates": {"enabled": True},
     },
     "quiet_hours": {"enabled": True, "start": "23:00", "end": "07:00"},
     "daily_summary": {"enabled": False, "time": "08:00"},
@@ -78,6 +79,7 @@ RULE_INFO = {
     "cpu_temp": ("CPU temperature high", "warning"),
     "tv_update_failed": ("TV app update failed", "warning"),
     "signin_failures": ("Too many failed dashboard sign-ins", "warning"),
+    "app_updates": ("New app or blueprint release available", "info"),
 }
 
 
@@ -486,6 +488,45 @@ def collect_signins(failures: Dict[str, int], limit: int) -> List[Condition]:
     return [Condition(f"signin:{ip}", "signin_failures", sev, title,
                       f"{count} failed sign-ins from {ip} in the last 5 minutes; that address is locked out for now.")
             for ip, count in failures.items() if count >= limit]
+
+
+def collect_updates(rep: Optional[Dict], state: Dict) -> List[Condition]:
+    """One-off events for newly discovered container or blueprint releases."""
+    if not rep or not isinstance(rep.get("rows"), list):
+        return []
+    from core import updates
+
+    fresh = updates.new_since_notified(rep, state.setdefault("updates_notified", {}))
+    out: List[Condition] = []
+    for row in fresh:
+        name = row.get("image_name") or row.get("container") or "app"
+        current = row.get("current") or "?"
+        latest = row.get("latest") or "?"
+        kind = row.get("kind")
+        is_major = kind == "major"
+        severity = "warning" if is_major else "info"
+        prefix = "Major update available" if is_major else "Update available"
+        title = f"{prefix}: {name} ({current} -> {latest})"
+        parts = []
+        if is_major:
+            parts.append("Major version bump: read upstream release notes before upgrading.")
+        elif row.get("kind_text"):
+            parts.append(str(row["kind_text"]))
+        if row.get("published"):
+            parts.append(f"Published {row['published']}.")
+        if row.get("release_url"):
+            parts.append(str(row["release_url"]))
+        if row.get("command"):
+            parts.append(f"Command: {row['command']}")
+        out.append(Condition(
+            f"update:{row.get('container') or name}:{latest}",
+            "app_updates",
+            severity,
+            title,
+            "\n".join(parts) or title,
+            event=True,
+        ))
+    return out
 
 
 def read_cpu_temp() -> Optional[float]:

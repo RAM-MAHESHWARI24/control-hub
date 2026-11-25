@@ -61,7 +61,7 @@ const RULE_FIELDS = {
 
 const RULE_ORDER = [
   "backup_failed", "drive_unreachable", "restore_test_failed", "backup_stale", "disk_critical", "disk_warning",
-  "container_down", "cpu_temp", "tv_update_failed", "signin_failures",
+  "container_down", "cpu_temp", "tv_update_failed", "signin_failures", "app_updates",
 ];
 
 const SEVERITY_TEXT = { critical: "Critical", warning: "Warning", info: "Info" };

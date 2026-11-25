@@ -296,6 +296,18 @@ export function renderOverviewAuditTrail() {
     });
   }
 
+  if (state.updatesSnapshot) {
+    const u = state.updatesSnapshot;
+    const pending = Number(u.pending || 0);
+    const majors = Number(u.majors || 0);
+    entries.push({
+      tone: majors > 0 ? "accent" : (pending > 0 ? "cool" : (u.checked_at ? "ok" : "muted")),
+      label: "App Updates",
+      detail: !u.checked_at ? "Not checked" : (pending > 0 ? `${pending} pending` : "Up to date"),
+      meta: majors > 0 ? `${majors} major release` : (u.checked_at_str || "24h GitHub check"),
+    });
+  }
+
   const key = JSON.stringify(entries);
   if (key === lastAuditKey && list.children.length > 0) return;
   lastAuditKey = key;

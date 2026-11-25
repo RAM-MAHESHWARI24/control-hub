@@ -26,6 +26,7 @@ from config import (
     get_tz_abbr,
 )
 from core import alerts, auth, backup_health
+from widgets import updates as updates_widget
 
 alerts_bp = Blueprint("alerts", __name__)
 
@@ -82,6 +83,9 @@ def collect(engine: alerts.AlertEngine, state: dict) -> list:
         conditions += alerts.collect_tv_errors(TV_UPDATER_LOG_FILE, state)
 
     conditions += alerts.collect_signins(auth.failure_counts(), auth.LOGIN_MAX_FAILURES)
+
+    if config["rules"].get("app_updates", {}).get("enabled", True):
+        conditions += alerts.collect_updates(updates_widget.get_updates_report(refresh_mode="due"), state)
     return conditions
 
 

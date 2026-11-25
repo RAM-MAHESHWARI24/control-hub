@@ -396,6 +396,29 @@
             <div class="empty-state">Checking qBittorrent download queue&hellip;</div>
           </div>
         </section>
+
+        <!-- Available Updates (Phase 2C) -->
+        <section class="panels console-sheet" id="updates-panel">
+          <div class="panel panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Available Updates</h2>
+              <span class="panel-subtitle card-summary" id="updates-subtitle">Comparing pinned tags against upstream releases&hellip;</span>
+            </div>
+            <div class="panel-actions">
+              <span class="badge" id="updates-summary-badge">Checking</span>
+              <button type="button" id="btn-check-updates" class="btn-secondary">
+                <span class="btn-spinner" id="updates-check-spinner" style="display: none;" aria-hidden="true"></span>
+                <span id="updates-check-label">Check Releases</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="updates-major-callout" class="inline-callout is-warning" hidden></div>
+
+          <div id="updates-table-wrap" class="services-ledger-host">
+            <div class="empty-state">Loading tracked container releases&hellip;</div>
+          </div>
+        </section>
       </div>
 
       <!-- =================================================================== -->

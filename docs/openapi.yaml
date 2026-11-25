@@ -718,6 +718,24 @@ paths:
         '400':
           description: Malformed body
 
+  /api/updates:
+    get:
+      summary: Container and Blueprint release updates
+      description: Compares running pinned Docker container tags and Control Hub against cached upstream GitHub releases.
+      tags: [Services]
+      responses:
+        '200':
+          description: "{checked_at, checked_at_str, pending, majors, rows}"
+
+  /api/updates/check:
+    post:
+      summary: Force an upstream GitHub release check
+      description: Refreshes release versions from GitHub if at least 10 minutes have elapsed since the previous check.
+      tags: [Services]
+      responses:
+        '200':
+          description: Updated release comparison with `throttled` flag
+
 components:
   securitySchemes:
     bearerToken:

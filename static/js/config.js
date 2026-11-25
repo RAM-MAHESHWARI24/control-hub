@@ -40,6 +40,8 @@ export const ENDPOINTS = {
   serviceRestart: (id) => `/api/services/restart/${id}`,
   serviceAction: (id) => `/api/services/action/${id}`,
   serviceLogs: (id, tail = 150) => `/api/services/logs/${id}?tail=${tail}`,
+  updates: "/api/updates",
+  updatesCheck: "/api/updates/check",
   tvUpdaterStatus: "/api/tv-updater/status",
   tvUpdaterDeploy: "/api/tv-updater/deploy",
   tvUpdaterSyncUpstream: "/api/tv-updater/sync-upstream",

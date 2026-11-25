@@ -2021,6 +2021,21 @@ td.ledger-cell-group {
 .torrent-status-pill.downloading { color: var(--success-text); }
 .torrent-status-pill.stalled { color: var(--warning-text); }
 
+.updates-release-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  color: var(--color-cool);
+  text-decoration: underline;
+  text-decoration-color: var(--color-rule-2);
+  text-underline-offset: 3px;
+}
+
+.updates-release-link:hover {
+  color: var(--color-accent);
+}
+
 /* ==========================================================================
    VIEW 3: Backups & Photos (Console Verification Bench & Audit Trail)
    ========================================================================== */

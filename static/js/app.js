@@ -26,6 +26,7 @@ import { fetchServices, setupServiceMatrix } from "./widgets/serviceMatrix.js";
 import { fetchNetplanStatus, setupConfigCenter } from "./widgets/configCenter.js";
 import { fetchIndexerStatus, setupIndexers } from "./widgets/indexers.js";
 import { fetchAlerts, setupAlerts } from "./widgets/alerts.js";
+import { fetchUpdates, setupUpdates } from "./widgets/updates.js";
 
 const FAST_POLL_MS = 2500;
 const MEDIUM_POLL_MS = 15000;
@@ -126,6 +127,7 @@ async function pollMediumTelemetry() {
     fetchIndexerStatus(),
     fetchAlerts(),
     fetchNetplanStatus(),
+    fetchUpdates(),
   ]);
 }
 
@@ -268,6 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupConfigCenter();
   setupIndexers();
   setupAlerts();
+  setupUpdates();
 
   setupVisibilityPolling();
   refreshAll(false);

@@ -45,6 +45,7 @@ from core.config_core import auth_password  # noqa: E402
 import server  # noqa: E402
 from widgets import alerts as alerts_widget  # noqa: E402
 from widgets import backup_sync, cron_tasks, network_speed, system_vitals, tv_updater  # noqa: E402
+from widgets import updates as updates_widget  # noqa: E402
 
 try:
     from werkzeug.serving import make_server
@@ -164,6 +165,8 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             mock.patch.object(backup_sync, "BACKUP_REMOTE_HELPER", str(root / "units" / "photo-restore-test.service")),
             mock.patch.object(alerts_widget.engine, "config_path", root / "alerts.json"),
             mock.patch.object(alerts_widget.engine, "state_path", root / "alerts_state.json"),
+            mock.patch.object(updates_widget, "UPDATES_CACHE_FILE", str(root / "updates_cache.json")),
+            mock.patch.object(updates_widget, "UPDATES_AUTO_CHECK", False),
         ]
         for p in cls._patches:
             p.start()
@@ -274,6 +277,31 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
         cls.app.view_functions["backup_sync.list_backup_remotes"] = mock_remotes
         cls.app.view_functions["backup_sync.test_backup_remote"] = mock_remote_test
+
+        def mock_updates_status():
+            from flask import jsonify
+            return jsonify({
+                "checked_at": 1700000000,
+                "checked_at_str": "2026-11-24 12:00 UTC",
+                "pending": 1,
+                "majors": 0,
+                "docker_available": True,
+                "rows": [
+                    {
+                        "container": "control-hub", "image_name": "Homelab Blueprint", "current": "v2.1.1",
+                        "latest": "v2.1.1", "release_url": "https://example.invalid/bp", "kind": "up_to_date",
+                        "kind_text": "Up to date", "reason": None, "command": None,
+                    },
+                    {
+                        "container": "jellyfin", "service": "jellyfin", "image_name": "lscr.io/linuxserver/jellyfin",
+                        "current": "10.9.11-ls1", "latest": "10.10.3-ls2", "release_url": "https://example.invalid/jf",
+                        "kind": "update", "kind_text": "Update available", "reason": None,
+                        "command": "cd /srv/stacks/media && sudo docker compose up -d jellyfin",
+                    },
+                ],
+            })
+
+        cls.app.view_functions["updates.api_get_updates"] = mock_updates_status
 
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
@@ -521,7 +549,7 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             modal = page.locator("#alerts-modal")
             modal.wait_for(state="visible", timeout=5000)
             page.wait_for_selector("#alerts-channels fieldset[data-channel='ntfy']")
-            self.assertEqual(page.locator("#alerts-rules [data-rule]").count(), 10)
+            self.assertEqual(page.locator("#alerts-rules [data-rule]").count(), 11)
             page.click("#alerts-channels fieldset[data-channel='ntfy'] button:has-text('New topic')")
             topic = page.input_value("#alerts-ntfy-topic")
             self.assertTrue(topic.startswith("homelab-") and len(topic) >= 20)

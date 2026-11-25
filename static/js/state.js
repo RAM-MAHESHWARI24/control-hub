@@ -72,6 +72,9 @@ export const state = {
   dozzlePort: 8888,
   cockpitInstalled: false,
 
+  // Available Updates (Phase 2C)
+  updatesSnapshot: null,
+
   // Backup Sync Toast & Overview snapshot
   backupSnapshot: null,
   userInitiatedSync: false,

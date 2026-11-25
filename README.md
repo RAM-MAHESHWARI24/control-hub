@@ -157,6 +157,8 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/services/status` | Real Docker health, published ports, and container IDs (`?include_other=true` supported) |
 | `POST` | `/api/services/action/<service>` | Start, stop, or restart a Docker container (`{"action": "start\|stop\|restart"}`) |
 | `GET` | `/api/services/logs/<service>?tail=150` | Direct Docker or Cockpit log stream |
+| `GET` | `/api/updates` | Compares pinned container tags & Blueprint version against cached GitHub releases |
+| `POST` | `/api/updates/check` | Checks upstream GitHub releases on demand (10-minute cooldown) |
 | `GET` | `/api/tv-updater/status` | Android TV fleet ADB update status |
 | `PUT` | `/api/tv-updater/devices/<id>/nickname` | Give a TV a nickname (empty shows the detected model) |
 
