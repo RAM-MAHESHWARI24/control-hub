@@ -617,13 +617,19 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             confirm.wait_for(state="hidden", timeout=5000)
             self.assertEqual(self.__class__.mock_action_calls, [])
 
-            # Now confirm and verify POST /api/services/action/jellyfin fires
+            # Now confirm and verify POST /api/services/action/jellyfin fires for restart and stop
             page.click("#btn-restart-jellyfin")
             confirm.wait_for(state="visible", timeout=5000)
             page.click("#confirm-modal-ok")
             confirm.wait_for(state="hidden", timeout=5000)
-            page.wait_for_timeout(250)
-            self.assertEqual(self.__class__.mock_action_calls, [("jellyfin", "restart")])
+            page.wait_for_timeout(200)
+            page.click("#btn-stop-jellyfin")
+            confirm.wait_for(state="visible", timeout=5000)
+            self.assertIn("Stop Jellyfin?", page.inner_text("#confirm-modal-title"))
+            page.click("#confirm-modal-ok")
+            confirm.wait_for(state="hidden", timeout=5000)
+            page.wait_for_timeout(200)
+            self.assertEqual(self.__class__.mock_action_calls, [("jellyfin", "restart"), ("jellyfin", "stop")])
             self.assertEqual(page_errors, [])
         finally:
             context.close()

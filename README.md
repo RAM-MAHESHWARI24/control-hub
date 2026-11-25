@@ -154,7 +154,7 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/backup/remotes` | rclone remotes on the server and the one in use |
 | `POST` | `/api/backup/remote/test` | Test a remote (answers, space, existing folders) |
 | `PUT` | `/api/backup/remote` | Switch both backups to another remote |
-| `GET` | `/api/services/status` | Real Docker health, published ports, and container IDs (`?include_other=true` supported) |
+| `GET` | `/api/services/status` | Real Docker health, restart count, uptime, image version, published ports, and container IDs (`?include_other=true` supported) |
 | `POST` | `/api/services/action/<service>` | Start, stop, or restart a Docker container (`{"action": "start\|stop\|restart"}`) |
 | `GET` | `/api/services/logs/<service>?tail=150` | Direct Docker or Cockpit log stream |
 | `GET` | `/api/updates` | Compares pinned container tags & Blueprint version against cached GitHub releases |

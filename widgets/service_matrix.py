@@ -57,6 +57,48 @@ def parse_published_port(ports_text: str, preferred_container_port: Optional[int
         return None
 
 
+def _fetch_restart_counts(names: list[str]) -> dict[str, int]:
+    """Batch-reads container restart counts via `docker inspect` (returns {} on failure)."""
+    if not names:
+        return {}
+    try:
+        proc = subprocess.run(
+            ["docker", "inspect", "--format", "{{.Name}}\t{{.RestartCount}}", *names],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode != 0:
+            return {}
+        counts: dict[str, int] = {}
+        for line in proc.stdout.splitlines():
+            name, _, count = line.partition("\t")
+            clean = name.strip().lstrip("/")
+            if clean and count.strip().isdigit():
+                counts[clean] = int(count.strip())
+        return counts
+    except Exception:
+        return {}
+
+
+def _parse_version(image: str) -> Optional[str]:
+    """Extracts pinned tag from a Docker image reference (drops registry port & digest)."""
+    if not image or image == "systemd":
+        return None
+    ref = image.split("@", 1)[0]
+    repo, sep, tag = ref.rpartition(":")
+    if not sep or "/" in tag or not repo:
+        return None
+    return tag
+
+
+def _parse_uptime(status_text: str) -> Optional[str]:
+    """Extracts human uptime phrase from Docker `Status` (e.g. 'Up 3 hours (healthy)' -> '3 hours')."""
+    m = re.match(r"^Up\s+(.+?)(?:\s+\((?:healthy|unhealthy|health:\s*starting|starting)\))?$", (status_text or "").strip(), re.I)
+    return m.group(1).strip() if m else None
+
+
 def _list_docker_containers():
     """Returns (running_map, docker_available, docker_error)."""
     running_map = {}
@@ -80,6 +122,9 @@ def _list_docker_containers():
                     running_map[c_name] = c
             except Exception:
                 pass
+        restart_counts = _fetch_restart_counts(list(running_map.keys()))
+        for c_name, c in running_map.items():
+            c["RestartCount"] = restart_counts.get(c_name, 0)
         return running_map, True, None
     except Exception as exc:
         return {}, False, str(exc)[:160]
@@ -94,6 +139,9 @@ def _serialize_container(c_id: str, docker_info: dict, meta: Optional[dict] = No
     docker_id = raw_id[:12] if len(raw_id) >= 12 else raw_id
     image = (docker_info.get("Image") or "").strip()
     ports_raw = docker_info.get("Ports", "")
+    restart_count = int(docker_info.get("RestartCount") or 0)
+    version = _parse_version(image)
+    uptime = _parse_uptime(status_text)
 
     if meta:
         default_port = meta.get("port")
@@ -110,6 +158,9 @@ def _serialize_container(c_id: str, docker_info: dict, meta: Optional[dict] = No
             "category": meta["category"],
             "state": state,
             "status": status_text,
+            "uptime": uptime,
+            "version": version,
+            "restart_count": restart_count,
             "health": health,
             "is_up": is_up,
             "has_web_ui": has_web_ui,
@@ -130,6 +181,9 @@ def _serialize_container(c_id: str, docker_info: dict, meta: Optional[dict] = No
         "category": "other",
         "state": state,
         "status": status_text,
+        "uptime": uptime,
+        "version": version,
+        "restart_count": restart_count,
         "health": health,
         "is_up": is_up,
         "has_web_ui": detected_port is not None,

@@ -157,7 +157,7 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
     return;
   }
 
-  const sig = JSON.stringify(services.map((s) => [s.id, s.state, s.health, s.status, s.port, s.is_up, s.has_web_ui, s.image]));
+  const sig = JSON.stringify(services.map((s) => [s.id, s.state, s.health, s.status, s.port, s.is_up, s.has_web_ui, s.image, s.restart_count, s.version]));
   if (sig === lastServicesSignature && servicesGrid.querySelector(".service-row")) {
     applyClientFilters();
     return;
@@ -200,7 +200,12 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
     const targetUrl = hasUi ? `${protocol}//${HOSTNAME}:${svc.port}` : null;
     const safeName = escapeHtml(svc.name);
     const statusParts = [svc.status || badgeText];
-    if (svc.image && svc.image !== "systemd") {
+    if (Number(svc.restart_count) > 0) {
+      statusParts.push(`${svc.restart_count} restart${svc.restart_count === 1 ? "" : "s"}`);
+    }
+    if (svc.version) {
+      statusParts.push(`v${svc.version}`);
+    } else if (svc.image && svc.image !== "systemd") {
       const shortImg = svc.image.includes("/") ? svc.image.split("/").pop() : svc.image;
       statusParts.push(shortImg);
     }
@@ -227,6 +232,9 @@ function renderServiceRows(services, dockerAvailable, dockerError) {
         <button type="button" class="btn-ghost btn-tile-restart" id="btn-restart-${escapeHtml(svc.id)}" data-action="restart" data-svc-id="${escapeHtml(svc.id)}" data-svc-name="${safeName}" aria-label="Restart ${safeName}">
           ${uiIcon("refresh")}
           <span>Restart</span>
+        </button>
+        <button type="button" class="btn-ghost btn-tile-stop" id="btn-stop-${escapeHtml(svc.id)}" data-action="stop" data-svc-id="${escapeHtml(svc.id)}" data-svc-name="${safeName}" aria-label="Stop ${safeName}">
+          <span>Stop</span>
         </button>
       ` : `
         <button type="button" class="btn-secondary btn-tile-restart" id="btn-start-${escapeHtml(svc.id)}" data-action="start" data-svc-id="${escapeHtml(svc.id)}" data-svc-name="${safeName}" aria-label="Start ${safeName}">
@@ -397,14 +405,16 @@ export async function refreshContainerLog() {
 }
 
 export async function performContainerAction(containerId, containerName, action = "restart", triggerEl = null) {
-  if (GUARDED_SERVICES.has(containerId) && (action === "restart" || action === "stop")) {
+  if (action === "stop" || (GUARDED_SERVICES.has(containerId) && action === "restart")) {
     let activeWarning = "";
     if (containerId === "jellyfin" && state.activeJellyfinStreams > 0) {
-      activeWarning = `${state.activeJellyfinStreams} Jellyfin connection(s) are currently active and will be interrupted.`;
+      activeWarning = `${state.activeJellyfinStreams} active Jellyfin stream(s) will be interrupted immediately.`;
+    } else if (containerId === "immich_server" && state.activeJellyfinStreams > 0) {
+      activeWarning = "Stopping the photo server interrupts any open gallery uploads or mobile backups.";
     } else if (containerId === "qbittorrent" && state.torrentsActiveCount > 0) {
       activeWarning = `${state.torrentsActiveCount} active torrent(s) are currently transferring.`;
     } else if (containerId === "immich_postgres") {
-      activeWarning = "Restarting PostgreSQL temporarily disconnects photo library queries and backups.";
+      activeWarning = "Stopping or restarting PostgreSQL temporarily disconnects photo library queries and backups.";
     }
     const ok = await confirmAction({
       title: `${action === "stop" ? "Stop" : "Restart"} ${containerName}?`,

@@ -515,6 +515,8 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
         def fake_run(cmd, **kwargs):
             if cmd[:2] == ["docker", "ps"]:
                 return mock.Mock(returncode=0, stdout=docker_out, stderr="")
+            if cmd[:2] == ["docker", "inspect"]:
+                return mock.Mock(returncode=0, stdout="/jellyfin\t3\n/my_custom_app\t0\n", stderr="")
             return mock.Mock(returncode=1, stdout="", stderr="")
 
         with mock.patch("subprocess.run", side_effect=fake_run):
@@ -523,6 +525,9 @@ class TestHonestData(_IsolatedEnvMixin, unittest.TestCase):
             jf = res["services"][0]
             self.assertEqual(jf["port"], 8097)
             self.assertEqual(jf["health"], "unhealthy")
+            self.assertEqual(jf["restart_count"], 3)
+            self.assertEqual(jf["version"], "10.10")
+            self.assertEqual(jf["uptime"], "2 hours")
             self.assertFalse(jf["is_up"])
 
             res_all = self.client.get("/api/services/status?include_other=true", headers=self.headers).get_json()
