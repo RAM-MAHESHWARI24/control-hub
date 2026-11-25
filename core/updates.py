@@ -29,6 +29,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 
 CHECK_EVERY_SECONDS = 24 * 3600
+AUTO_PATCH_INTERVAL = 24 * 3600
 MIN_MANUAL_INTERVAL = 600
 USER_AGENT = "homelab-blueprint-control-hub"
 
@@ -41,6 +42,10 @@ REPO_OVERRIDES = {
 }
 MANUAL = {
     "ghcr.io/immich-app/postgres": "Database engine: update it by hand, together with the photo app, after reading its release notes.",
+}
+MIGRATION_MAJOR_HINTS = {
+    "open-noodle/gallery": "Major photo-app release requires a manual database migration check — read release notes first.",
+    "linuxserver/docker-sonarr": "Major Sonarr release includes database schema changes — review release notes before upgrading.",
 }
 
 
@@ -93,6 +98,17 @@ def classify(current: str, latest: str) -> str:
     if new < cur:
         return "newer_than_release"
     return "major" if new[0] != cur[0] else "update"
+
+
+def is_patch_update(current: str, latest: str) -> bool:
+    """True only for image rebuilds or patch-level bumps (same major.minor; never major/minor)."""
+    kind = classify(current, latest)
+    if kind == "rebuild":
+        return True
+    if kind != "update":
+        return False
+    (cur, _), (new, _) = parse_version(current), parse_version(latest)
+    return len(cur) >= 2 and len(new) >= 2 and cur[:2] == new[:2]
 
 
 KIND_TEXT = {
@@ -175,10 +191,11 @@ def save_cache(path: Path, data: Dict) -> None:
         pass
 
 
-def refresh(cache_path: Path, containers: List[Dict], extra_repos: List[str], fetch=fetch_latest, now: Optional[float] = None) -> Dict:
+def refresh(cache_path: Path, containers: List[Dict], extra_repos: List[str], fetch=None, now: Optional[float] = None) -> Dict:
     """Fetches the newest release of every repo the running images map to."""
+    fetcher = fetch or fetch_latest
     repos = sorted({r for c in containers if (r := source_for(split_image(c["image"])[0])[0])} | set(extra_repos))
-    data = {"checked_at": now or time.time(), "repos": {repo: fetch(repo) for repo in repos}}
+    data = {"checked_at": now or time.time(), "repos": {repo: fetcher(repo) for repo in repos}}
     save_cache(cache_path, data)
     return data
 
@@ -205,7 +222,8 @@ def report(containers: List[Dict], cache: Dict, self_row: Optional[Dict] = None)
         name, tag = split_image(c["image"])
         repo, why = source_for(name)
         row = {**c, "image_name": name, "current": tag, "repo": repo, "latest": None, "published": None,
-               "release_url": None, "kind": "not_tracked", "reason": why, "command": update_command(c)}
+               "release_url": None, "kind": "not_tracked", "reason": why, "command": update_command(c),
+               "patch_safe": False, "one_click_allowed": False}
         if repo:
             got = (cache.get("repos") or {}).get(repo)
             if not got:
@@ -213,17 +231,55 @@ def report(containers: List[Dict], cache: Dict, self_row: Optional[Dict] = None)
             elif got.get("error"):
                 row.update(kind="error", reason=got["error"])
             else:
-                row.update(latest=got["tag"], published=got.get("published"), release_url=got.get("url"),
-                           kind=classify(tag, got["tag"] or ""), reason=None)
+                kind = classify(tag, got["tag"] or "")
+                reason = None
+                if kind == "major":
+                    reason = MIGRATION_MAJOR_HINTS.get(
+                        repo, "Major release requires manual review — check release notes before updating."
+                    )
+                row.update(
+                    latest=got["tag"],
+                    published=got.get("published"),
+                    release_url=got.get("url"),
+                    kind=kind,
+                    reason=reason,
+                    patch_safe=bool(got.get("tag") and is_patch_update(tag, got["tag"])),
+                    one_click_allowed=bool(kind in ("update", "rebuild") and got.get("tag") and c.get("service")),
+                )
         if tag in ("latest", "release", "main"):
-            row.update(kind="not_tracked", reason=f"Floating tag '{tag}': the version cannot be known from the tag.")
+            row.update(kind="not_tracked", patch_safe=False, one_click_allowed=False,
+                       reason=f"Floating tag '{tag}': the version cannot be known from the tag.")
         row["kind_text"] = KIND_TEXT.get(row["kind"], row["kind"])
         rows.append(row)
     if self_row:
         rows.insert(0, self_row)
     pending = [r for r in rows if r["kind"] in ("rebuild", "update", "major")]
     return {"checked_at": cache.get("checked_at"), "rows": rows, "pending": len(pending),
-            "majors": sum(1 for r in pending if r["kind"] == "major")}
+            "majors": sum(1 for r in pending if r["kind"] == "major"),
+            "safe_pending": sum(1 for r in rows if r.get("one_click_allowed"))}
+
+
+def load_policy(path: Path) -> Dict:
+    default = {"auto_patch": False, "last_auto_run": None, "last_auto_summary": None}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            default["auto_patch"] = bool(data.get("auto_patch", False))
+            default["last_auto_run"] = data.get("last_auto_run")
+            default["last_auto_summary"] = data.get("last_auto_summary")
+    except (OSError, ValueError):
+        pass
+    return default
+
+
+def save_policy(path: Path, policy: Dict) -> Dict:
+    clean = {
+        "auto_patch": bool(policy.get("auto_patch", False)),
+        "last_auto_run": policy.get("last_auto_run"),
+        "last_auto_summary": policy.get("last_auto_summary"),
+    }
+    save_cache(path, clean)
+    return clean
 
 
 def blueprint_row(version: str, cache: Dict, repo: str) -> Dict:

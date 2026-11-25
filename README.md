@@ -159,6 +159,10 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/services/logs/<service>?tail=150` | Direct Docker or Cockpit log stream |
 | `GET` | `/api/updates` | Compares pinned container tags & Blueprint version against cached GitHub releases |
 | `POST` | `/api/updates/check` | Checks upstream GitHub releases on demand (10-minute cooldown) |
+| `POST` | `/api/updates/apply` | Applies one or all safe app updates via `homelab-update` with pre-update config backup & automatic health rollback |
+| `POST` | `/api/updates/self-update` | Checks out a Blueprint release tag via `homelab-update` and re-applies setup (blueprint installs only) |
+| `POST` | `/api/updates/policy` | Toggles optional automatic patch/rebuild updates (never majors or minors) |
+| `GET` | `/api/updates/job` | Polls active or most recent app/blueprint update job status |
 | `GET` | `/api/tv-updater/status` | Android TV fleet ADB update status |
 | `PUT` | `/api/tv-updater/devices/<id>/nickname` | Give a TV a nickname (empty shows the detected model) |
 

@@ -406,6 +406,9 @@
             </div>
             <div class="panel-actions">
               <span class="badge" id="updates-summary-badge">Checking</span>
+              <button type="button" id="btn-updates-auto-patch" class="btn-secondary" aria-pressed="false" hidden>Auto-Patch: Off</button>
+              <button type="button" id="btn-self-update" class="btn-secondary" hidden>Self-Update Blueprint</button>
+              <button type="button" id="btn-update-all-safe" class="btn-primary" hidden>Update All Safe</button>
               <button type="button" id="btn-check-updates" class="btn-secondary">
                 <span class="btn-spinner" id="updates-check-spinner" style="display: none;" aria-hidden="true"></span>
                 <span id="updates-check-label">Check Releases</span>
@@ -413,6 +416,7 @@
             </div>
           </div>
 
+          <div id="updates-job-banner" class="inline-callout is-info" hidden></div>
           <div id="updates-major-callout" class="inline-callout is-warning" hidden></div>
 
           <div id="updates-table-wrap" class="services-ledger-host">

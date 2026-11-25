@@ -2036,6 +2036,11 @@ td.ledger-cell-group {
   color: var(--color-accent);
 }
 
+#btn-updates-auto-patch[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
 /* ==========================================================================
    VIEW 3: Backups & Photos (Console Verification Bench & Audit Trail)
    ========================================================================== */

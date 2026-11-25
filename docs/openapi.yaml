@@ -736,6 +736,45 @@ paths:
         '200':
           description: Updated release comparison with `throttled` flag
 
+  /api/updates/apply:
+    post:
+      summary: Apply one or all safe app updates with backup and automatic rollback
+      description: Invokes /usr/local/sbin/homelab-update in a background job; returns 404 when the blueprint helper is absent or 400 for manual major upgrades.
+      tags: [Services]
+      responses:
+        '202':
+          description: Background update job started
+        '400':
+          description: Manual migration required or invalid target
+        '404':
+          description: Blueprint update helper not installed
+
+  /api/updates/self-update:
+    post:
+      summary: Self-update Control Hub and Blueprint release checkout
+      description: Checks out the release tag and re-applies installer config via homelab-update (hidden in standalone mode).
+      tags: [Services]
+      responses:
+        '202':
+          description: Self-update job started
+
+  /api/updates/policy:
+    post:
+      summary: Toggle automatic patch-only updates
+      description: Saves auto-patch policy (`auto_patch` boolean; majors and minors are never auto-applied).
+      tags: [Services]
+      responses:
+        '200':
+          description: Updated policy state
+
+  /api/updates/job:
+    get:
+      summary: Poll running or last update job status
+      tags: [Services]
+      responses:
+        '200':
+          description: "{running, kind, target, ok, rolled_back, message, results}"
+
 components:
   securitySchemes:
     bearerToken:
