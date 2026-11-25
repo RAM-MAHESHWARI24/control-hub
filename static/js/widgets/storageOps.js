@@ -92,11 +92,14 @@ export function renderStorageOps(sto = {}) {
     });
     streams.forEach((stream) => {
       const statusText = stream.verified ? (stream.status || "Playing") : "Connected";
+      const labelDetail = stream.verified && stream.title
+        ? `${stream.user || stream.client_ip} · ${stream.title}${stream.play_method ? ` (${stream.play_method})` : ""}`
+        : `${stream.client_ip}${stream.user ? ` (${stream.user})` : ""} · ${stream.type}`;
       clientsHtml += `
         <div class="client-item-row">
           <div class="client-meta">
             <span class="client-type-tag jellyfin">JELLYFIN</span>
-            <span>${escapeHtml(stream.client_ip)}${stream.user ? ` (${escapeHtml(stream.user)})` : ""} &middot; ${escapeHtml(stream.type)}</span>
+            <span>${escapeHtml(labelDetail)}</span>
           </div>
           <span class="client-status-txt"><span class="client-dot" aria-hidden="true"></span> ${escapeHtml(statusText)}</span>
         </div>

@@ -17,6 +17,8 @@ export const ENDPOINTS = {
   speedtestRun: "/api/speedtest/run",
   activeDownloads: "/api/downloads/active",
   torrentsToggle: "/api/torrents/toggle-all",
+  torrentAction: (hash) => `/api/torrents/${encodeURIComponent(hash)}/action`,
+  torrentsLimits: "/api/torrents/limits",
   backupStatus: "/api/backup/status",
   backupSync: "/api/backup/sync",
   backupLog: "/api/backup/log",

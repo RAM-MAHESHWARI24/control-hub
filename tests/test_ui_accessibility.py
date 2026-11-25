@@ -630,6 +630,13 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             confirm.wait_for(state="hidden", timeout=5000)
             page.wait_for_timeout(200)
             self.assertEqual(self.__class__.mock_action_calls, [("jellyfin", "restart"), ("jellyfin", "stop")])
+            # Verify Speed Limits modal opens cleanly & passes WCAG 2.2 AA
+            page.click("#btn-torrent-limits")
+            limits = page.locator("#torrent-limits-modal")
+            limits.wait_for(state="visible", timeout=5000)
+            self._assert_axe_wcag_aa(page, "torrent-limits-modal@1366x900")
+            page.click("#torrent-limits-close")
+            limits.wait_for(state="hidden", timeout=5000)
             self.assertEqual(page_errors, [])
         finally:
             context.close()

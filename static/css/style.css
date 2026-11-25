@@ -2021,6 +2021,18 @@ td.ledger-cell-group {
 .torrent-status-pill.downloading { color: var(--success-text); }
 .torrent-status-pill.stalled { color: var(--warning-text); }
 
+.torrent-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+#btn-torrent-alt-speed[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
 .updates-release-link {
   display: inline-flex;
   align-items: center;

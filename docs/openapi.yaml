@@ -178,6 +178,29 @@ paths:
         '200':
           description: Toggle state updated
 
+  /api/torrents/{torrent_hash}/action:
+    post:
+      summary: Per-torrent queue action
+      description: Pause, resume, delete (optional delete_files), or change priority for one torrent.
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{success, hash, action}"
+
+  /api/torrents/limits:
+    get:
+      summary: Read qBittorrent global and alternative speed limits
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{success, dl_limit_kbps, up_limit_kbps, alt_speed_enabled, scheduler_enabled}"
+    post:
+      summary: Update qBittorrent global caps, toggle alt-speed mode, or configure evening schedule
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{success: true}"
+
   /api/storage/operations:
     get:
       summary: Storage Mount Capacities

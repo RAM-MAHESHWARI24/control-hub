@@ -142,8 +142,10 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/system/vitals` | Real-time CPU, RAM, Swap, and per-filesystem disk capacity metrics |
 | `GET` | `/api/network/speed` | True Rx/Tx bandwidth deltas for the active NIC and cached Speedtest info |
 | `GET` | `/api/storage/operations` | Real-time disk I/O throughput and SMB/Jellyfin client sessions |
-| `GET` | `/api/downloads/active` | Active qBittorrent downloads, speeds, status, and ETAs |
+| `GET` | `/api/downloads/active` | Active qBittorrent downloads, speeds, status, priority, and ETAs |
 | `POST` | `/api/torrents/toggle-all` | Pause/Stop or Resume/Start all torrents (qBittorrent 4.x & 5.x compatible) |
+| `POST` | `/api/torrents/<hash>/action` | Per-torrent `pause`, `resume`, `delete` (with optional `delete_files`), or priority change |
+| `GET` / `POST` | `/api/torrents/limits` | Read or update global DL/UL speed caps, alt-speed mode toggle, and evening schedule |
 | `GET` | `/api/backup/status` | Photo & media cloud backup status, quota, and restore test telemetry |
 | `GET` | `/api/alerts` | Alert channels, rules, open alerts and recent history |
 | `PUT` | `/api/alerts/config` | Save alert channels, rules and quiet hours |
