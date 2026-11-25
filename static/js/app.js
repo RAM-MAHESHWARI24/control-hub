@@ -25,6 +25,7 @@ import { fetchCronTasks, setupCronTasks } from "./widgets/cronTasks.js";
 import { fetchServices, setupServiceMatrix } from "./widgets/serviceMatrix.js";
 import { fetchNetplanStatus, setupConfigCenter } from "./widgets/configCenter.js";
 import { fetchIndexerStatus, setupIndexers } from "./widgets/indexers.js";
+import { fetchMediaHub, setupMediaHub } from "./widgets/mediaHub.js";
 import { fetchAlerts, setupAlerts } from "./widgets/alerts.js";
 import { fetchUpdates, setupUpdates } from "./widgets/updates.js";
 
@@ -125,6 +126,7 @@ async function pollMediumTelemetry() {
     fetchCronTasks(),
     fetchServices(),
     fetchIndexerStatus(),
+    fetchMediaHub(),
     fetchAlerts(),
     fetchNetplanStatus(),
     fetchUpdates(),
@@ -269,6 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupServiceMatrix();
   setupConfigCenter();
   setupIndexers();
+  setupMediaHub();
   setupAlerts();
   setupUpdates();
 

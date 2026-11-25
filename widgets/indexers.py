@@ -178,3 +178,83 @@ def indexers_add():
 
     added = sum(1 for r in results if r["ok"] and r["detail"] == "added")
     return jsonify({"status": "ok", "added": added, "configured": len(configured), "results": results})
+
+
+def _indexer_fix_hint(disabled_till: Optional[str], enabled: bool) -> Optional[str]:
+    if not enabled:
+        return "Disabled in Prowlarr; re-enable or test connectivity."
+    if disabled_till:
+        return "Blocked or failing challenge check; ensure Byparr solver / proxy tag is attached, then click Test All."
+    return None
+
+
+@indexers_bp.route("/api/indexers/health", methods=["GET"])
+def indexers_health():
+    """Returns health, recent failure status, and fix hints for every configured Prowlarr indexer."""
+    if not _api_key():
+        return jsonify({"status": "ok", "installed": False, "reachable": False, "indexers": []})
+
+    st_list, indexers = _call("indexer")
+    if st_list != 200 or not isinstance(indexers, list):
+        return jsonify({"status": "ok", "installed": True, "reachable": False, "indexers": []})
+
+    st_stat, statuses = _call("indexerstatus")
+    status_by_id = {}
+    if st_stat == 200 and isinstance(statuses, list):
+        for s in statuses:
+            if isinstance(s, dict) and s.get("indexerId") is not None:
+                status_by_id[s["indexerId"]] = s
+
+    rows = []
+    failing = 0
+    for ix in indexers:
+        if not isinstance(ix, dict):
+            continue
+        iid = ix.get("id")
+        st_info = status_by_id.get(iid) or {}
+        disabled_till = st_info.get("disabledTill")
+        most_recent = st_info.get("mostRecentFailure")
+        enabled = bool(ix.get("enable", True))
+        healthy = enabled and not disabled_till and not most_recent
+        if not healthy:
+            failing += 1
+        rows.append({
+            "id": iid,
+            "name": ix.get("name") or "Unknown",
+            "protocol": ix.get("protocol") or "",
+            "privacy": ix.get("privacy") or "",
+            "enabled": enabled,
+            "healthy": healthy,
+            "disabled_till": disabled_till,
+            "last_failure": most_recent,
+            "fix_hint": _indexer_fix_hint(disabled_till, enabled) if not healthy else None,
+        })
+    rows.sort(key=lambda r: (r["healthy"], (r["name"] or "").lower()))
+    return jsonify({
+        "status": "ok",
+        "installed": True,
+        "reachable": True,
+        "total": len(rows),
+        "failing": failing,
+        "indexers": rows,
+    })
+
+
+@indexers_bp.route("/api/indexers/test-all", methods=["POST"])
+def indexers_test_all():
+    """Runs Prowlarr's connectivity test across all configured indexers."""
+    if not _api_key():
+        return jsonify({"status": "error", "error": "indexer module not installed"}), 404
+    st, resp = _call("indexer/testall", method="POST", data={}, timeout=90)
+    if st not in (200, 201, 204):
+        return jsonify({"status": "error", "error": f"Prowlarr testall failed (HTTP {st})"}), 502
+    results = []
+    if isinstance(resp, list):
+        for r in resp:
+            if isinstance(r, dict):
+                results.append({
+                    "id": r.get("id"),
+                    "ok": bool(r.get("isValid", True)),
+                    "failures": [str(f.get("errorMessage") or f) for f in (r.get("validationFailures") or [])][:3],
+                })
+    return jsonify({"status": "ok", "results": results})

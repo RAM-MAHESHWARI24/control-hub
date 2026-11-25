@@ -399,6 +399,33 @@
           </div>
         </section>
 
+        <!-- Media Pipeline Operations: Indexers, Requests, Calendar & Library (Phase 3A) -->
+        <section class="panels console-sheet" id="media-hub-panel">
+          <div class="panel panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Media Pipeline &amp; Indexer Health</h2>
+              <span class="panel-subtitle card-summary" id="media-hub-summary">Checking Prowlarr indexers and media pipeline&hellip;</span>
+            </div>
+            <div class="panel-actions">
+              <button type="button" id="btn-media-test-indexers" class="btn-secondary">Test Indexers</button>
+              <button type="button" id="btn-media-scan-jellyfin" class="btn-secondary">Scan Jellyfin Library</button>
+            </div>
+          </div>
+
+          <div class="panel panel-toolbar-strip">
+            <div class="tv-brand-tabs" role="tablist" aria-label="Media pipeline views">
+              <button type="button" role="tab" class="btn-secondary tv-brand-tab media-hub-tab" data-tab="indexers" aria-selected="true">Indexer Health</button>
+              <button type="button" role="tab" class="btn-secondary tv-brand-tab media-hub-tab" data-tab="requests" aria-selected="false">Requests</button>
+              <button type="button" role="tab" class="btn-secondary tv-brand-tab media-hub-tab" data-tab="calendar" aria-selected="false">Coming Up (7d)</button>
+              <button type="button" role="tab" class="btn-secondary tv-brand-tab media-hub-tab" data-tab="library" aria-selected="false">Library &amp; Wanted</button>
+            </div>
+          </div>
+
+          <div id="media-hub-body" class="services-ledger-host">
+            <div class="empty-state">Checking media pipeline status&hellip;</div>
+          </div>
+        </section>
+
         <!-- Available Updates (Phase 2C) -->
         <section class="panels console-sheet" id="updates-panel">
           <div class="panel panel-head-strip panel-header-wrap">

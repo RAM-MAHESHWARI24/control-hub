@@ -135,6 +135,14 @@ QBITTORRENT_PASS = os.getenv("QBITTORRENT_PASS", "")
 PROWLARR_URL = os.getenv("PROWLARR_URL", "http://127.0.0.1:9696")
 PROWLARR_KEY_FILE = os.getenv("PROWLARR_KEY_FILE", str(Path(os.getenv("HOMELAB_ETC_DIR", "/etc/homelab")) / "prowlarr.key"))
 
+# Optional *Arr & Seerr integrations (Phase 3A)
+RADARR_URL = os.getenv("RADARR_URL", "http://127.0.0.1:7878")
+RADARR_API_KEY = os.getenv("RADARR_API_KEY", "")
+SONARR_URL = os.getenv("SONARR_URL", "http://127.0.0.1:8989")
+SONARR_API_KEY = os.getenv("SONARR_API_KEY", "")
+SEERR_URL = os.getenv("SEERR_URL", "http://127.0.0.1:5055")
+SEERR_API_KEY = os.getenv("SEERR_API_KEY", "")
+
 
 def get_host_timezone() -> str:
     """Returns the configured host IANA timezone name or local tzname."""

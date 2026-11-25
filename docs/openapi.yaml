@@ -844,6 +844,46 @@ paths:
         '200':
           description: "{running, kind, target, ok, rolled_back, message, results}"
 
+  /api/indexers/health:
+    get:
+      summary: Prowlarr indexer health & diagnostics
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{installed, reachable, total, failing, indexers}"
+
+  /api/indexers/test-all:
+    post:
+      summary: Run Prowlarr connectivity tests across all configured indexers
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{status, results}"
+
+  /api/media/overview:
+    get:
+      summary: Media pipeline overview (Seerr requests, 7-day *Arr calendar, missing items, Jellyfin recent)
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{requests, calendar, library}"
+
+  /api/media/requests/{req_id}/{decision}:
+    post:
+      summary: Approve or decline a pending Seerr request
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{success, id, decision}"
+
+  /api/media/jellyfin/scan:
+    post:
+      summary: Trigger a Jellyfin library scan
+      tags: [Media Ingest]
+      responses:
+        '200':
+          description: "{success, message}"
+
 components:
   securitySchemes:
     bearerToken:

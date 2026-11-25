@@ -310,6 +310,24 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
         cls.app.view_functions["updates.api_get_updates"] = mock_updates_status
 
+        def mock_indexers_health():
+            from flask import jsonify
+            return jsonify({
+                "status": "ok", "installed": True, "reachable": True, "total": 1, "failing": 1,
+                "indexers": [{"id": 1, "name": "1337x", "protocol": "torrent", "privacy": "public", "enabled": True, "healthy": False, "fix_hint": "Enable Byparr solver"}],
+            })
+
+        def mock_media_overview():
+            from flask import jsonify
+            return jsonify({
+                "requests": {"configured": True, "reachable": True, "items": [{"id": 7, "type": "movie", "title": "Dune", "requested_by": "Alex", "waiting_reason": "Pending approval"}]},
+                "calendar": {"configured": True, "reachable": True, "items": [{"kind": "movie", "title": "Arrival", "date": "2026-11-27", "has_file": False}]},
+                "library": {"jellyfin": {"configured": True, "reachable": True, "recent": [{"name": "Andor", "type": "Series", "year": 2025}]}, "wanted_configured": True, "wanted": [{"kind": "movie", "title": "Inception"}]},
+            })
+
+        cls.app.view_functions["indexers.indexers_health"] = mock_indexers_health
+        cls.app.view_functions["media_hub.media_overview"] = mock_media_overview
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"

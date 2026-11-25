@@ -25,6 +25,7 @@ from widgets.service_matrix import service_matrix_bp
 from widgets.tv_updater import tv_updater_bp
 from widgets.config_center import config_center_bp
 from widgets.indexers import indexers_bp
+from widgets.media_hub import media_hub_bp
 from widgets.alerts import alerts_bp, start_alerts
 from widgets.updates import updates_bp
 
@@ -148,6 +149,7 @@ def create_app():
     app.register_blueprint(tv_updater_bp)
     app.register_blueprint(config_center_bp)
     app.register_blueprint(indexers_bp)
+    app.register_blueprint(media_hub_bp)
     app.register_blueprint(alerts_bp)
     app.register_blueprint(updates_bp)
 

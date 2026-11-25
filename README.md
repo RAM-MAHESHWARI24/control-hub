@@ -159,6 +159,12 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/services/status` | Real Docker health, restart count, uptime, image version, published ports, and container IDs (`?include_other=true` supported) |
 | `POST` | `/api/services/action/<service>` | Start, stop, or restart a Docker container (`{"action": "start\|stop\|restart"}`) |
 | `GET` | `/api/services/logs/<service>?tail=150` | Direct Docker or Cockpit log stream |
+| `POST` | `/api/indexers/add` | Adds selected Prowlarr indexers with optional credentials |
+| `GET` | `/api/indexers/health` | Per-indexer Prowlarr health status, disabled state, and failure fix hints |
+| `POST` | `/api/indexers/test-all` | Triggers Prowlarr connectivity test across all configured indexers |
+| `GET` | `/api/media/overview` | Aggregates pending Seerr requests, 7-day Radarr/Sonarr calendar, missing items, and Jellyfin recent additions |
+| `POST` | `/api/media/requests/<id>/<decision>` | Approves or declines a pending Seerr media request |
+| `POST` | `/api/media/jellyfin/scan` | Triggers a Jellyfin library refresh scan |
 | `GET` | `/api/updates` | Compares pinned container tags & Blueprint version against cached GitHub releases |
 | `POST` | `/api/updates/check` | Checks upstream GitHub releases on demand (10-minute cooldown) |
 | `POST` | `/api/updates/apply` | Applies one or all safe app updates via `homelab-update` with pre-update config backup & automatic health rollback |
