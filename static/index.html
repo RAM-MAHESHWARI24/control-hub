@@ -1692,6 +1692,8 @@
           <button type="button" class="cfg-tab-btn" data-config-tab="ports" role="tab" aria-selected="false">Port Matrix</button>
           <button type="button" class="cfg-tab-btn" data-config-tab="secrets" role="tab" aria-selected="false">API Secrets</button>
           <button type="button" class="cfg-tab-btn" data-config-tab="network" role="tab" aria-selected="false">Static IP (Netplan)</button>
+          <button type="button" class="cfg-tab-btn" data-config-tab="manifest" id="cfg-tab-manifest" role="tab" aria-selected="false">Install Manifest</button>
+          <button type="button" class="cfg-tab-btn" data-config-tab="bundle" role="tab" aria-selected="false">Export &amp; Support</button>
         </div>
 
         <!-- Tab 1: Paths -->
@@ -1732,6 +1734,19 @@
               <input type="text" id="cfg-timezone" class="form-input font-mono" placeholder="UTC" />
             </div>
           </div>
+
+          <div class="form-row-two">
+            <div class="form-field">
+              <label for="cfg-hub-port">Control Hub Port</label>
+              <input type="number" id="cfg-hub-port" class="form-input font-mono" min="1024" max="65535" value="7575" />
+            </div>
+            <div class="form-field">
+              <label for="cfg-gdrive-remote">Backup Remote (rclone)</label>
+              <input type="text" id="cfg-gdrive-remote" class="form-input font-mono" placeholder="gdrive:" />
+            </div>
+          </div>
+
+          <pre id="config-diff-preview" class="modal-log-viewer font-mono" style="display: none;"></pre>
         </div>
 
         <!-- Tab 2: Ports -->
@@ -1807,9 +1822,36 @@
           </div>
           <pre id="netplan-yaml-preview" class="modal-log-viewer font-mono" style="display: none;"></pre>
         </div>
+
+        <!-- Tab 5: Install Manifest -->
+        <div class="cfg-tab-pane" id="cfg-pane-manifest" role="tabpanel">
+          <p class="modal-sub">Tracked files, systemd units, cron jobs, and Docker Compose stacks from <code>/var/lib/homelab/installed.json</code>.</p>
+          <div id="cfg-manifest-content" class="empty-state">Open this tab on a blueprint install to view installed artefacts&hellip;</div>
+        </div>
+
+        <!-- Tab 6: Export, Import & Support Bundle -->
+        <div class="cfg-tab-pane" id="cfg-pane-bundle" role="tabpanel">
+          <div class="form-field">
+            <p class="modal-sub">Export settings without secrets to migrate servers, import settings JSON, or download a scrubbed support bundle.</p>
+            <div class="hardlink-test-row">
+              <button type="button" id="btn-export-settings" class="btn-secondary">Export Settings (No Secrets)</button>
+              <button type="button" id="btn-download-support-bundle" class="btn-secondary">Download Support Bundle</button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="cfg-import-file">Import Settings JSON (secrets stripped)</label>
+            <input type="file" id="cfg-import-file" class="form-input" accept=".json,application/json" />
+          </div>
+          <pre id="cfg-import-preview" class="modal-log-viewer font-mono" style="display: none;"></pre>
+          <div class="hardlink-test-row">
+            <button type="button" id="btn-apply-import" class="btn-primary" hidden>Apply Imported Settings</button>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-ghost" id="config-modal-cancel">Close</button>
+        <button type="button" class="btn-secondary" id="btn-undo-config" hidden>Undo Last Change</button>
+        <button type="button" class="btn-secondary" id="btn-preview-config-diff">Preview Diff</button>
         <button type="button" class="btn-primary" id="btn-save-config">
           <span class="btn-spinner" id="config-save-spinner" style="display: none;" aria-hidden="true"></span>
           <span>Save &amp; Sync Config</span>
@@ -1916,6 +1958,6 @@
   </div>
 
   <script src="/js/auth.js?v=4"></script>
-  <script type="module" src="/js/app.js?v=33"></script>
+  <script type="module" src="/js/app.js?v=34"></script>
 </body>
 </html>

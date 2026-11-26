@@ -464,6 +464,41 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
         cls.app.view_functions["storage_hub.get_storage_overview"] = mock_storage_overview
 
+        def mock_install_manifest():
+            from flask import jsonify
+            return jsonify({
+                "installed": True,
+                "path": "/var/lib/homelab/installed.json",
+                "manifest": {
+                    "blueprint_version": "2.1.1",
+                    "installed_at": "2026-11-21T10:43:00+0530",
+                    "install_dir": "/opt/homelab-blueprint",
+                    "service_user": "homelab",
+                    "modules": ["media", "photos", "control_hub"],
+                    "units": ["control-hub.service", "homelab-storage-sizes.timer"],
+                    "crons": ["/etc/cron.d/immich-backup"],
+                    "compose": [{"module": "mediaserver", "dir": "/srv/stacks/media"}],
+                },
+            })
+
+        cls.app.view_functions["config_center.get_install_manifest"] = mock_install_manifest
+
+        _orig_get_current_config = cls.app.view_functions["config_center.get_current_config"]
+
+        def mock_get_current_config():
+            resp = _orig_get_current_config()
+            if isinstance(resp, tuple):
+                response_obj, code = resp[0], resp[1]
+            else:
+                response_obj, code = resp, 200
+            data = response_obj.get_json() or {}
+            data["blueprint_mode"] = True
+            data["read_only"] = False
+            from flask import jsonify
+            return jsonify(data), code
+
+        cls.app.view_functions["config_center.get_current_config"] = mock_get_current_config
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -955,6 +990,36 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 self.assertIn("qBittorrent Rotated Logs", page.inner_text("#storage-cleanup-tbody"))
                 self._assert_layout_and_touch_targets(page, width, f"system-storage@{width}")
                 self._assert_axe_wcag_aa(page, f"system-storage@{width}x{height}")
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+
+    def test_config_center_tabs_preview_manifest_and_bundle_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height)
+            try:
+                if width < 1024:
+                    page.click("#btn-header-menu")
+                    page.click("[data-proxy-click='btn-open-config-center']")
+                else:
+                    page.click("#btn-open-config-center")
+                modal = page.locator("#config-center-modal")
+                modal.wait_for(state="visible", timeout=5000)
+
+                page.click("#btn-preview-config-diff")
+                page.wait_for_selector("#config-diff-preview", state="visible", timeout=5000)
+
+                page.wait_for_selector("#cfg-tab-manifest", state="visible", timeout=5000)
+                page.click("#cfg-tab-manifest")
+                page.wait_for_function(
+                    "() => (document.getElementById('cfg-manifest-content')?.textContent || '').includes('2.1.1')",
+                    timeout=5000,
+                )
+
+                page.click("[data-config-tab='bundle']")
+                page.wait_for_selector("#btn-download-support-bundle", state="visible", timeout=5000)
+                self._assert_layout_and_touch_targets(page, width, f"config-center@{width}")
+                self._assert_axe_wcag_aa(page, f"config-center@{width}x{height}")
                 self.assertEqual(page_errors, [])
             finally:
                 context.close()

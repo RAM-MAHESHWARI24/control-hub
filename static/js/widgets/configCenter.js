@@ -15,6 +15,7 @@ import { showToast } from "../shared/toast.js";
 let currentSystemData = null;
 let netplanCountdownTimer = null;
 let netplanRemainingSec = 0;
+let pendingImportConfig = null;
 
 // ============================================================================
 // 1. Fetch & Populate Current Configuration + Read-Only Guard
@@ -28,7 +29,14 @@ export async function fetchCurrentConfig() {
 
     if (data.status === "success") {
       currentSystemData = data.system || {};
-      populateFormFields(data.config, data.system, Boolean(data.read_only), data.apply_hint);
+      populateFormFields(
+        data.config,
+        data.system,
+        Boolean(data.read_only),
+        data.apply_hint,
+        Boolean(data.blueprint_mode),
+        Boolean(data.can_undo)
+      );
       renderNetplanPending(data.netplan_pending);
     }
     return true;
@@ -38,12 +46,15 @@ export async function fetchCurrentConfig() {
   }
 }
 
-function populateFormFields(cfg, sys, readOnly, applyHint) {
+function populateFormFields(cfg, sys, readOnly, applyHint, blueprintMode = false, canUndo = false) {
   if (!cfg) return;
 
   const readonlyBanner = $("config-readonly-banner");
   const readonlyHint = $("config-readonly-hint");
   const btnSave = $("btn-save-config");
+  const btnPreview = $("btn-preview-config-diff");
+  const btnUndo = $("btn-undo-config");
+  const tabManifest = $("cfg-tab-manifest");
 
   if (readonlyBanner) readonlyBanner.hidden = !readOnly;
   if (readonlyHint && applyHint) readonlyHint.textContent = applyHint;
@@ -51,6 +62,9 @@ function populateFormFields(cfg, sys, readOnly, applyHint) {
     btnSave.disabled = readOnly;
     btnSave.title = readOnly ? "Managed by setup.sh on blueprint installs" : "";
   }
+  if (btnPreview) btnPreview.hidden = readOnly;
+  if (btnUndo) btnUndo.hidden = !(blueprintMode && canUndo && !readOnly);
+  if (tabManifest) tabManifest.hidden = !blueprintMode;
 
   const editableFields = [
     ["cfg-hdd-data", cfg.hdd_data || "/mnt/hdd/data"],
@@ -58,6 +72,8 @@ function populateFormFields(cfg, sys, readOnly, applyHint) {
     ["cfg-puid", cfg.puid || "1000"],
     ["cfg-pgid", cfg.pgid || "1000"],
     ["cfg-timezone", cfg.timezone || state.timezone || "UTC"],
+    ["cfg-hub-port", cfg.control_hub_port || "7575"],
+    ["cfg-gdrive-remote", cfg.gdrive_remote || ""],
     ["cfg-qbit-pass", cfg.qbittorrent_pass || ""],
     ["cfg-radarr-key", cfg.radarr_api_key || ""],
     ["cfg-sonarr-key", cfg.sonarr_api_key || ""],
@@ -401,27 +417,97 @@ export async function applyNetplanSafe() {
 // 7. Save Configuration
 // ============================================================================
 
-export async function saveConfiguration() {
-  const btnSave = $("btn-save-config");
-  const spinner = $("config-save-spinner");
-  const modal = $("config-center-modal");
-
-  if (btnSave) btnSave.disabled = true;
-  if (spinner) spinner.style.display = "inline-block";
-
-  const payload = {
+function _collectConfigPayload() {
+  return {
     hdd_data: ($("cfg-hdd-data")?.value || "/mnt/hdd/data").trim(),
     hdd_memories: ($("cfg-hdd-memories")?.value || "/mnt/hdd/Memories").trim(),
     puid: parseInt($("cfg-puid")?.value || "1000", 10) || 1000,
     pgid: parseInt($("cfg-pgid")?.value || "1000", 10) || 1000,
     timezone: ($("cfg-timezone")?.value || state.timezone || "UTC").trim(),
+    control_hub_port: parseInt($("cfg-hub-port")?.value || "7575", 10) || 7575,
+    gdrive_remote: ($("cfg-gdrive-remote")?.value || "").trim(),
     qbittorrent_pass: ($("cfg-qbit-pass")?.value || "").trim(),
     radarr_api_key: ($("cfg-radarr-key")?.value || "").trim(),
     sonarr_api_key: ($("cfg-sonarr-key")?.value || "").trim(),
     prowlarr_api_key: ($("cfg-prowlarr-key")?.value || "").trim(),
   };
+}
+
+function _renderDiffBox(preEl, changes, errors) {
+  if (!preEl) return;
+  if (Array.isArray(errors) && errors.length > 0) {
+    preEl.textContent = `Validation error:\n- ${errors.join("\n- ")}`;
+    preEl.style.display = "block";
+    return;
+  }
+  if (!Array.isArray(changes) || changes.length === 0) {
+    preEl.textContent = "No changes detected compared to stored settings.";
+    preEl.style.display = "block";
+    return;
+  }
+  preEl.textContent = changes
+    .map((c) => `${c.label || c.field}: ${String(c.old ?? "")} -> ${String(c.new ?? "")}`)
+    .join("\n");
+  preEl.style.display = "block";
+}
+
+export async function previewConfigDiff() {
+  const btn = $("btn-preview-config-diff");
+  const pre = $("config-diff-preview");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(ENDPOINTS.configPreview, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(_collectConfigPayload()),
+    });
+    const data = await res.json();
+    _renderDiffBox(pre, data.changes, data.errors);
+    if (!res.ok || data.valid === false) {
+      showToast("Validation Notice", (data.errors || [data.message])[0] || "Check highlighted fields.", "warning");
+    }
+  } catch (err) {
+    showToast("Error", `Could not preview diff: ${err.message}`, "danger");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+export async function saveConfiguration() {
+  const btnSave = $("btn-save-config");
+  const spinner = $("config-save-spinner");
+  const modal = $("config-center-modal");
+  const pre = $("config-diff-preview");
+
+  const payload = _collectConfigPayload();
+  if (btnSave) btnSave.disabled = true;
+  if (spinner) spinner.style.display = "inline-block";
 
   try {
+    const prevRes = await fetch(ENDPOINTS.configPreview, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const prevData = await prevRes.json();
+    _renderDiffBox(pre, prevData.changes, prevData.errors);
+    if (!prevRes.ok || prevData.valid === false) {
+      showToast("Validation Failed", (prevData.errors || [prevData.message])[0] || "Fix validation errors first.", "warning", 5000);
+      return;
+    }
+
+    const changeCount = (prevData.changes || []).length;
+    if (changeCount > 0) {
+      const ok = await confirmAction({
+        title: `Apply ${changeCount} configuration change(s)?`,
+        message: "Control Hub will back up /etc/homelab/config.json and re-render blueprint environment files.",
+        confirmLabel: "Apply Changes",
+        danger: false,
+        triggerEl: btnSave,
+      });
+      if (!ok) return;
+    }
+
     const res = await fetch(ENDPOINTS.configUpdate, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -429,7 +515,8 @@ export async function saveConfiguration() {
     });
     const data = await res.json();
     if (res.ok && data.status === "success") {
-      showToast("Configuration Saved", "Unified settings synchronized across env files.", "success");
+      showToast("Configuration Saved", data.message || "Unified settings synchronized across env files.", "success");
+      await fetchCurrentConfig();
       if (modal) closeModal(modal);
     } else {
       showToast("Save Failed", data.message || "Could not save configuration.", "warning", 6000);
@@ -439,6 +526,141 @@ export async function saveConfiguration() {
   } finally {
     if (btnSave) btnSave.disabled = false;
     if (spinner) spinner.style.display = "none";
+  }
+}
+
+export async function undoConfiguration() {
+  const btnUndo = $("btn-undo-config");
+  const ok = await confirmAction({
+    title: "Undo last configuration change?",
+    message: "Restores the previous /etc/homelab/config.json snapshot and re-renders environment files.",
+    confirmLabel: "Restore Snapshot",
+    danger: true,
+    triggerEl: btnUndo,
+  });
+  if (!ok) return;
+
+  if (btnUndo) btnUndo.disabled = true;
+  try {
+    const res = await fetch(ENDPOINTS.configUndo, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast("Snapshot Restored", data.message || "Previous settings restored.", "success");
+      await fetchCurrentConfig();
+    } else {
+      showToast("Undo Failed", data.message || "Could not undo configuration.", "warning");
+    }
+  } catch (err) {
+    showToast("Error", `Undo failed: ${err.message}`, "danger");
+  } finally {
+    if (btnUndo) btnUndo.disabled = false;
+  }
+}
+
+export async function fetchInstallManifest() {
+  const box = $("cfg-manifest-content");
+  if (!box) return;
+  box.textContent = "Loading install manifest...";
+  try {
+    const res = await fetch(ENDPOINTS.configManifest);
+    const data = await res.json();
+    const m = data.manifest;
+    if (!data.installed || !m) {
+      box.className = "empty-state";
+      box.textContent = "No blueprint manifest found (standalone install mode).";
+      return;
+    }
+    const listJoin = (arr) => (Array.isArray(arr) && arr.length ? arr.join(", ") : "None");
+    const composeItems = Array.isArray(m.compose) ? m.compose.map((c) => `${c.module}: ${c.dir}`) : [];
+    box.className = "panel detail-panel";
+    box.innerHTML = `
+      <div class="kv-row"><span>Blueprint Version:</span><strong class="font-mono">${escapeHtml(m.blueprint_version || "unknown")}</strong></div>
+      <div class="kv-row"><span>Installed At:</span><strong class="font-mono">${escapeHtml(m.installed_at || "unknown")}</strong></div>
+      <div class="kv-row"><span>Install Directory:</span><strong class="font-mono">${escapeHtml(m.install_dir || "")}</strong></div>
+      <div class="kv-row"><span>Service Account:</span><strong class="font-mono">${escapeHtml(m.service_user || "")}</strong></div>
+      <div class="kv-row"><span>Modules:</span><strong class="font-mono">${escapeHtml(listJoin(m.modules))}</strong></div>
+      <div class="kv-row"><span>Compose Stacks:</span><strong class="font-mono">${escapeHtml(listJoin(composeItems))}</strong></div>
+      <div class="kv-row"><span>Systemd Units:</span><strong class="font-mono">${escapeHtml(listJoin(m.units))}</strong></div>
+      <div class="kv-row"><span>Cron Files:</span><strong class="font-mono">${escapeHtml(listJoin(m.crons))}</strong></div>
+    `;
+  } catch (err) {
+    box.className = "empty-state";
+    box.textContent = `Failed to load manifest: ${err.message}`;
+  }
+}
+
+async function _downloadJsonEndpoint(endpoint, fallbackFilename) {
+  try {
+    const res = await fetch(`${endpoint}?download=1`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fallbackFilename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast("Download Ready", `Saved ${fallbackFilename} (secrets stripped).`, "success");
+  } catch (err) {
+    showToast("Download Failed", err.message, "danger");
+  }
+}
+
+async function handleImportFileSelected(ev) {
+  const file = ev.target?.files?.[0];
+  const previewEl = $("cfg-import-preview");
+  const applyBtn = $("btn-apply-import");
+  pendingImportConfig = null;
+  if (applyBtn) applyBtn.hidden = true;
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const res = await fetch(ENDPOINTS.configImport, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: parsed.config || parsed, preview: true }),
+    });
+    const data = await res.json();
+    _renderDiffBox(previewEl, data.changes, data.errors);
+    if (res.ok && data.valid !== false && data.sanitized_config) {
+      pendingImportConfig = data.sanitized_config;
+      if (applyBtn) applyBtn.hidden = false;
+    }
+  } catch (err) {
+    if (previewEl) {
+      previewEl.textContent = `Could not parse settings JSON: ${err.message}`;
+      previewEl.style.display = "block";
+    }
+  }
+}
+
+async function handleApplyImport() {
+  if (!pendingImportConfig) return;
+  const applyBtn = $("btn-apply-import");
+  if (applyBtn) applyBtn.disabled = true;
+  try {
+    const res = await fetch(ENDPOINTS.configImport, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: pendingImportConfig, preview: false }),
+    });
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast("Settings Imported", data.message || "Imported settings applied cleanly.", "success");
+      pendingImportConfig = null;
+      if (applyBtn) applyBtn.hidden = true;
+      await fetchCurrentConfig();
+    } else {
+      showToast("Import Failed", data.message || "Could not apply imported settings.", "warning");
+    }
+  } catch (err) {
+    showToast("Error", `Import failed: ${err.message}`, "danger");
+  } finally {
+    if (applyBtn) applyBtn.disabled = false;
   }
 }
 
@@ -526,6 +748,7 @@ function setupConfigTabs() {
       const targetPane = $(`cfg-pane-${targetTab}`);
       if (targetPane) targetPane.classList.add("active");
       if (targetTab === "ports") fetchPortsMatrix();
+      if (targetTab === "manifest") fetchInstallManifest();
     });
   });
 }
@@ -563,7 +786,14 @@ export function setupConfigCenter() {
   wire("btn-generate-secrets", generateFreshSecrets);
   wire("btn-preview-netplan", previewNetplan);
   wire("btn-apply-netplan", applyNetplanSafe);
+  wire("btn-preview-config-diff", previewConfigDiff);
+  wire("btn-undo-config", undoConfiguration);
   wire("btn-save-config", saveConfiguration);
+  wire("btn-export-settings", () => _downloadJsonEndpoint(ENDPOINTS.configExport, "homelab-settings-export.json"));
+  wire("btn-download-support-bundle", () => _downloadJsonEndpoint(ENDPOINTS.configSupportBundle, "homelab-support-bundle.json"));
+  wire("btn-apply-import", handleApplyImport);
+  const importInput = $("cfg-import-file");
+  if (importInput) importInput.addEventListener("change", handleImportFileSelected);
   wire("btn-copy-ai-prompt", copyAiPromptToClipboard);
   wire("btn-netplan-banner-confirm", confirmNetplanIp);
   wire("btn-netplan-modal-confirm", confirmNetplanIp);

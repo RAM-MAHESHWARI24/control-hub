@@ -651,6 +651,54 @@ paths:
         '200':
           description: Pending state and seconds left on the revert timer
 
+  /api/config/preview:
+    post:
+      summary: Validate configuration changes and return a redacted diff preview
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Validation status and field-level diff list
+
+  /api/config/undo:
+    post:
+      summary: Restore the previous `/etc/homelab/config.json` snapshot via `homelab-config-apply`
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Snapshot restored cleanly
+
+  /api/config/manifest:
+    get:
+      summary: Return `/var/lib/homelab/installed.json` blueprint installation manifest
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Installed modules, compose stacks, units, and crons
+
+  /api/config/export:
+    get:
+      summary: Export portable settings JSON with all secrets removed
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Secret-free settings export
+
+  /api/config/import:
+    post:
+      summary: Preview or apply an imported settings JSON payload (secrets stripped)
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Import validation diff or applied result
+
+  /api/config/support-bundle:
+    get:
+      summary: Download a secret-free diagnostic bundle (system snapshot, containers, scrubbed logs)
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Sanitized JSON diagnostic bundle
+
   /api/alerts:
     get:
       summary: Alert settings, open alerts and recent history

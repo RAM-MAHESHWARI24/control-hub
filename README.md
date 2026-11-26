@@ -198,8 +198,14 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 
 | Method | Endpoint | Parameters / Body | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/config/current` | None | Returns active `.env` configuration dictionary |
-| `POST` | `/api/config/update` | JSON payload of env key-values | Atomically writes updated settings to `.env` |
+| `GET` | `/api/config/current` | None | Returns active `.env` configuration dictionary, blueprint mode, and undo availability |
+| `POST` | `/api/config/preview` | Proposed JSON config | Validates changes and previews a redacted field-by-field diff |
+| `POST` | `/api/config/update` | JSON payload of env key-values | Saves snapshot and applies updates via `homelab-config-apply` (or directly when standalone) |
+| `POST` | `/api/config/undo` | None | Reverts the last applied blueprint configuration snapshot |
+| `GET` | `/api/config/manifest` | None | Returns `/var/lib/homelab/installed.json` modules, units, crons, and stacks |
+| `GET` | `/api/config/export` | `?download=1` optional | Exports portable settings JSON with all secrets stripped |
+| `POST` | `/api/config/import` | `{"config": {...}, "preview": true}` | Previews or applies imported settings safely with secrets stripped |
+| `GET` | `/api/config/support-bundle` | `?download=1` optional | Downloads system vitals, container status, and secret-scrubbed logs |
 | `POST` | `/api/config/verify-hardlink` | `{"path": "/mnt/hdd/data"}` | Executes live `os.link` probe and measures latency |
 | `GET` | `/api/config/ports` | None | Probes all 13 services and returns active/inactive status |
 | `POST` | `/api/config/generate-secrets` | None | Generates cryptographically secure passwords & API keys |
