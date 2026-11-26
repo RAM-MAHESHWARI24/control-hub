@@ -328,6 +328,105 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         cls.app.view_functions["indexers.indexers_health"] = mock_indexers_health
         cls.app.view_functions["media_hub.media_overview"] = mock_media_overview
 
+        def mock_photos_overview():
+            from flask import jsonify
+            return jsonify({
+                "installed": True,
+                "timezone": "UTC",
+                "tz_abbr": "UTC",
+                "library": {
+                    "available": True,
+                    "total_assets": 35765,
+                    "photos_count": 33400,
+                    "videos_count": 2365,
+                    "named_people": 12,
+                    "unhidden_people": 18,
+                    "assets_with_named_faces": 18904,
+                    "total_face_instances": 42100,
+                    "offline_assets": 0,
+                    "disk_size": "264.3 GB",
+                    "photos_free_gb": 512.0,
+                    "photos_total_gb": 1800.0,
+                },
+                "users": [
+                    {"name": "Primary User", "assets": 35762, "used_bytes": 281570581686, "quota_bytes": None},
+                    {"name": "Family Member", "assets": 3, "used_bytes": 12402948, "quota_bytes": 53687091200},
+                ],
+                "libraries": [
+                    {"name": "Stills", "paths": ["/mnt/hdd/Memories/STILLS"], "refreshed_at": "2026-11-25T07:30:00Z", "assets": 35000, "offline_assets": 0},
+                ],
+                "ml": {
+                    "installed": True,
+                    "container_exists": True,
+                    "running": False,
+                    "can_control": True,
+                    "last_run": "Nov 25, 10:00 UTC",
+                    "last_event": "[STOP] Container stopped successfully.",
+                    "schedule": {"exists": True, "enabled": True, "start_time": "06:05", "stop_time": "10:00", "editable": True},
+                    "queue": {
+                        "redis_available": True,
+                        "active": 0,
+                        "waiting": 12,
+                        "delayed": 0,
+                        "failed": 0,
+                        "pending_faces": 49,
+                        "pending_metadata": 2,
+                        "queues": [
+                            {"id": "faceDetection", "label": "Face Detection", "waiting": 12, "active": 0, "delayed": 0, "failed": 0},
+                        ],
+                    },
+                },
+                "face_export": {
+                    "installed": True,
+                    "status": "ok",
+                    "last_run": "Nov 24, 22:00 UTC",
+                    "named_assets": 18904,
+                    "files_written": 0,
+                    "cached_skipped": 18904,
+                    "errors": 0,
+                    "summary": "All 18,904 sidecars up to date",
+                },
+                "storage_health": {
+                    "unreadable_total": 0,
+                    "missing_total": 0,
+                    "folders": [
+                        {"label": "Upload Folder", "kind": "upload", "path": "/var/photos/upload", "exists": True, "readable": True,
+                         "free_gb": 512.0, "total_gb": 1800.0, "used_percent": 71.6, "unreadable_count": 0,
+                         "status": "healthy", "message": "Readable (400+ checked)"},
+                    ],
+                },
+            })
+
+        def mock_library_stats():
+            from flask import jsonify
+            return jsonify({
+                "disk_size": "264.3 GB",
+                "disk_partial": False,
+                "photos_free_gb": 512.0,
+                "photos_total_gb": 1800.0,
+                "gdrive": {"used_gb": 287.4, "free_gb": 4832.6, "total_gb": 5120.0, "used_percent": 5.6},
+                "assets": {
+                    "total_assets": 35765,
+                    "photos_count": 33400,
+                    "videos_count": 2365,
+                    "named_people": 12,
+                    "unhidden_people": 18,
+                    "assets_with_named_faces": 18904,
+                    "total_face_instances": 42100,
+                },
+                "db_dump_size": "339.8 MB",
+                "memories_dir": "/mnt/hdd/Memories",
+                "gdrive_remote": "backup_remote_drive_long_name:",
+            })
+
+        cls.app.view_functions["photos_hub.get_photos_overview"] = mock_photos_overview
+        cls.app.view_functions["backup_sync.get_library_stats"] = mock_library_stats
+
+        # Patch telemetry helper so /api/backup/status also shows realistic populated library numbers.
+        from widgets import backup_sync as _bs_mod
+        cls._orig_fetch_lib = _bs_mod.fetch_immich_library_telemetry
+        _bs_mod.fetch_immich_library_telemetry = lambda force=False: mock_library_stats().get_json()
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -345,6 +444,12 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             pass
         try:
             cls._pw.stop()
+        except Exception:
+            pass
+        try:
+            from widgets import backup_sync as _bs_mod
+            if hasattr(cls, "_orig_fetch_lib"):
+                _bs_mod.fetch_immich_library_telemetry = cls._orig_fetch_lib
         except Exception:
             pass
         try:
@@ -763,6 +868,40 @@ class TestControlHubUiAccessibility(unittest.TestCase):
             self.assertEqual(page_errors, [])
         finally:
             context.close()
+
+    def test_backups_library_numbers_unclipped_and_photos_health_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height)
+            try:
+                self._navigate_view(page, "backups")
+                page.wait_for_selector("#photos-health-panel", state="visible", timeout=5000)
+                page.wait_for_function(
+                    "() => (document.getElementById('lib-val-assets')?.textContent || '').includes('35,765')",
+                    timeout=5000,
+                )
+                for sel in ("#lib-val-disk", "#lib-val-gdrive", "#lib-val-assets", "#lib-val-faces"):
+                    metrics = page.evaluate(
+                        """(s) => {
+                            const el = document.querySelector(s);
+                            return el ? { text: el.textContent.trim(), sw: el.scrollWidth, cw: el.clientWidth } : null;
+                        }""",
+                        sel,
+                    )
+                    self.assertIsNotNone(metrics)
+                    self.assertLessEqual(metrics["sw"], metrics["cw"] + 2, f"{sel} clipped at {width}x{height}: {metrics}")
+
+                self.assertIn("264.3 GB", page.inner_text("#lib-val-disk"))
+                self.assertIn("287.4 GB", page.inner_text("#lib-val-gdrive"))
+                self.assertIn("35,765", page.inner_text("#lib-val-assets"))
+                self.assertIn("18,904", page.inner_text("#lib-val-faces"))
+                self.assertIn("Primary User", page.inner_text("#photos-users-tbody"))
+                self.assertIn("0 Offline Assets", page.inner_text("#photos-offline-badge"))
+
+                self._assert_layout_and_touch_targets(page, width, f"photos-backups@{width}")
+                self._assert_axe_wcag_aa(page, f"photos-backups@{width}x{height}")
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
 
 
 if __name__ == "__main__":

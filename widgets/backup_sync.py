@@ -7,6 +7,7 @@ and Immich/Noodle asset & face telemetry. Never returns invented fallback values
 
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -120,12 +121,120 @@ def run_backup_sync_thread():
             is_syncing_backup = False
 
 
+def _disk_free_stats(path_str):
+    """Returns (free_gb, total_gb, used_percent) for `path_str` if accessible."""
+    if not path_str or not os.path.exists(path_str):
+        return None, None, None
+    try:
+        usage = shutil.disk_usage(path_str)
+        if usage.total <= 0:
+            return None, None, None
+        free_gb = round(usage.free / (1024**3), 1)
+        total_gb = round(usage.total / (1024**3), 1)
+        used_pct = round((usage.used / usage.total) * 100, 1)
+        return free_gb, total_gb, used_pct
+    except OSError:
+        return None, None, None
+
+
 def _query_immich_db():
     """
-    Queries Immich / Noodle Gallery Postgres for asset & face counts.
-    Handles both Noodle Gallery (`personGroupId`) and upstream Immich (`personId`).
+    Queries Immich / Noodle Gallery Postgres for asset, face, per-user storage,
+    and external library telemetry. Falls back gracefully if schema differs.
     """
     sql_variants = [
+        """
+        SELECT json_build_object(
+            'total_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL),
+            'photos_count', (SELECT COUNT(*) FROM asset WHERE type = 'IMAGE' AND "deletedAt" IS NULL),
+            'videos_count', (SELECT COUNT(*) FROM asset WHERE type = 'VIDEO' AND "deletedAt" IS NULL),
+            'unhidden_people', (SELECT COUNT(*) FROM person WHERE "isHidden" = false),
+            'named_people', (SELECT COUNT(*) FROM person WHERE name IS NOT NULL AND name != '' AND "isHidden" = false),
+            'assets_with_named_faces', (SELECT COUNT(DISTINCT "assetId") FROM asset_face af JOIN person p ON af."personGroupId" = p."personGroupId" WHERE p.name IS NOT NULL AND p.name != ''),
+            'total_face_instances', (SELECT COUNT(*) FROM asset_face),
+            'offline_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL AND "isOffline" = true),
+            'pending_faces', (SELECT COUNT(*) FROM asset a LEFT JOIN asset_job_status j ON j."assetId" = a.id WHERE a."deletedAt" IS NULL AND j."facesRecognizedAt" IS NULL),
+            'pending_metadata', (SELECT COUNT(*) FROM asset a LEFT JOIN asset_job_status j ON j."assetId" = a.id WHERE a."deletedAt" IS NULL AND j."metadataExtractedAt" IS NULL),
+            'users', COALESCE((
+                SELECT json_agg(row_to_json(u_row))
+                FROM (
+                    SELECT
+                        COALESCE(NULLIF(u.name, ''), 'User') AS name,
+                        COUNT(a.id)::bigint AS assets,
+                        COALESCE(NULLIF(SUM(COALESCE(e."fileSizeInByte", 0)), 0), MAX(COALESCE(u."quotaUsageInBytes", 0)))::bigint AS used_bytes,
+                        MAX(u."quotaSizeInBytes") AS quota_bytes
+                    FROM "user" u
+                    LEFT JOIN asset a ON a."ownerId" = u.id AND a."deletedAt" IS NULL
+                    LEFT JOIN asset_exif e ON e."assetId" = a.id
+                    WHERE u."deletedAt" IS NULL
+                    GROUP BY u.id, u.name
+                    ORDER BY used_bytes DESC, assets DESC, name ASC
+                ) u_row
+            ), '[]'::json),
+            'libraries', COALESCE((
+                SELECT json_agg(row_to_json(lib_row))
+                FROM (
+                    SELECT
+                        COALESCE(NULLIF(l.name, ''), 'Library') AS name,
+                        COALESCE(l."importPaths", ARRAY[]::text[]) AS paths,
+                        l."refreshedAt" AS refreshed_at,
+                        COUNT(a.id)::bigint AS assets,
+                        COUNT(a.id) FILTER (WHERE a."isOffline" = true)::bigint AS offline_assets
+                    FROM library l
+                    LEFT JOIN asset a ON a."libraryId" = l.id AND a."deletedAt" IS NULL
+                    WHERE l."deletedAt" IS NULL
+                    GROUP BY l.id, l.name, l."importPaths", l."refreshedAt"
+                    ORDER BY l.name ASC
+                ) lib_row
+            ), '[]'::json)
+        )::text;
+        """,
+        """
+        SELECT json_build_object(
+            'total_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL),
+            'photos_count', (SELECT COUNT(*) FROM asset WHERE type = 'IMAGE' AND "deletedAt" IS NULL),
+            'videos_count', (SELECT COUNT(*) FROM asset WHERE type = 'VIDEO' AND "deletedAt" IS NULL),
+            'unhidden_people', (SELECT COUNT(*) FROM person WHERE "isHidden" = false),
+            'named_people', (SELECT COUNT(*) FROM person WHERE name IS NOT NULL AND name != '' AND "isHidden" = false),
+            'assets_with_named_faces', (SELECT COUNT(DISTINCT "assetId") FROM asset_face af JOIN person p ON af."personId" = p.id WHERE p.name IS NOT NULL AND p.name != ''),
+            'total_face_instances', (SELECT COUNT(*) FROM asset_face),
+            'offline_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL AND "isOffline" = true),
+            'pending_faces', (SELECT COUNT(*) FROM asset a LEFT JOIN asset_job_status j ON j."assetId" = a.id WHERE a."deletedAt" IS NULL AND j."facesRecognizedAt" IS NULL),
+            'pending_metadata', (SELECT COUNT(*) FROM asset a LEFT JOIN asset_job_status j ON j."assetId" = a.id WHERE a."deletedAt" IS NULL AND j."metadataExtractedAt" IS NULL),
+            'users', COALESCE((
+                SELECT json_agg(row_to_json(u_row))
+                FROM (
+                    SELECT
+                        COALESCE(NULLIF(u.name, ''), 'User') AS name,
+                        COUNT(a.id)::bigint AS assets,
+                        COALESCE(NULLIF(SUM(COALESCE(e."fileSizeInByte", 0)), 0), MAX(COALESCE(u."quotaUsageInBytes", 0)))::bigint AS used_bytes,
+                        MAX(u."quotaSizeInBytes") AS quota_bytes
+                    FROM "user" u
+                    LEFT JOIN asset a ON a."ownerId" = u.id AND a."deletedAt" IS NULL
+                    LEFT JOIN asset_exif e ON e."assetId" = a.id
+                    WHERE u."deletedAt" IS NULL
+                    GROUP BY u.id, u.name
+                    ORDER BY used_bytes DESC, assets DESC, name ASC
+                ) u_row
+            ), '[]'::json),
+            'libraries', COALESCE((
+                SELECT json_agg(row_to_json(lib_row))
+                FROM (
+                    SELECT
+                        COALESCE(NULLIF(l.name, ''), 'Library') AS name,
+                        COALESCE(l."importPaths", ARRAY[]::text[]) AS paths,
+                        l."refreshedAt" AS refreshed_at,
+                        COUNT(a.id)::bigint AS assets,
+                        COUNT(a.id) FILTER (WHERE a."isOffline" = true)::bigint AS offline_assets
+                    FROM library l
+                    LEFT JOIN asset a ON a."libraryId" = l.id AND a."deletedAt" IS NULL
+                    WHERE l."deletedAt" IS NULL
+                    GROUP BY l.id, l.name, l."importPaths", l."refreshedAt"
+                    ORDER BY l.name ASC
+                ) lib_row
+            ), '[]'::json)
+        )::text;
+        """,
         """
         SELECT json_build_object(
             'total_assets', (SELECT COUNT(*) FROM asset WHERE "deletedAt" IS NULL),
@@ -162,8 +271,8 @@ def _query_immich_db():
                 return json.loads(proc.stdout.strip()), None
             err = (proc.stderr or proc.stdout or "").strip()
             last_reason = err[:140] if err else "Photo database unavailable"
-            # Retry with upstream schema only if the column name differed
-            if idx == 0 and "does not exist" in err.lower():
+            # Retry simpler or upstream schema variants only if a column/relation name differed
+            if idx < len(sql_variants) - 1 and ("does not exist" in err.lower() or "undefined" in err.lower()):
                 continue
             return None, last_reason
         except Exception as exc:
@@ -236,11 +345,15 @@ def fetch_immich_library_telemetry(force=False):
     except Exception as exc:
         dump_reason = str(exc)[:140]
 
+    photos_free_gb, photos_total_gb, photos_used_pct = _disk_free_stats(HDD_MEMORIES or PHOTO_UPLOAD_DIR)
     payload = {
         "disk_size": disk_size,
         "disk_reason": disk_reason,
         "disk_partial": disk_partial,
         "disk_measured_by": sizes.get("measured_by"),
+        "photos_free_gb": photos_free_gb,
+        "photos_total_gb": photos_total_gb,
+        "photos_used_percent": photos_used_pct,
         "gdrive": gdrive_usage,
         "gdrive_reason": gdrive_reason,
         "assets": db_metrics,
@@ -425,6 +538,9 @@ def get_backup_status():
         "disk_reason": lib_meta.get("disk_reason"),
         "disk_partial": lib_meta.get("disk_partial", False),
         "disk_measured_by": lib_meta.get("disk_measured_by"),
+        "photos_free_gb": lib_meta.get("photos_free_gb"),
+        "photos_total_gb": lib_meta.get("photos_total_gb"),
+        "photos_used_percent": lib_meta.get("photos_used_percent"),
         "gdrive_used_gb": gdrive_info.get("used_gb"),
         "gdrive_total_gb": gdrive_info.get("total_gb"),
         "gdrive_free_gb": gdrive_info.get("free_gb"),

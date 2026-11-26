@@ -24,7 +24,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=35" />
+  <link rel="stylesheet" href="css/style.css?v=36" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -546,19 +546,23 @@
               <div class="library-stats-grid panels">
                 <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Photo Store</span>
-                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-disk">Measuring&hellip;</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-disk">Measuring&hellip;</span>
+                  <span class="lib-stat-sub font-mono" id="lib-sub-disk"></span>
                 </div>
                 <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Cloud Mirror</span>
-                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-gdrive">Unknown</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-gdrive">Unknown</span>
+                  <span class="lib-stat-sub font-mono" id="lib-sub-gdrive"></span>
                 </div>
                 <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Assets</span>
-                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-assets">Unknown</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-assets">Unknown</span>
+                  <span class="lib-stat-sub font-mono" id="lib-sub-assets"></span>
                 </div>
                 <div class="panel lib-stat-cell">
                   <span class="lib-stat-label">Face Tags</span>
-                  <span class="lib-stat-value reading reading-sm font-mono" id="lib-val-faces">Unknown</span>
+                  <span class="lib-stat-value font-mono" id="lib-val-faces">Unknown</span>
+                  <span class="lib-stat-sub font-mono" id="lib-sub-faces"></span>
                 </div>
               </div>
 
@@ -592,6 +596,112 @@
             </section>
           </div>
         </div>
+
+        <!-- Panel 4: Photos Library, ML Schedule, Face Export & Folder Health -->
+        <section class="panels console-sheet photos-health-panel" id="photos-health-panel" hidden>
+          <div class="panel panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Photo Library, ML &amp; Folder Health</h2>
+              <span class="panel-subtitle card-summary" id="photos-health-subtitle">Checking photo service telemetry&hellip;</span>
+            </div>
+            <div class="panel-actions">
+              <span class="badge badge-neutral" id="photos-offline-badge">Offline Check</span>
+              <button type="button" class="btn-secondary" id="btn-photos-refresh">Refresh Photos</button>
+            </div>
+          </div>
+
+          <div class="panels photos-subgrid">
+            <!-- Subpanel A: Machine Learning Schedule & Job Queue -->
+            <div class="panel photos-subpanel" id="photos-ml-box">
+              <div class="photos-subpanel-head">
+                <h3>Machine Learning &amp; Job Queue</h3>
+                <div class="panel-actions">
+                  <span class="badge badge-neutral" id="photos-ml-badge">Checking</span>
+                  <button type="button" class="btn-secondary" id="btn-ml-toggle" disabled>Start ML</button>
+                </div>
+              </div>
+              <p class="status-note-text" id="photos-ml-last-event">Checking ML runtime and schedule&hellip;</p>
+              <form class="ml-schedule-form" id="ml-schedule-form">
+                <label class="ml-time-field" for="ml-start-time">
+                  <span>Start time</span>
+                  <input type="time" id="ml-start-time" value="06:05" required />
+                </label>
+                <label class="ml-time-field" for="ml-stop-time">
+                  <span>Stop time</span>
+                  <input type="time" id="ml-stop-time" value="10:00" required />
+                </label>
+                <label class="ml-enable-label" for="ml-schedule-enabled">
+                  <input type="checkbox" id="ml-schedule-enabled" checked />
+                  <span>Scheduled</span>
+                </label>
+                <button type="submit" class="btn-secondary" id="btn-ml-save-schedule">Save Schedule</button>
+              </form>
+              <div class="table-wrap" id="photos-ml-queue-wrap">
+                <table class="service-ledger">
+                  <thead>
+                    <tr>
+                      <th>Queue</th>
+                      <th class="num-col">Pending / Active</th>
+                      <th class="num-col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="photos-ml-queue-tbody">
+                    <tr><td colspan="3" class="text-muted">Checking queues&hellip;</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Subpanel B: Face-Tag Export & Per-User Storage -->
+            <div class="panel photos-subpanel" id="photos-users-export-box">
+              <div class="photos-subpanel-head">
+                <h3>Face-Tag XMP Export &amp; Users</h3>
+                <span class="badge badge-neutral" id="photos-xmp-badge">Checking</span>
+              </div>
+              <div class="kv-row"><span>Last Export Run:</span><strong class="font-mono" id="photos-xmp-last-run">Never</strong></div>
+              <div class="kv-row"><span>Sidecars Exported:</span><strong class="font-mono" id="photos-xmp-written">Unknown</strong></div>
+              <div class="kv-row"><span>Errors:</span><strong class="font-mono" id="photos-xmp-errors">None</strong></div>
+              <p class="status-note-text" id="photos-xmp-summary"></p>
+
+              <div class="table-wrap">
+                <table class="service-ledger">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th class="num-col">Assets</th>
+                      <th class="num-col">Storage Used</th>
+                    </tr>
+                  </thead>
+                  <tbody id="photos-users-tbody">
+                    <tr><td colspan="3" class="text-muted">Loading user usage&hellip;</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Subpanel C: Upload Folder & External Libraries Health -->
+          <div class="panel photos-subpanel" id="photos-folders-box">
+            <div class="photos-subpanel-head">
+              <h3>Upload Folder &amp; External Libraries Health</h3>
+              <span class="text-muted font-mono" id="photos-offline-summary">Checking offline assets&hellip;</span>
+            </div>
+            <div class="table-wrap">
+              <table class="service-ledger">
+                <thead>
+                  <tr>
+                    <th>Location</th>
+                    <th class="num-col">Free Space</th>
+                    <th class="num-col">Readability &amp; Assets</th>
+                  </tr>
+                </thead>
+                <tbody id="photos-folders-tbody">
+                  <tr><td colspan="3" class="text-muted">Scanning configured photo folders&hellip;</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </div>
 
       <!-- =================================================================== -->
@@ -1723,6 +1833,6 @@
   </div>
 
   <script src="/js/auth.js?v=4"></script>
-  <script type="module" src="/js/app.js?v=31"></script>
+  <script type="module" src="/js/app.js?v=32"></script>
 </body>
 </html>

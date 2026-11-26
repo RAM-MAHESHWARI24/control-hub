@@ -147,6 +147,9 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `POST` | `/api/torrents/<hash>/action` | Per-torrent `pause`, `resume`, `delete` (with optional `delete_files`), or priority change |
 | `GET` / `POST` | `/api/torrents/limits` | Read or update global DL/UL speed caps, alt-speed mode toggle, and evening schedule |
 | `GET` | `/api/backup/status` | Photo & media cloud backup status, quota, and restore test telemetry |
+| `GET` | `/api/photos/overview` | Per-user photo storage, ML schedule & job queue, Face-to-XMP export telemetry, and folder health |
+| `POST` | `/api/photos/ml/schedule` | Update or pause `/etc/cron.d/immich-ml` start/stop times |
+| `POST` | `/api/photos/ml/action` | Immediately `start` or `stop` the Immich Machine Learning container |
 | `GET` | `/api/alerts` | Alert channels, rules, open alerts and recent history |
 | `PUT` | `/api/alerts/config` | Save alert channels, rules and quiet hours |
 | `POST` | `/api/alerts/test` | Send a test message to one channel |

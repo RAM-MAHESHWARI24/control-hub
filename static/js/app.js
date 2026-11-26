@@ -19,6 +19,7 @@ import { fetchSleepStatus, setupSleepGuard } from "./widgets/sleepGuard.js";
 import { drawLanSparkline, fetchSpeedometers, setupNetworkSpeed } from "./widgets/networkSpeed.js";
 import { setupCurrentDownloads } from "./widgets/currentDownloads.js";
 import { fetchBackupStatus, setBackupVisibilityCallback, setupBackupSync } from "./widgets/backupSync.js";
+import { fetchPhotosOverview, setupPhotosHub } from "./widgets/photosHub.js";
 import { fetchTvUpdaterStatus, setTvVisibilityCallback, setupTvUpdater } from "./widgets/tvUpdater.js";
 import { fetchVitals } from "./widgets/systemVitals.js";
 import { fetchCronTasks, setupCronTasks } from "./widgets/cronTasks.js";
@@ -122,6 +123,7 @@ async function pollMediumTelemetry() {
   await Promise.allSettled([
     fetchSleepStatus(),
     fetchBackupStatus(),
+    fetchPhotosOverview(),
     fetchTvUpdaterStatus(),
     fetchCronTasks(),
     fetchServices(),
@@ -266,6 +268,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupNetworkSpeed();
   setupCurrentDownloads();
   setupBackupSync();
+  setupPhotosHub();
   setupTvUpdater();
   setupCronTasks();
   setupServiceMatrix();

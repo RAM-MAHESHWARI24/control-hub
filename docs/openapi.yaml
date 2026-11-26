@@ -787,6 +787,65 @@ paths:
         '400':
           description: Malformed body
 
+  /api/backup/library-stats:
+    get:
+      summary: Photo library sizes, remote quota, and Immich/Noodle Postgres asset & face totals
+      tags: [Backups]
+      responses:
+        '200':
+          description: Photo library stats payload
+
+  /api/photos/overview:
+    get:
+      summary: Photo library overview, per-user usage, ML schedule/queue, face export, and folder health
+      description: >
+        Combines Immich PostgreSQL asset/user/library metrics, /etc/cron.d/immich-ml schedule,
+        Redis BullMQ ML job queues, Face-to-XMP export telemetry, and disk free/readability probes.
+      tags: [Backups]
+      responses:
+        '200':
+          description: Comprehensive photos hub overview
+
+  /api/photos/ml/schedule:
+    post:
+      summary: Update Immich Machine Learning daily start/stop schedule
+      tags: [Backups]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start_time, stop_time]
+              properties:
+                enabled: { type: boolean, default: true }
+                start_time: { type: string, example: "06:05" }
+                stop_time: { type: string, example: "10:00" }
+      responses:
+        '200':
+          description: Updated ML cron schedule
+        '400':
+          description: Invalid HH:MM schedule or identical start/stop times
+
+  /api/photos/ml/action:
+    post:
+      summary: Start or stop the Immich Machine Learning container immediately
+      tags: [Backups]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [start, stop] }
+      responses:
+        '200':
+          description: ML container action applied
+        '400':
+          description: Invalid action
+
   /api/updates:
     get:
       summary: Container and Blueprint release updates

@@ -72,6 +72,10 @@ const libValDisk = $("lib-val-disk");
 const libValGdrive = $("lib-val-gdrive");
 const libValAssets = $("lib-val-assets");
 const libValFaces = $("lib-val-faces");
+const libSubDisk = $("lib-sub-disk");
+const libSubGdrive = $("lib-sub-gdrive");
+const libSubAssets = $("lib-sub-assets");
+const libSubFaces = $("lib-sub-faces");
 const libPartialWarning = $("lib-partial-warning");
 
 const immichLibraryModal = $("immich-library-modal");
@@ -562,8 +566,19 @@ export async function fetchBackupStatus() {
     }
 
     if (libValDisk) {
-      libValDisk.textContent = data.disk_size || "Unknown";
-      libValDisk.title = data.disk_reason || "";
+      if (data.disk_size) {
+        libValDisk.textContent = data.disk_size;
+        libValDisk.title = data.disk_partial ? (data.disk_reason || "") : "";
+        if (libSubDisk) {
+          libSubDisk.textContent = typeof data.photos_free_gb === "number"
+            ? `${formatTb(data.photos_free_gb)} free on disk`
+            : (data.disk_partial ? "Partial scan" : "Photos + uploads");
+        }
+      } else {
+        libValDisk.textContent = "Unavailable";
+        libValDisk.title = data.disk_reason || "Photo directory size unavailable";
+        if (libSubDisk) libSubDisk.textContent = data.disk_reason || "Measuring size";
+      }
     }
     if (libPartialWarning) {
       if (data.disk_partial) {
@@ -575,31 +590,46 @@ export async function fetchBackupStatus() {
     }
     if (libValGdrive) {
       if (typeof data.gdrive_used_gb === "number" && typeof data.gdrive_total_gb === "number") {
-        libValGdrive.innerHTML = `${data.gdrive_used_gb} GB <span class="text-muted">/ ${formatTb(data.gdrive_total_gb)}</span>`;
+        libValGdrive.textContent = formatTb(data.gdrive_used_gb);
         libValGdrive.title = "";
+        if (libSubGdrive) {
+          const pctTxt = typeof data.gdrive_used_percent === "number" ? ` (${data.gdrive_used_percent}%)` : "";
+          libSubGdrive.textContent = `of ${formatTb(data.gdrive_total_gb)}${pctTxt}`;
+        }
       } else {
         libValGdrive.textContent = "Unknown";
         libValGdrive.title = data.gdrive_reason || "Remote quota unavailable";
+        if (libSubGdrive) libSubGdrive.textContent = data.gdrive_reason || "Waiting for run";
       }
     }
     if (libValAssets) {
       if (typeof data.total_assets === "number") {
-        const photosTxt = typeof data.photos_count === "number" ? ` (${(data.photos_count / 1000).toFixed(1)}k)` : "";
-        libValAssets.innerHTML = `${Number(data.total_assets).toLocaleString()}<span class="text-muted">${photosTxt}</span>`;
+        libValAssets.textContent = Number(data.total_assets).toLocaleString();
         libValAssets.title = "";
+        if (libSubAssets) {
+          const photos = typeof data.photos_count === "number" ? `${Number(data.photos_count).toLocaleString()} photos` : "";
+          const videos = typeof data.videos_count === "number" ? `${Number(data.videos_count).toLocaleString()} videos` : "";
+          libSubAssets.textContent = [photos, videos].filter(Boolean).join(" · ") || "Library total";
+        }
       } else {
         libValAssets.textContent = "Unknown";
         libValAssets.title = data.assets_reason || "Database unavailable";
+        if (libSubAssets) libSubAssets.textContent = data.assets_reason || "DB unavailable";
       }
     }
     if (libValFaces) {
       if (typeof data.assets_with_named_faces === "number") {
-        const peopleTxt = typeof data.named_people === "number" ? ` (${data.named_people})` : "";
-        libValFaces.innerHTML = `${Number(data.assets_with_named_faces).toLocaleString()}<span class="text-muted">${peopleTxt}</span>`;
+        libValFaces.textContent = Number(data.assets_with_named_faces).toLocaleString();
         libValFaces.title = "";
+        if (libSubFaces) {
+          libSubFaces.textContent = typeof data.named_people === "number"
+            ? `${Number(data.named_people).toLocaleString()} named people`
+            : "Tagged assets";
+        }
       } else {
         libValFaces.textContent = "Unknown";
         libValFaces.title = data.assets_reason || "Database unavailable";
+        if (libSubFaces) libSubFaces.textContent = data.assets_reason || "DB unavailable";
       }
     }
 

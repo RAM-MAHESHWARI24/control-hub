@@ -72,15 +72,21 @@ def _parse_cron_hm(cron_file: str, needle: str = ""):
 
 
 def _parse_immich_ml_schedule(cron_file: str, tz_abbr: str) -> tuple[str, str]:
-    """Reads start/stop schedule from /etc/cron.d/immich-ml if installed."""
-    start_hm = _parse_cron_hm(cron_file, "start")
-    stop_hm = _parse_cron_hm(cron_file, "stop")
-    if start_hm and stop_hm:
-        s_str = f"{start_hm[0]:02d}:{start_hm[1]:02d}"
-        e_str = f"{stop_hm[0]:02d}:{stop_hm[1]:02d}"
+    """Reads start/stop schedule from /etc/cron.d/immich-ml if installed (including disabled lines)."""
+    from widgets.photos_hub import parse_ml_cron_file
+
+    parsed = parse_ml_cron_file(cron_file)
+    s_str = parsed.get("start_time")
+    e_str = parsed.get("stop_time")
+    if s_str and e_str:
+        if parsed.get("enabled"):
+            return (
+                f"{s_str} (Start) \u2192 {e_str} (Stop) {tz_abbr}",
+                f"Auto-starts ML container at {s_str}; auto-stops at {e_str} {tz_abbr} to save RAM",
+            )
         return (
-            f"{s_str} (Start) \u2192 {e_str} (Stop) {tz_abbr}",
-            f"Auto-starts ML container at {s_str}; auto-stops at {e_str} {tz_abbr} to save RAM",
+            f"Disabled (was {s_str} \u2192 {e_str} {tz_abbr})",
+            "Automatic ML schedule is paused; start or stop ML manually as needed",
         )
     return (
         "Manual / No cron schedule",
