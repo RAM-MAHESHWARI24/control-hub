@@ -220,7 +220,7 @@ def sync_all_blueprint_envs(base_dir: str, config: Dict[str, Any], env_dir: Opti
                 "ENABLE_TMDB_BYPASS": "true" if config.get("enable_tmdb_bypass") else "false",
                 "SEERR_NODE_OPTIONS": (
                     "--dns-result-order=ipv4first --require /app/config/tmdb-interceptor.js"
-                    if config.get("enable_tmdb_bypass") else ""
+                    if config.get("enable_tmdb_bypass") else "--dns-result-order=ipv4first"
                 ),
                 "COMPOSE_PROFILES": "byparr" if config.get("enable_byparr") else "",
                 "DNS_OVERRIDE": "true" if config.get("dns_override") else "",
