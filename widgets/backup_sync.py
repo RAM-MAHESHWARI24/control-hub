@@ -266,7 +266,7 @@ def _query_immich_db():
                 "psql", "-U", IMMICH_DB_USER, "-d", IMMICH_DB_NAME,
                 "-t", "-A", "-c", sql,
             ]
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=4)
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
             if proc.returncode == 0 and proc.stdout.strip():
                 return json.loads(proc.stdout.strip()), None
             err = (proc.stderr or proc.stdout or "").strip()
@@ -302,8 +302,10 @@ def _gdrive_from_status(status_data):
 def fetch_immich_library_telemetry(force=False):
     """Fetches measured photo DB metrics, local folder size, and remote quota from status.json."""
     now = time.time()
-    if not force and immich_library_stats_cache["data"] and (now - immich_library_stats_cache["last_fetched"] < 300):
-        return immich_library_stats_cache["data"]
+    cached = immich_library_stats_cache["data"]
+    cache_ttl = 300 if (isinstance(cached, dict) and cached.get("assets")) else 15
+    if not force and cached and (now - immich_library_stats_cache["last_fetched"] < cache_ttl):
+        return cached
 
     db_metrics, db_reason = _query_immich_db()
 

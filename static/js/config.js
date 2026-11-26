@@ -37,6 +37,8 @@ export const ENDPOINTS = {
   photosMlAction: "/api/photos/ml/action",
   systemVitals: "/api/system/vitals",
   storageOps: "/api/storage/operations",
+  storageOverview: "/api/storage/overview",
+  storageCleanup: "/api/storage/cleanup",
   cronStatus: "/api/cron/status",
   cronLog: (id) => `/api/cron/log/${id}`,
   cronRun: (id) => `/api/cron/run/${id}`,

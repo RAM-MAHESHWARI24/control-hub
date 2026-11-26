@@ -22,6 +22,7 @@ import { fetchBackupStatus, setBackupVisibilityCallback, setupBackupSync } from 
 import { fetchPhotosOverview, setupPhotosHub } from "./widgets/photosHub.js";
 import { fetchTvUpdaterStatus, setTvVisibilityCallback, setupTvUpdater } from "./widgets/tvUpdater.js";
 import { fetchVitals } from "./widgets/systemVitals.js";
+import { fetchStorageOverview, setupStorageHub } from "./widgets/storageHub.js";
 import { fetchCronTasks, setupCronTasks } from "./widgets/cronTasks.js";
 import { fetchServices, setupServiceMatrix } from "./widgets/serviceMatrix.js";
 import { fetchNetplanStatus, setupConfigCenter } from "./widgets/configCenter.js";
@@ -124,6 +125,7 @@ async function pollMediumTelemetry() {
     fetchSleepStatus(),
     fetchBackupStatus(),
     fetchPhotosOverview(),
+    fetchStorageOverview(),
     fetchTvUpdaterStatus(),
     fetchCronTasks(),
     fetchServices(),
@@ -269,6 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupCurrentDownloads();
   setupBackupSync();
   setupPhotosHub();
+  setupStorageHub();
   setupTvUpdater();
   setupCronTasks();
   setupServiceMatrix();

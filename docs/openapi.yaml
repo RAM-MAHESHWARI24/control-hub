@@ -846,6 +846,37 @@ paths:
         '400':
           description: Invalid action
 
+  /api/storage/overview:
+    get:
+      summary: Per-folder storage usage, 30-day fill forecast, cleanup suggestions, and SMART health
+      description: >
+        Returns cached per-folder sizes (Movies, TV Shows, Downloads, Photos, Backups, App Data),
+        linear fill forecast computed from recorded disk snapshots, safe cleanup candidates,
+        and physical drive SMART telemetry from homelab-storage-ops.
+      tags: [System]
+      responses:
+        '200':
+          description: Storage analytics overview
+
+  /api/storage/cleanup:
+    post:
+      summary: Execute one safe storage cleanup action
+      tags: [System]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target]
+              properties:
+                target: { type: string, enum: [torrents_seeded, qbit_logs, docker_prune, old_dumps] }
+      responses:
+        '200':
+          description: Cleanup finished with count and freed bytes
+        '400':
+          description: Unknown cleanup target
+
   /api/updates:
     get:
       summary: Container and Blueprint release updates

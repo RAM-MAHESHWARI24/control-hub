@@ -142,6 +142,8 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/system/vitals` | Real-time CPU, RAM, Swap, and per-filesystem disk capacity metrics |
 | `GET` | `/api/network/speed` | True Rx/Tx bandwidth deltas for the active NIC and cached Speedtest info |
 | `GET` | `/api/storage/operations` | Real-time disk I/O throughput and SMB/Jellyfin client sessions |
+| `GET` | `/api/storage/overview` | Per-folder usage, 30-day fill forecast, safe cleanup suggestions, and drive SMART health |
+| `POST` | `/api/storage/cleanup` | Execute one safe cleanup (`torrents_seeded`, `qbit_logs`, `docker_prune`, or `old_dumps`) |
 | `GET` | `/api/downloads/active` | Active qBittorrent downloads, speeds, status, priority, and ETAs |
 | `POST` | `/api/torrents/toggle-all` | Pause/Stop or Resume/Start all torrents (qBittorrent 4.x & 5.x compatible) |
 | `POST` | `/api/torrents/<hash>/action` | Per-torrent `pause`, `resume`, `delete` (with optional `delete_files`), or priority change |

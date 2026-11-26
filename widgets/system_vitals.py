@@ -20,14 +20,16 @@ from config import (
     BACKUP_DIR,
     HDD_DATA,
     HDD_MEMORIES,
+    MEDIA_BACKUP_DIR,
     PHOTO_UPLOAD_DIR,
     PORT,
+    STORAGE_HISTORY_FILE,
     STORAGE_SIZES_CACHE_FILE,
     get_host_timezone,
     get_tz_abbr,
 )
 from core import alerts as alerts_core
-from core.storage_sizes import get_storage_sizes
+from core.storage_sizes import get_storage_sizes, record_storage_sample
 from core.telemetry_sampler import telemetry_lock, telemetry_state
 
 system_vitals_bp = Blueprint("system_vitals", __name__)
@@ -139,6 +141,7 @@ def get_system_vitals():
     hdd_pct = None
     hdd_critical = False
     hdd_warning_level = "unknown"
+    hdd_stat = None
     if mount_exists:
         try:
             hdd_stat = shutil.disk_usage(data_mount)
@@ -151,6 +154,10 @@ def get_system_vitals():
         except Exception:
             mount_exists = False
 
+    record_storage_sample(STORAGE_HISTORY_FILE, "/", ssd_stat.used, ssd_stat.total)
+    if mount_exists and hdd_stat is not None:
+        record_storage_sample(STORAGE_HISTORY_FILE, data_mount, hdd_stat.used, hdd_stat.total)
+
     # 3. Measured folder breakdown (async hourly cache or root systemd timer)
     sizes = get_storage_sizes(
         cache_file=STORAGE_SIZES_CACHE_FILE,
@@ -159,6 +166,7 @@ def get_system_vitals():
         appdata_path=APPDATA_DIR,
         backup_path=BACKUP_DIR,
         photo_upload_path=PHOTO_UPLOAD_DIR,
+        media_backup_path=MEDIA_BACKUP_DIR,
     )
     media_gb = sizes.get("media_gb")
     photos_gb = sizes.get("photos_gb")

@@ -24,7 +24,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=36" />
+  <link rel="stylesheet" href="css/style.css?v=37" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -844,6 +844,89 @@
                 <span id="legend-other-wrap" hidden><span class="legend-dot seg-other" aria-hidden="true"></span><span id="legend-other">Other</span></span>
               </div>
               <p class="status-note-text" id="storage-breakdown-note">Measuring directory sizes in background&hellip;</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5.1b Storage Usage Breakdown, 30-Day Fill Forecast, Safe Cleanups & SMART Disk Health -->
+        <section class="panels console-sheet" id="storage-analytics-panel">
+          <div class="panel panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <h2>Storage Breakdown, Cleanup &amp; Disk Health</h2>
+              <span class="panel-subtitle card-summary" id="storage-analytics-subtitle">Measuring per-folder usage and SMART status&hellip;</span>
+            </div>
+            <div class="panel-actions">
+              <span class="badge badge-neutral" id="storage-forecast-badge">Forecast</span>
+              <button type="button" class="btn-secondary" id="btn-storage-refresh">Refresh Storage</button>
+            </div>
+          </div>
+
+          <div class="panel" id="storage-forecast-panel">
+            <p class="inline-callout" id="storage-forecast-callout">Collecting disk usage samples for 30-day fill forecast&hellip;</p>
+          </div>
+
+          <div class="panels photos-subgrid">
+            <div class="panel photos-subpanel">
+              <div class="photos-subpanel-head">
+                <h3>Real Usage by Folder</h3>
+                <span class="text-muted font-mono" id="storage-measured-meta">Checking cache&hellip;</span>
+              </div>
+              <div class="table-wrap">
+                <table class="service-ledger">
+                  <thead>
+                    <tr>
+                      <th>Folder</th>
+                      <th class="num-col">Allocated Size</th>
+                    </tr>
+                  </thead>
+                  <tbody id="storage-folders-tbody">
+                    <tr><td colspan="2" class="text-muted">Measuring folders&hellip;</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel photos-subpanel">
+              <div class="photos-subpanel-head">
+                <h3>Physical Disk Health (SMART)</h3>
+                <span class="badge badge-neutral" id="storage-smart-badge">Checking</span>
+              </div>
+              <div class="table-wrap">
+                <table class="service-ledger">
+                  <thead>
+                    <tr>
+                      <th>Drive</th>
+                      <th class="num-col">Temp &amp; Sectors</th>
+                      <th class="num-col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="storage-smart-tbody">
+                    <tr><td colspan="3" class="text-muted">Probing SMART telemetry&hellip;</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel photos-subpanel">
+            <div class="photos-subpanel-head">
+              <h3>Safe Storage Cleanup</h3>
+              <span class="text-muted font-mono" id="storage-cleanup-total">Scanning reclaimable space&hellip;</span>
+            </div>
+            <div class="table-wrap">
+              <table class="service-ledger">
+                <thead>
+                  <tr>
+                    <th>Cleanup Candidate</th>
+                    <th class="num-col">Items</th>
+                    <th class="num-col">Reclaimable</th>
+                    <th class="actions-col">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="storage-cleanup-tbody">
+                  <tr><td colspan="4" class="text-muted">Scanning cleanup candidates&hellip;</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -1833,6 +1916,6 @@
   </div>
 
   <script src="/js/auth.js?v=4"></script>
-  <script type="module" src="/js/app.js?v=32"></script>
+  <script type="module" src="/js/app.js?v=33"></script>
 </body>
 </html>

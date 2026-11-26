@@ -427,6 +427,43 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         cls._orig_fetch_lib = _bs_mod.fetch_immich_library_telemetry
         _bs_mod.fetch_immich_library_telemetry = lambda force=False: mock_library_stats().get_json()
 
+        def mock_storage_overview():
+            from flask import jsonify
+            return jsonify({
+                "folders": {
+                    "measured": True, "measuring": False, "measured_at": 1700000000, "measured_by": "root-timer",
+                    "rows": [
+                        {"id": "movies", "label": "Movies", "path": "/mnt/hdd/data/media/movies", "gb": 480.2},
+                        {"id": "tv", "label": "TV Shows", "path": "/mnt/hdd/data/media/tv", "gb": 210.5},
+                        {"id": "downloads", "label": "Downloads / Torrents", "path": "/mnt/hdd/data/torrents", "gb": 90.0},
+                        {"id": "photos", "label": "Photos & Uploads", "path": "/mnt/hdd/Memories", "gb": 264.1},
+                        {"id": "backups", "label": "Local Backups", "path": "/var/lib/homelab/photo-backups", "gb": 1.1},
+                        {"id": "appdata", "label": "App Data", "path": "/srv/homelab/appdata", "gb": 6.4},
+                    ],
+                },
+                "forecasts": {
+                    "hdd": {"ready": True, "trend": "growing", "days_until_full": 42.0, "daily_delta_gb": 2.5, "used_percent": 88.5, "window_days": 30,
+                            "message": "At the last 30 days' rate (+2.50 GB/day), /mnt/hdd/data (88.5% used) is full in ~42 days."},
+                    "ssd": {"ready": True, "trend": "stable", "days_until_full": None, "daily_delta_gb": 0.0, "window_days": 30,
+                            "message": "Usage steady (+0.00 GB/day over last 30d)."},
+                },
+                "cleanup": [
+                    {"id": "torrents_seeded", "label": "Finished Torrents (Seed Goal Met)", "description": "Completed torrents past seed target.",
+                     "count": 4, "size_bytes": 4200000000, "size_mb": 4005.4, "size_gb": 3.91, "actionable": True, "action_label": "Remove Finished", "reason": None},
+                    {"id": "qbit_logs", "label": "qBittorrent Rotated Logs", "description": "Old qbittorrent.log.bak* files.",
+                     "count": 2500, "size_bytes": 186646528, "size_mb": 178.0, "size_gb": 0.17, "actionable": True, "action_label": "Purge Rotated Logs", "reason": None},
+                ],
+                "smart": {
+                    "available": True, "smartctl_installed": True,
+                    "disks": [
+                        {"device": "sda", "model": "ST1000LM024", "type": "HDD", "size_gb": 931.5, "passed": True, "temp_c": 34, "reallocated_sectors": 0},
+                        {"device": "sdb", "model": "S930P PRO", "type": "SSD", "size_gb": 238.5, "passed": True, "temp_c": 31, "reallocated_sectors": 0},
+                    ],
+                },
+            })
+
+        cls.app.view_functions["storage_hub.get_storage_overview"] = mock_storage_overview
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -899,6 +936,25 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
                 self._assert_layout_and_touch_targets(page, width, f"photos-backups@{width}")
                 self._assert_axe_wcag_aa(page, f"photos-backups@{width}x{height}")
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+
+    def test_storage_analytics_and_smart_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height)
+            try:
+                self._navigate_view(page, "system")
+                page.wait_for_selector("#storage-analytics-panel", state="visible", timeout=5000)
+                page.wait_for_function(
+                    "() => (document.getElementById('storage-smart-tbody')?.textContent || '').includes('ST1000LM024')",
+                    timeout=5000,
+                )
+                self.assertIn("~42 days", page.inner_text("#storage-forecast-callout"))
+                self.assertIn("480.20 GB", page.inner_text("#storage-folders-tbody"))
+                self.assertIn("qBittorrent Rotated Logs", page.inner_text("#storage-cleanup-tbody"))
+                self._assert_layout_and_touch_targets(page, width, f"system-storage@{width}")
+                self._assert_axe_wcag_aa(page, f"system-storage@{width}x{height}")
                 self.assertEqual(page_errors, [])
             finally:
                 context.close()
