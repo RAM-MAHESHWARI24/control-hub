@@ -539,6 +539,55 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
         cls.app.view_functions["network_speed.get_network_overview"] = mock_network_overview
 
+        def mock_cron_status():
+            from flask import jsonify
+            return jsonify({
+                "jobs": [
+                    {
+                        "id": "immich_backup",
+                        "name": "Photo Cloud Backup",
+                        "description": "Photo library, face XMP sidecars & PostgreSQL dump to cloud remote",
+                        "schedule": "Daily at 01:00 UTC",
+                        "next_run": "Tomorrow 01:00 UTC",
+                        "time_hhmm": "01:00",
+                        "enabled": True,
+                        "editable": True,
+                        "is_running": False,
+                        "status_text": "Synced",
+                        "last_run": "Nov 26, 22:00 UTC",
+                        "can_run": True,
+                        "run_label": "Run backup now",
+                        "icon": "cloud",
+                    },
+                    {
+                        "id": "server_suspend",
+                        "name": "Nightly Sleep Suspend",
+                        "description": "Suspends hardware to RAM (S3) for 6.0h; wakes at 06:00 UTC",
+                        "schedule": "Daily at 00:00 UTC (6.0h sleep)",
+                        "next_run": "Tomorrow 00:00 UTC",
+                        "time_hhmm": "00:00",
+                        "wake_hhmm": "06:00",
+                        "enabled": True,
+                        "editable": True,
+                        "is_running": False,
+                        "status_text": "Armed (00:00)",
+                        "last_run": "Nov 26",
+                        "can_run": False,
+                        "run_label": "Toggle Skip",
+                        "icon": "moon",
+                    },
+                ],
+                "clashes": [
+                    {
+                        "severity": "warning",
+                        "jobs": ["immich_backup", "server_suspend"],
+                        "message": "Photo Cloud Backup (01:00) is inside the 00:00 -> 06:00 Sleep Suspend window and may be skipped while the host sleeps.",
+                    }
+                ],
+            })
+
+        cls.app.view_functions["cron_tasks.get_cron_tasks_status"] = mock_cron_status
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -1079,6 +1128,23 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 page.click("#btn-open-netplan-modal")
                 page.wait_for_selector("#cfg-dhcp-tip", state="visible", timeout=5000)
                 self.assertIn("DHCP Reservation Tip", page.inner_text("#cfg-dhcp-tip"))
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+
+    def test_schedules_panel_clash_and_editor_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height, "#/system")
+            try:
+                page.wait_for_selector("#cron-clash-callout", state="visible", timeout=5000)
+                self.assertIn("Sleep Suspend window", page.inner_text("#cron-clash-callout"))
+                page.wait_for_selector("#btn-cron-edit-immich_backup", state="visible", timeout=5000)
+                self._assert_layout_and_touch_targets(page, width, f"system-schedules@{width}")
+                self._assert_axe_wcag_aa(page, f"system-schedules@{width}x{height}")
+
+                page.click("#btn-cron-edit-immich_backup")
+                page.wait_for_selector("#cron-schedule-modal", state="visible", timeout=5000)
+                self._assert_axe_wcag_aa(page, f"cron-schedule-modal@{width}x{height}")
                 self.assertEqual(page_errors, [])
             finally:
                 context.close()

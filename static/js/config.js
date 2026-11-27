@@ -43,6 +43,7 @@ export const ENDPOINTS = {
   cronStatus: "/api/cron/status",
   cronLog: (id) => `/api/cron/log/${id}`,
   cronRun: (id) => `/api/cron/run/${id}`,
+  cronSchedule: (id) => `/api/cron/schedule/${id}`,
   servicesStatus: (includeOther = false) =>
     includeOther ? "/api/services/status?include_other=true" : "/api/services/status",
   serviceRestart: (id) => `/api/services/restart/${id}`,

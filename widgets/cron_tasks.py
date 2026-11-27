@@ -9,11 +9,13 @@ timers — never displays phantom uninstalled jobs or hardcoded schedules.
 
 import datetime
 import os
+import re
 import shutil
 import subprocess
 import threading
+from pathlib import Path
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from config import (
     BACKUP_CRON_FILE,
@@ -28,6 +30,7 @@ from config import (
     RECYCLARR_LOG_FILE,
     RESTORE_TEST_UNIT,
     SERVER_SUSPEND_LOG_FILE,
+    STATE_DIR,
     SUSPEND_SKIP_FILE,
     get_tz_abbr,
 )
@@ -61,14 +64,168 @@ CRON_RUNNING_LOCK = threading.Lock()
 cron_running_jobs = set()
 
 
-def _backup_schedule_text(tz_abbr: str) -> str:
-    hm = backup_health.cron_time(BACKUP_CRON_FILE)
-    return f"Daily at {hm[0]:02d}:{hm[1]:02d} {tz_abbr}" if hm else "Not scheduled"
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+_CRON_LINE_RE = re.compile(r"^(\s*(?:#\s*DISABLED:\s*)?)(\d{1,2})\s+(\d{1,2})(\s+\*\s+\*\s+\*\s+.+)$")
+
+
+def _validate_hhmm(val: str) -> tuple[int, int, str] | None:
+    if not isinstance(val, str):
+        return None
+    s = val.strip()
+    m = _HHMM_RE.match(s)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2)), s
+
+
+def _format_next_daily(hour: int, minute: int, tz_abbr: str, now: datetime.datetime | None = None) -> str:
+    cur = now or datetime.datetime.now()
+    target = cur.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    prefix = "Today" if target > cur else "Tomorrow"
+    return f"{prefix} {hour:02d}:{minute:02d} {tz_abbr}"
 
 
 def _parse_cron_hm(cron_file: str, needle: str = ""):
     hm = backup_health.cron_time(cron_file, needle) if cron_file else None
     return hm
+
+
+def _parse_cron_status_and_hm(cron_file: str, needle: str = "") -> tuple[tuple[int, int] | None, bool]:
+    """Reads (hour, minute) and enabled flag even if commented with '# DISABLED:'."""
+    hm = _parse_cron_hm(cron_file, needle)
+    if hm:
+        return hm, True
+    if not cron_file or not os.path.isfile(cron_file):
+        return None, True
+    try:
+        for line in Path(cron_file).read_text(encoding="utf-8", errors="replace").splitlines():
+            m = _CRON_LINE_RE.match(line)
+            if not m:
+                continue
+            if needle and needle not in m.group(4):
+                continue
+            minute, hour = int(m.group(2)), int(m.group(3))
+            if 0 <= hour < 24 and 0 <= minute < 60:
+                return (hour, minute), not bool(m.group(1).strip())
+    except OSError:
+        pass
+    return None, True
+
+
+def _write_cron_file(cron_file: str, content: str) -> None:
+    target = Path(cron_file)
+    if os.access(cron_file, os.W_OK) or (not target.exists() and os.access(str(target.parent), os.W_OK)):
+        tmp = target.with_name(f".{target.name}.tmp")
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(tmp, target)
+        return
+    subprocess.run(
+        ["sudo", "tee", cron_file],
+        input=content,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+
+
+def _update_daily_cron_time(cron_file: str, hour: int, minute: int, enabled: bool, needle: str = "") -> None:
+    if not cron_file or not os.path.isfile(cron_file):
+        raise FileNotFoundError(f"Cron file not found: {cron_file}")
+    lines = Path(cron_file).read_text(encoding="utf-8", errors="replace").splitlines()
+    replaced = False
+    new_lines = []
+    prefix = "" if enabled else "# DISABLED: "
+    for line in lines:
+        m = _CRON_LINE_RE.match(line)
+        if m and not replaced and (not needle or needle in m.group(4)):
+            new_lines.append(f"{prefix}{minute} {hour}{m.group(4)}")
+            replaced = True
+        else:
+            new_lines.append(line)
+    if not replaced:
+        raise ValueError(f"Could not locate daily schedule line in {cron_file}")
+    _write_cron_file(cron_file, "\n".join(new_lines) + "\n")
+
+
+def _in_sleep_window(job_min: int, sleep_min: int, wake_min: int) -> bool:
+    if sleep_min == wake_min:
+        return False
+    if sleep_min < wake_min:
+        return sleep_min <= job_min < wake_min
+    return job_min >= sleep_min or job_min < wake_min
+
+
+def _minutes_before_sleep(job_min: int, sleep_min: int) -> int:
+    return (sleep_min - job_min) % 1440
+
+
+def detect_schedule_clashes(jobs: list[dict]) -> list[dict]:
+    """Detects overlapping backups or daily jobs scheduled inside the host sleep window."""
+    clashes: list[dict] = []
+    suspend_job = next((j for j in jobs if j.get("id") == "server_suspend" and j.get("enabled", True)), None)
+    sleep_hhmm = suspend_job.get("time_hhmm") if suspend_job else None
+    wake_hhmm = suspend_job.get("wake_hhmm") if suspend_job else None
+
+    s_parsed = _validate_hhmm(sleep_hhmm or "")
+    w_parsed = _validate_hhmm(wake_hhmm or "")
+    if s_parsed and w_parsed:
+        s_min = s_parsed[0] * 60 + s_parsed[1]
+        w_min = w_parsed[0] * 60 + w_parsed[1]
+        for job in jobs:
+            jid = job.get("id")
+            if jid == "server_suspend" or not job.get("enabled", True):
+                continue
+            t_parsed = _validate_hhmm(job.get("time_hhmm") or "")
+            if not t_parsed:
+                continue
+            j_min = t_parsed[0] * 60 + t_parsed[1]
+            if _in_sleep_window(j_min, s_min, w_min):
+                clashes.append({
+                    "severity": "warning",
+                    "jobs": [jid, "server_suspend"],
+                    "message": (
+                        f"{job['name']} ({t_parsed[2]}) is inside the {s_parsed[2]} -> {w_parsed[2]} "
+                        "Sleep Suspend window and may be skipped while the host sleeps."
+                    ),
+                })
+            elif jid in ("immich_backup", "media_backup") and 0 < _minutes_before_sleep(j_min, s_min) <= 45:
+                gap = _minutes_before_sleep(j_min, s_min)
+                clashes.append({
+                    "severity": "info",
+                    "jobs": [jid, "server_suspend"],
+                    "message": (
+                        f"{job['name']} ({t_parsed[2]}) starts {gap} min before Sleep Suspend "
+                        f"({s_parsed[2]}): Sleep Guard will delay sleep until transfers finish."
+                    ),
+                })
+
+    img_bk = next((j for j in jobs if j.get("id") == "immich_backup" and j.get("enabled", True)), None)
+    med_bk = next((j for j in jobs if j.get("id") == "media_backup" and j.get("enabled", True)), None)
+    if img_bk and med_bk:
+        p1 = _validate_hhmm(img_bk.get("time_hhmm") or "")
+        p2 = _validate_hhmm(med_bk.get("time_hhmm") or "")
+        if p1 and p2:
+            m1, m2 = p1[0] * 60 + p1[1], p2[0] * 60 + p2[1]
+            diff = min((m1 - m2) % 1440, (m2 - m1) % 1440)
+            if diff <= 15:
+                clashes.append({
+                    "severity": "info",
+                    "jobs": ["immich_backup", "media_backup"],
+                    "message": (
+                        f"Photo Cloud Backup ({p1[2]}) and Media Settings Backup ({p2[2]}) "
+                        "start within 15 min of each other (shared disk and rclone bandwidth)."
+                    ),
+                })
+    return clashes
+
+
+def _backup_schedule_text(tz_abbr: str) -> str:
+    hm, enabled = _parse_cron_status_and_hm(BACKUP_CRON_FILE)
+    if not hm:
+        return "Not scheduled"
+    return f"Daily at {hm[0]:02d}:{hm[1]:02d} {tz_abbr}" if enabled else f"Disabled (was {hm[0]:02d}:{hm[1]:02d} {tz_abbr})"
 
 
 def _parse_immich_ml_schedule(cron_file: str, tz_abbr: str) -> tuple[str, str]:
@@ -96,7 +253,14 @@ def _parse_immich_ml_schedule(cron_file: str, tz_abbr: str) -> tuple[str, str]:
 
 @cron_tasks_bp.route("/api/cron/status", methods=["GET"])
 def get_cron_tasks_status():
-    """Returns real-time status of actually installed system cron jobs and timers."""
+    """Returns real-time status, next run, and clash warnings for all installed schedules."""
+    jobs = _collect_cron_jobs()
+    clashes = detect_schedule_clashes(jobs)
+    return jsonify({"jobs": jobs, "clashes": clashes})
+
+
+def _collect_cron_jobs() -> list[dict]:
+    """Inspects all installed cron files, systemd timers, and host schedules."""
     tz_abbr = get_tz_abbr()
     jobs = []
 
@@ -168,11 +332,18 @@ def get_cron_tasks_status():
         if gdrive_running:
             gdrive_status_text = "Syncing..."
 
+        b_hm, b_enabled = _parse_cron_status_and_hm(BACKUP_CRON_FILE)
+        b_hhmm = f"{b_hm[0]:02d}:{b_hm[1]:02d}" if b_hm else None
+        b_next = _format_next_daily(b_hm[0], b_hm[1], tz_abbr) if (b_hm and b_enabled) else ("Paused" if not b_enabled else "Not scheduled")
         jobs.append({
             "id": "immich_backup",
             "name": "Photo Cloud Backup",
             "description": "Photo library, face XMP sidecars & PostgreSQL dump to cloud remote",
             "schedule": _backup_schedule_text(tz_abbr),
+            "next_run": b_next,
+            "time_hhmm": b_hhmm,
+            "enabled": b_enabled,
+            "editable": bool(BACKUP_CRON_FILE and os.path.isfile(BACKUP_CRON_FILE)),
             "is_running": gdrive_running,
             "status_text": gdrive_status_text,
             "last_run": gdrive_last_run,
@@ -185,8 +356,15 @@ def get_cron_tasks_status():
     # 2. Media Settings Backup (only if installed)
     media_info = media_backup_summary()
     if media_info is not None:
-        m_hm = _parse_cron_hm(MEDIA_BACKUP_CRON_FILE, "media_config_backup.py")
-        m_schedule = f"Daily at {m_hm[0]:02d}:{m_hm[1]:02d} {tz_abbr}" if m_hm else "Not scheduled"
+        m_hm, m_enabled = _parse_cron_status_and_hm(MEDIA_BACKUP_CRON_FILE, "media_config_backup.py")
+        m_hhmm = f"{m_hm[0]:02d}:{m_hm[1]:02d}" if m_hm else None
+        if not m_hm:
+            m_schedule = "Not scheduled"
+        elif m_enabled:
+            m_schedule = f"Daily at {m_hhmm} {tz_abbr}"
+        else:
+            m_schedule = f"Disabled (was {m_hhmm} {tz_abbr})"
+        m_next = _format_next_daily(m_hm[0], m_hm[1], tz_abbr) if (m_hm and m_enabled) else ("Paused" if not m_enabled else "Not scheduled")
         m_status = {
             "synced": "Synced",
             "error": "Error",
@@ -199,6 +377,10 @@ def get_cron_tasks_status():
             "name": "Media Settings Backup",
             "description": "Nightly archive of Jellyfin, Seerr & *arr databases to cloud remote",
             "schedule": m_schedule,
+            "next_run": m_next,
+            "time_hhmm": m_hhmm,
+            "enabled": m_enabled,
+            "editable": bool(MEDIA_BACKUP_CRON_FILE and os.path.isfile(MEDIA_BACKUP_CRON_FILE)),
             "is_running": media_info.get("state") == "syncing",
             "status_text": m_status,
             "last_run": media_info.get("last_good") or "Never",
@@ -227,6 +409,10 @@ def get_cron_tasks_status():
             "name": "Photo Backup Restore Test",
             "description": "Restores latest remote database dump into a throwaway Postgres container",
             "schedule": f"Monthly (Next: {restore_info['next']})" if restore_info.get("next") else "Monthly timer",
+            "next_run": restore_info.get("next") or "First Sunday 11:00",
+            "time_hhmm": None,
+            "enabled": True,
+            "editable": False,
             "is_running": bool(restore_info.get("running")),
             "status_text": rt_status,
             "last_run": rt.get("tested_at") or "Never",
@@ -271,11 +457,18 @@ def get_cron_tasks_status():
             if enabled or override
             else f"Disabled (was {eff_sleep} \u2192 {eff_wake} {tz_abbr})"
         )
+        s_parsed = _validate_hhmm(eff_sleep)
+        s_next = _format_next_daily(s_parsed[0], s_parsed[1], tz_abbr) if (s_parsed and (enabled or override)) else "Disabled"
         jobs.append({
             "id": "server_suspend",
             "name": "Nightly Sleep Suspend",
             "description": f"Suspends hardware to RAM (S3) for {eff_dur}h; wakes at {eff_wake} {tz_abbr}",
             "schedule": sleep_sched,
+            "next_run": s_next,
+            "time_hhmm": eff_sleep,
+            "wake_hhmm": eff_wake,
+            "enabled": enabled,
+            "editable": True,
             "is_running": False,
             "status_text": sleep_status_text,
             "last_run": sleep_last_run,
@@ -331,6 +524,10 @@ def get_cron_tasks_status():
             "name": "Android TV App Updater",
             "description": "Silent ADB sideload updater for SmartTube and CloudStream (pinned signing keys)",
             "schedule": get_tv_schedule_text(tz_abbr),
+            "next_run": get_tv_schedule_text(tz_abbr),
+            "time_hhmm": None,
+            "enabled": True,
+            "editable": False,
             "is_running": tv_running,
             "status_text": tv_status_text,
             "last_run": tv_last_run,
@@ -380,13 +577,24 @@ def get_cron_tasks_status():
             except Exception:
                 pass
 
-        rc_hm = _parse_cron_hm(recyclarr_cron, "recyclarr")
-        rc_schedule = f"Daily at {rc_hm[0]:02d}:{rc_hm[1]:02d} {tz_abbr}" if rc_hm else "Manual / Not scheduled"
+        rc_hm, rc_enabled = _parse_cron_status_and_hm(recyclarr_cron, "recyclarr")
+        rc_hhmm = f"{rc_hm[0]:02d}:{rc_hm[1]:02d}" if rc_hm else None
+        if not rc_hm:
+            rc_schedule = "Manual / Not scheduled"
+        elif rc_enabled:
+            rc_schedule = f"Daily at {rc_hhmm} {tz_abbr}"
+        else:
+            rc_schedule = f"Disabled (was {rc_hhmm} {tz_abbr})"
+        rc_next = _format_next_daily(rc_hm[0], rc_hm[1], tz_abbr) if (rc_hm and rc_enabled) else "Not scheduled"
         jobs.append({
             "id": "recyclarr",
             "name": "Recyclarr TRaSH Sync",
             "description": "Syncs TRaSH quality profiles and release scores with Sonarr and Radarr",
             "schedule": rc_schedule,
+            "next_run": rc_next,
+            "time_hhmm": rc_hhmm,
+            "enabled": rc_enabled,
+            "editable": os.path.isfile(recyclarr_cron),
             "is_running": rc_running,
             "status_text": rc_status_text,
             "last_run": rc_last_run,
@@ -423,12 +631,25 @@ def get_cron_tasks_status():
             except Exception:
                 pass
 
+        from widgets.photos_hub import parse_ml_cron_file
+        ml_parsed = parse_ml_cron_file(IMMICH_ML_CRON_FILE)
         ml_sched, ml_desc = _parse_immich_ml_schedule(IMMICH_ML_CRON_FILE, tz_abbr)
+        ml_start_hm = _validate_hhmm(ml_parsed.get("start_time") or "")
+        ml_next = (
+            _format_next_daily(ml_start_hm[0], ml_start_hm[1], tz_abbr)
+            if (ml_start_hm and ml_parsed.get("enabled"))
+            else ("Paused" if ml_cron_exists and not ml_parsed.get("enabled") else "Manual")
+        )
         jobs.append({
             "id": "immich_ml",
             "name": "Photo Machine Learning",
             "description": ml_desc,
             "schedule": ml_sched,
+            "next_run": ml_next,
+            "time_hhmm": ml_parsed.get("start_time"),
+            "stop_hhmm": ml_parsed.get("stop_time"),
+            "enabled": bool(ml_parsed.get("enabled", True)),
+            "editable": ml_cron_exists,
             "is_running": ml_running,
             "status_text": "Active (AI)" if ml_running else ("Conserved" if ml_exists else "Not Installed"),
             "last_run": ml_last_run,
@@ -437,7 +658,121 @@ def get_cron_tasks_status():
             "icon": "cpu",
         })
 
-    return jsonify({"jobs": jobs})
+    # 8. Mediaserver Smart Auto-Import (ONLY if cron exists)
+    autoimport_cron = "/etc/cron.d/mediaserver-autoimport"
+    autoimport_log = str(STATE_DIR / "mediaserver-autoimport.log")
+    if os.path.isfile(autoimport_cron):
+        ai_last_run = "Never"
+        if os.path.isfile(autoimport_log):
+            try:
+                mtime = os.path.getmtime(autoimport_log)
+                ai_last_run = datetime.datetime.fromtimestamp(mtime).strftime(f"%b %d, %H:%M {tz_abbr}")
+            except OSError:
+                pass
+        jobs.append({
+            "id": "mediaserver_autoimport",
+            "name": "Media Smart Auto-Import",
+            "description": "Clears title-verified Radarr & Sonarr Manual Import queue holds",
+            "schedule": "Every 3 min",
+            "next_run": "Within 3 min",
+            "time_hhmm": None,
+            "enabled": True,
+            "editable": False,
+            "is_running": False,
+            "status_text": "Active",
+            "last_run": ai_last_run,
+            "can_run": False,
+            "run_label": "Auto-runs every 3m",
+            "icon": "sliders",
+        })
+
+    return jobs
+
+
+@cron_tasks_bp.route("/api/cron/schedule/<job_id>", methods=["POST"])
+def update_cron_schedule(job_id: str):
+    """Updates or previews a scheduled job time and returns updated jobs + clash warnings."""
+    body = request.get_json(silent=True) or {}
+    time_str = str(body.get("time") or "").strip()
+    enabled = bool(body.get("enabled", True))
+    preview_only = bool(body.get("preview_only", False))
+
+    parsed = _validate_hhmm(time_str)
+    if not parsed:
+        return jsonify({"ok": False, "error": "Time must use 24-hour HH:MM format."}), 400
+    hour, minute, norm_time = parsed
+
+    if preview_only:
+        jobs = _collect_cron_jobs()
+        found = False
+        for job in jobs:
+            if job.get("id") == job_id:
+                job["time_hhmm"] = norm_time
+                job["enabled"] = enabled
+                if job_id == "server_suspend" and body.get("wake_time"):
+                    w_p = _validate_hhmm(str(body.get("wake_time")))
+                    if w_p:
+                        job["wake_hhmm"] = w_p[2]
+                if job_id == "immich_ml" and body.get("stop_time"):
+                    s_p = _validate_hhmm(str(body.get("stop_time")))
+                    if s_p:
+                        job["stop_hhmm"] = s_p[2]
+                found = True
+                break
+        if not found:
+            return jsonify({"ok": False, "error": f"Schedule job '{job_id}' is not installed."}), 404
+        return jsonify({"ok": True, "preview": True, "clashes": detect_schedule_clashes(jobs)})
+
+    try:
+        if job_id == "immich_backup":
+            _update_daily_cron_time(BACKUP_CRON_FILE, hour, minute, enabled)
+        elif job_id == "media_backup":
+            _update_daily_cron_time(MEDIA_BACKUP_CRON_FILE, hour, minute, enabled, "media_config_backup.py")
+        elif job_id == "recyclarr":
+            _update_daily_cron_time("/etc/cron.d/recyclarr", hour, minute, enabled, "recyclarr")
+        elif job_id == "immich_ml":
+            from widgets.photos_hub import write_ml_cron_file
+            stop_time = str(body.get("stop_time") or "10:00").strip()
+            write_ml_cron_file(IMMICH_ML_CRON_FILE, enabled, norm_time, stop_time)
+        elif job_id == "server_suspend":
+            from widgets.sleep_guard import load_permanent_config, save_permanent_config
+            cur_perm = load_permanent_config()
+            wake_str = str(body.get("wake_time") or cur_perm.get("wake_time") or "06:00").strip()
+            w_p = _validate_hhmm(wake_str)
+            if not w_p:
+                return jsonify({"ok": False, "error": "Wake time must use 24-hour HH:MM format."}), 400
+            s_mins = hour * 60 + minute
+            w_mins = w_p[0] * 60 + w_p[1]
+            dur_mins = w_mins - s_mins
+            if dur_mins <= 0:
+                dur_mins += 1440
+            save_permanent_config({
+                "enabled": enabled,
+                "sleep_time": norm_time,
+                "wake_time": w_p[2],
+                "duration_hours": round(dur_mins / 60.0, 1),
+                "duration_seconds": dur_mins * 60,
+            })
+        else:
+            return jsonify({"ok": False, "error": f"Schedule for '{job_id}' is not editable."}), 400
+    except FileNotFoundError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except subprocess.CalledProcessError as exc:
+        err = (exc.stderr or "Permission denied updating cron schedule").strip()[:200]
+        return jsonify({"ok": False, "error": err}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)[:200]}), 500
+
+    jobs = _collect_cron_jobs()
+    clashes = detect_schedule_clashes(jobs)
+    return jsonify({
+        "ok": True,
+        "message": f"Updated schedule for '{job_id}' to {norm_time}" + (" (enabled)" if enabled else " (paused)"),
+        "jobs": jobs,
+        "clashes": clashes,
+    })
 
 
 @cron_tasks_bp.route("/api/cron/log/<job_id>", methods=["GET"])
@@ -467,6 +802,7 @@ def get_cron_job_log(job_id):
         "recyclarr": RECYCLARR_LOG_FILE,
         "immich_ml": IMMICH_ML_LOG_FILE,
         "tv_updater": get_preferred_log_file(),
+        "mediaserver_autoimport": str(STATE_DIR / "mediaserver-autoimport.log"),
     }
     if job_id not in log_map:
         return jsonify({"error": "Unknown cron job ID"}), 404

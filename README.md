@@ -194,6 +194,8 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `POST` | `/api/sleep/toggle` | Creates/clears `/run/server-suspend.skip` to stay awake tonight |
 | `POST` | `/api/sleep/shift-tonight` | Shifts tonight's suspend time by +1h, +2h, or custom window |
 | `POST` | `/api/sleep/schedule-permanent` | Updates or disables the recurring nightly sleep schedule |
+| `GET` | `/api/cron/status` | All installed timed jobs (`next_run`, `last_run`, `editable`) plus sleep/backup clash warnings |
+| `POST` | `/api/cron/schedule/<job_id>` | Previews (`preview_only: true`) or updates a job's cron/Sleep Guard schedule and recalculates clashes |
 
 ### Configuration Center Endpoints (`widgets/config_center.py`)
 

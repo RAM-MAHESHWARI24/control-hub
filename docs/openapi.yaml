@@ -454,11 +454,37 @@ paths:
   /api/cron/status:
     get:
       summary: Cron & Automation Task Timers
-      description: Returns next execution schedules and historical statuses for all scheduled homelab tasks.
+      description: Returns next execution schedules, last run statuses, editable schedule fields, and clash warnings for all installed homelab tasks.
       tags: [Automation]
       responses:
         '200':
-          description: Cron status overview
+          description: Cron status overview with jobs and schedule clashes
+
+  /api/cron/schedule/{job_id}:
+    post:
+      summary: Edit or Preview a Job Schedule
+      description: Updates or previews (`preview_only: true`) the daily execution time of an installed job and evaluates schedule clashes against Sleep Guard.
+      tags: [Automation]
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                time: { type: string, example: "22:00" }
+                stop_time: { type: string, example: "10:00" }
+                wake_time: { type: string, example: "06:00" }
+                enabled: { type: boolean, default: true }
+                preview_only: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Updated or previewed schedule and clash warnings
 
   /api/tv-updater/status:
     get:
