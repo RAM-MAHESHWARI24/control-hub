@@ -1,0 +1,19 @@
+{
+  "name": "Homelab Control Hub",
+  "short_name": "Control Hub",
+  "description": "Home server command center for app launcher, hardware telemetry, backups, TVs, and Sleep Guard.",
+  "start_url": "/#/overview",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#141517",
+  "theme_color": "#18191B",
+  "icons": [
+    {
+      "src": "/img/icons/hub-app.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

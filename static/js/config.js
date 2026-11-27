@@ -89,4 +89,6 @@ export const ENDPOINTS = {
   configNetplanConfirm: "/api/config/netplan-confirm",
   configNetplanStatus: "/api/config/netplan-status",
   troubleshoot: "/api/troubleshoot",
+  history: (range = "24h") => `/api/history?range=${encodeURIComponent(range)}`,
+  insightsMonthly: "/api/insights/monthly",
 };

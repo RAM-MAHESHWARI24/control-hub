@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Control Hub &middot; Home Server Command Center</title>
   <meta name="description" content="Home server command center for app launcher, hardware telemetry, backups, TV fleet updates, Sleep Guard, and host configuration." />
+  <meta name="theme-color" content="#18191B" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Control Hub" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/img/icons/hub-app.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/img/icons/hub-app.svg" />
   <script>
     (function () {
       try {
@@ -24,7 +30,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=39" />
+  <link rel="stylesheet" href="css/style.css?v=40" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -133,6 +139,14 @@
           <button type="button" id="btn-kiosk-toggle" class="dropdown-item">
             <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-maximize"></use></svg>
             <span>Toggle Fullscreen</span>
+          </button>
+          <button type="button" id="btn-browser-notifications" class="dropdown-item" aria-pressed="false">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-bell"></use></svg>
+            <span id="browser-notif-label">Browser Alerts: Off</span>
+          </button>
+          <button type="button" id="btn-pwa-install" class="dropdown-item" hidden>
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-download"></use></svg>
+            <span>Install App (PWA)</span>
           </button>
         </div>
       </div>
@@ -1228,6 +1242,78 @@
           </div>
         </section>
 
+        <!-- 5.4b Phase 4C: Telemetry History & Monthly Insights Report -->
+        <section class="panels console-sheet" id="history-insights-panel" aria-labelledby="history-panel-heading">
+          <div class="panel panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <h2 id="history-panel-heading">History &amp; Monthly Insights</h2>
+              <span class="panel-subtitle card-summary" id="history-panel-subtitle">Collecting telemetry history&hellip;</span>
+            </div>
+            <div class="panel-actions">
+              <div class="segmented-group" role="group" aria-label="History timeframe">
+                <button type="button" class="pill-btn active" data-hist-range="24h" aria-pressed="true">24h</button>
+                <button type="button" class="pill-btn" data-hist-range="7d" aria-pressed="false">7d</button>
+                <button type="button" class="pill-btn" data-hist-range="30d" aria-pressed="false">30d</button>
+              </div>
+              <button type="button" id="btn-history-refresh" class="btn-secondary">Refresh Trends</button>
+            </div>
+          </div>
+
+          <div class="history-charts-grid panels">
+            <div class="panel history-chart-card">
+              <div class="sub-panel-top">
+                <h3>CPU, Memory &amp; Temperature</h3>
+                <span class="font-mono text-muted" id="hist-cpu-stats">Waiting for samples&hellip;</span>
+              </div>
+              <div class="history-canvas-box well">
+                <canvas id="hist-cpu-canvas" aria-label="CPU, memory, and temperature history graph"></canvas>
+              </div>
+              <div class="history-legend" aria-hidden="true">
+                <span><span class="legend-dot hist-cpu"></span>CPU %</span>
+                <span><span class="legend-dot hist-ram"></span>RAM %</span>
+                <span><span class="legend-dot hist-temp"></span>Temp &deg;C</span>
+              </div>
+            </div>
+
+            <div class="panel history-chart-card">
+              <div class="sub-panel-top">
+                <h3>Network &amp; Disk I/O Peaks</h3>
+                <span class="font-mono text-muted" id="hist-io-stats">Waiting for samples&hellip;</span>
+              </div>
+              <div class="history-canvas-box well">
+                <canvas id="hist-io-canvas" aria-label="Network and disk throughput history graph"></canvas>
+              </div>
+              <div class="history-legend" aria-hidden="true">
+                <span><span class="legend-dot hist-ram"></span>LAN MB/s</span>
+                <span><span class="legend-dot hist-cpu"></span>Disk MB/s</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="insights-report-grid panels" aria-label="Monthly health report and Sleep Guard power savings">
+            <div class="panel insight-kpi-card">
+              <span class="lib-stat-label">Host Uptime</span>
+              <strong class="reading reading-sm font-mono" id="insight-uptime-val">-- h</strong>
+              <span class="text-muted" id="insight-uptime-sub">-- samples (30d)</span>
+            </div>
+            <div class="panel insight-kpi-card">
+              <span class="lib-stat-label">Backups Passed (30d)</span>
+              <strong class="reading reading-sm font-mono" id="insight-backup-val">-- passed</strong>
+              <span class="text-muted" id="insight-backup-sub">Checking backup history</span>
+            </div>
+            <div class="panel insight-kpi-card">
+              <span class="lib-stat-label">Storage &amp; Updates (30d)</span>
+              <strong class="reading reading-sm font-mono" id="insight-space-val">-- GB</strong>
+              <span class="text-muted" id="insight-space-sub">30d pool delta</span>
+            </div>
+            <div class="panel insight-kpi-card">
+              <span class="lib-stat-label">Sleep Guard Power Saved</span>
+              <strong class="reading reading-sm font-mono" id="insight-power-val">-- kWh/mo</strong>
+              <span class="text-muted" id="insight-power-sub">Checking suspend schedule</span>
+            </div>
+          </div>
+        </section>
+
         <!-- 5.5 Node Administration -->
         <section class="panels console-sheet" aria-labelledby="node-tools-heading">
           <div class="panel panel-head-strip">
@@ -2180,6 +2266,6 @@
   </div>
 
   <script src="/js/auth.js?v=5"></script>
-  <script type="module" src="/js/app.js?v=38"></script>
+  <script type="module" src="/js/app.js?v=39"></script>
 </body>
 </html>

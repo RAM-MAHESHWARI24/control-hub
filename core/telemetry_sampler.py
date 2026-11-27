@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import threading
@@ -27,6 +28,7 @@ from config import (
     QBITTORRENT_URL,
     QBITTORRENT_USER,
 )
+from core.metrics_history import record_sample as record_history_sample
 
 VIRTUAL_NIC_PREFIXES = (
     "docker",
@@ -1007,6 +1009,35 @@ def telemetry_worker():
                     "model": CPU_SPECS["model"],
                     "temp_c": cpu_temp,
                 }
+
+            # 6. Append 5-minute downsampled rollup for 24h/7d/30d history charts (non-blocking)
+            try:
+                ram_pct = 0.0
+                meminfo_path = "/proc/meminfo"
+                if os.path.exists(meminfo_path):
+                    vals = {}
+                    with open(meminfo_path, encoding="utf-8") as mf:
+                        for line in mf:
+                            k, _, rest = line.partition(":")
+                            if k in ("MemTotal", "MemAvailable") and rest:
+                                vals[k] = float(rest.strip().split()[0])
+                    if vals.get("MemTotal", 0) > 0:
+                        avail = vals.get("MemAvailable", 0)
+                        ram_pct = ((vals["MemTotal"] - avail) / vals["MemTotal"]) * 100.0
+                pool_used_gb = None
+                if DETECTED_DATA_MOUNT and os.path.exists(DETECTED_DATA_MOUNT):
+                    du = shutil.disk_usage(DETECTED_DATA_MOUNT)
+                    pool_used_gb = du.used / (1024 ** 3)
+                record_history_sample({
+                    "cpu_pct": cpu_usage_pct,
+                    "cpu_temp_c": cpu_temp,
+                    "ram_pct": ram_pct,
+                    "lan_mbs": rx_mbs + tx_mbs,
+                    "disk_io_mbs": collective_storage_mbs,
+                    "pool_used_gb": pool_used_gb,
+                }, now_ts=now)
+            except Exception:
+                pass
 
             prev_time = now
             time.sleep(1.0)

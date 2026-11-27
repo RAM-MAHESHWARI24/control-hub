@@ -1140,6 +1140,26 @@ paths:
         '403':
           description: Restricted to owner role
 
+  /api/history:
+    get:
+      summary: Query downsampled 24h / 7d / 30d hardware & throughput history
+      tags: [Diagnostics]
+      parameters:
+        - name: range
+          in: query
+          schema: { type: string, enum: [24h, 7d, 30d], default: 24h }
+      responses:
+        '200':
+          description: "{range, raw_samples, points, stats}"
+
+  /api/insights/monthly:
+    get:
+      summary: Monthly 30-day uptime/backup/update/storage report and Sleep Guard power savings estimate
+      tags: [Diagnostics]
+      responses:
+        '200':
+          description: "{monthly_report, power_savings, generated_at}"
+
 components:
   securitySchemes:
     bearerToken:

@@ -32,6 +32,8 @@ import { fetchMediaHub, setupMediaHub } from "./widgets/mediaHub.js";
 import { fetchAlerts, setupAlerts } from "./widgets/alerts.js";
 import { fetchUpdates, setupUpdates } from "./widgets/updates.js";
 import { setupHelpDrawer } from "./widgets/helpDrawer.js";
+import { fetchHistoryAndInsights, redrawHistoryCharts, setupHistoryInsights } from "./widgets/historyInsights.js";
+import { setupPwa } from "./widgets/pwa.js";
 
 const FAST_POLL_MS = 2500;
 const MEDIUM_POLL_MS = 15000;
@@ -79,7 +81,10 @@ export function activateView(viewName, updateHash = false) {
 
   setMenuOpen(false);
   if (target === "system") {
-    window.requestAnimationFrame(() => drawLanSparkline());
+    window.requestAnimationFrame(() => {
+      drawLanSparkline();
+      redrawHistoryCharts();
+    });
   }
 }
 
@@ -146,6 +151,7 @@ async function pollMediumTelemetry() {
     fetchNetplanStatus(),
     fetchNetworkOverview(),
     fetchUpdates(),
+    fetchHistoryAndInsights(),
   ]);
 }
 
@@ -289,7 +295,10 @@ function applyRoleState(role) {
 
 document.addEventListener("DOMContentLoaded", async () => {
   setupHeader();
-  setThemeChangeHandler(() => drawLanSparkline());
+  setThemeChangeHandler(() => {
+    drawLanSparkline();
+    redrawHistoryCharts();
+  });
   setRetryConnectionHandler(() => refreshAll(true));
   setBackupVisibilityCallback(handleModuleVisibility);
   setTvVisibilityCallback(handleModuleVisibility);
@@ -321,6 +330,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupAlerts();
   setupUpdates();
   setupHelpDrawer();
+  setupHistoryInsights();
+  setupPwa();
 
   try {
     const authInfo = await window.HomelabAuth?.ready?.();

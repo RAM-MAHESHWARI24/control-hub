@@ -10,6 +10,7 @@ import { ENDPOINTS } from "../config.js";
 import { openModal, registerModal } from "../shared/modal.js";
 import { showToast } from "../shared/toast.js";
 import { state } from "../state.js";
+import { notifyFiringAlerts } from "./pwa.js";
 
 const CHANNELS = {
   ntfy: {
@@ -295,6 +296,7 @@ function renderAll(data) {
   current = data;
   state.alertsSnapshot = data;
   renderBadge(data);
+  notifyFiringAlerts(data.firing || []);
   renderFiring(data);
   renderChannels(data);
   renderRules(data);

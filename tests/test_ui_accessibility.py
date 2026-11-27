@@ -599,6 +599,48 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
         cls.app.view_functions["cron_tasks.get_cron_tasks_status"] = mock_cron_status
 
+        def mock_history():
+            from flask import jsonify, request
+            rng = request.args.get("range", "24h")
+            return jsonify({
+                "status": "ok",
+                "range": rng,
+                "raw_samples": 12,
+                "points": [
+                    {"ts": 1750000000 + i * 1800, "cpu_pct": 12 + i * 2, "cpu_temp_c": 42 + i, "ram_pct": 40 + i, "lan_mbs": 3.5 + i, "disk_io_mbs": 1.2 + i * 0.5, "pool_used_gb": 510 + i * 0.4}
+                    for i in range(6)
+                ],
+                "stats": {"cpu_avg": 17.0, "ram_avg": 42.5, "temp_max": 47.0, "lan_peak_mbs": 8.5, "disk_peak_mbs": 3.7, "pool_delta_gb": 2.0},
+            })
+
+        def mock_insights():
+            from flask import jsonify
+            return jsonify({
+                "status": "ok",
+                "generated_at": "2026-11-27T12:00:00+00:00",
+                "monthly_report": {
+                    "uptime_hours": 148.5,
+                    "samples_30d": 12,
+                    "coverage_hours_30d": 1.0,
+                    "backups_passed_30d": 28,
+                    "backups_failed_30d": 0,
+                    "pending_updates": 1,
+                    "storage_delta_gb": 12.4,
+                },
+                "power_savings": {
+                    "installed": True,
+                    "enabled": True,
+                    "hours_per_day": 6.0,
+                    "monthly_kwh_saved": 3.02,
+                    "potential_monthly_kwh_saved": 3.02,
+                    "annual_kwh_saved": 36.2,
+                    "co2_kg_annual": 14.5,
+                },
+            })
+
+        cls.app.view_functions["history.api_get_history"] = mock_history
+        cls.app.view_functions["history.api_get_monthly_insights"] = mock_insights
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -1254,6 +1296,29 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 page.wait_for_selector("#troubleshoot-modal", state="visible", timeout=5000)
                 page.wait_for_selector("#troubleshoot-checks-list .troubleshoot-item", state="visible", timeout=8000)
                 self._assert_axe_wcag_aa(page, f"troubleshoot-modal@{width}x{height}")
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+
+    def test_history_insights_and_pwa_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, ext_reqs = self._new_authenticated_page(width, height, "#/system")
+            try:
+                page.wait_for_selector("#history-insights-panel", state="visible", timeout=5000)
+                page.wait_for_function(
+                    "() => document.getElementById('insight-backup-val')?.textContent?.includes('28 passed')",
+                    timeout=5000,
+                )
+                self.assertIn("3.02 kWh/mo", page.inner_text("#insight-power-val"))
+                page.click('[data-hist-range="7d"]')
+                page.wait_for_function(
+                    "() => document.getElementById('history-panel-subtitle')?.textContent?.includes('7d')",
+                    timeout=5000,
+                )
+                self.assertEqual(page.get_attribute('link[rel="manifest"]', "href"), "/manifest.webmanifest")
+                self._assert_layout_and_touch_targets(page, width, f"system-history@{width}")
+                self._assert_axe_wcag_aa(page, f"system-history@{width}x{height}")
+                self.assertEqual(ext_reqs, [])
                 self.assertEqual(page_errors, [])
             finally:
                 context.close()
