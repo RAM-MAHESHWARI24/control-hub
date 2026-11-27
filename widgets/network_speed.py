@@ -365,6 +365,62 @@ def probe_tailscale_status() -> dict:
     }
 
 
+def probe_tailscale_https(tailscale: dict, listen_port: int = PORT) -> dict:
+    """Inspects Tailscale Serve HTTPS status and returns safe remote setup commands."""
+    ts = tailscale if isinstance(tailscale, dict) else {}
+    installed = bool(ts.get("installed"))
+    connected = bool(ts.get("connected"))
+    dns_name = str(ts.get("dns_name") or "").strip().rstrip(".") or None
+    port_int = int(listen_port or PORT)
+    example_host = dns_name or "<node>.<tailnet>.ts.net"
+    serve_cmd = f"sudo tailscale serve --bg {port_int}"
+    cert_cmd = f"sudo tailscale cert {example_host}"
+    https_url = f"https://{dns_name}" if dns_name else None
+
+    serve_active = False
+    serve_targets: list[str] = []
+    probe_error = None
+    ts_bin = shutil.which("tailscale") if installed and connected else None
+
+    if ts_bin:
+        try:
+            proc = subprocess.run(
+                [ts_bin, "serve", "status", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            raw = (proc.stdout or "").strip()
+            if raw and raw != "{}":
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    web = parsed.get("Web") or {}
+                    tcp = parsed.get("TCP") or {}
+                    for host_port, entry in (web.items() if isinstance(web, dict) else []):
+                        if isinstance(entry, dict) and entry.get("Handlers"):
+                            serve_active = True
+                            serve_targets.append(str(host_port))
+                    for pnum, entry in (tcp.items() if isinstance(tcp, dict) else []):
+                        if isinstance(entry, dict) and entry.get("HTTPS"):
+                            serve_active = True
+                            serve_targets.append(str(pnum))
+        except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError) as exc:
+            probe_error = str(exc)[:140]
+
+    return {
+        "installed": installed,
+        "connected": connected,
+        "dns_name": dns_name,
+        "https_url": https_url,
+        "serve_active": serve_active,
+        "serve_targets": serve_targets,
+        "serve_cmd": serve_cmd,
+        "cert_cmd": cert_cmd,
+        "probe_error": probe_error,
+    }
+
+
 def _running_docker_ports() -> dict[int, list[str]]:
     """Returns {host_port: [container_names]} for currently running Docker containers."""
     try:
@@ -450,6 +506,7 @@ def get_network_overview():
     try:
         net = probe_network_interfaces()
         tailscale = probe_tailscale_status()
+        ts_https = probe_tailscale_https(tailscale, PORT)
         ports, conflicts = build_port_map()
         return jsonify({
             "status": "success",
@@ -459,6 +516,7 @@ def get_network_overview():
             "dns_servers": net.get("dns_servers", []),
             "interfaces": net.get("interfaces", []),
             "tailscale": tailscale,
+            "tailscale_https": ts_https,
             "ports": ports,
             "port_conflicts": conflicts,
         })

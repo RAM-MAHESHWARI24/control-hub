@@ -88,4 +88,5 @@ export const ENDPOINTS = {
   configNetplanApply: "/api/config/netplan-apply",
   configNetplanConfirm: "/api/config/netplan-confirm",
   configNetplanStatus: "/api/config/netplan-status",
+  troubleshoot: "/api/troubleshoot",
 };

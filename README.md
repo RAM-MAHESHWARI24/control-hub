@@ -218,6 +218,7 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/config/ai-diagnostics` | None | Returns hardware specs and ~300-token preformatted AI prompt |
 | `POST` | `/api/config/netplan-preview` | `{"ip": "...", "gateway": "..."}` | Generates clean Netplan YAML configuration |
 | `POST` | `/api/config/netplan-apply` | `{"interface": "...", "ip": ".../24", "gateway": "...", "dns": [...]}` | Applies with a revert timer; confirm with `POST /api/config/netplan-confirm`, inspect with `GET /api/config/netplan-status` |
+| `GET` | `/api/troubleshoot` | None | Runs unified read-only checks across telemetry, hardlinks, disk headroom, Docker containers, indexers, backups, network/Tailscale HTTPS, and Sleep Guard schedules with plain-word fix steps |
 
 ---
 

@@ -24,7 +24,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=38" />
+  <link rel="stylesheet" href="css/style.css?v=39" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -121,6 +121,10 @@
           <button type="button" class="dropdown-item" data-proxy-click="btn-open-ai-copilot">
             <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-sparkles"></use></svg>
             <span>AI Copilot Diagnostics</span>
+          </button>
+          <button type="button" id="btn-open-troubleshoot" class="dropdown-item owner-only-control">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-activity"></use></svg>
+            <span>Troubleshoot &amp; Guides</span>
           </button>
           <button type="button" id="btn-open-account" class="dropdown-item" data-open-account="true">
             <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-user"></use></svg>
@@ -443,6 +447,7 @@
               <span class="panel-subtitle card-summary" id="media-hub-summary">Checking Prowlarr indexers and media pipeline&hellip;</span>
             </div>
             <div class="panel-actions">
+              <button type="button" class="btn-ghost owner-only-control" data-howto-guide="add_indexer">How-To</button>
               <button type="button" id="btn-media-test-indexers" class="btn-secondary">Test Indexers</button>
               <button type="button" id="btn-media-scan-jellyfin" class="btn-secondary">Scan Jellyfin Library</button>
             </div>
@@ -504,6 +509,7 @@
               </div>
               <div class="panel-actions">
                 <span class="badge badge-neutral" id="backup-status-badge">Unknown</span>
+                <button type="button" class="btn-ghost" data-howto-guide="restore_backup">How-To</button>
                 <button type="button" id="btn-view-backup-log" class="btn-secondary">Log</button>
                 <button type="button" id="btn-sync-card" class="btn-primary">
                   <span class="btn-spinner" id="card-sync-spinner" style="display: none;" aria-hidden="true"></span>
@@ -752,6 +758,7 @@
             </div>
             <div class="panel-actions">
               <span class="badge badge-neutral" id="tv-status-badge">Checking</span>
+              <button type="button" class="btn-ghost" data-howto-guide="add_tv">How-To</button>
               <button type="button" id="btn-add-tv" class="btn-secondary">Add a TV</button>
               <button type="button" id="btn-view-tv-log" class="btn-secondary">Log</button>
               <button type="button" id="btn-open-tv-details" class="btn-secondary">App Matrix</button>
@@ -893,6 +900,7 @@
             </div>
             <div class="panel-actions">
               <span class="badge badge-neutral" id="storage-forecast-badge">Forecast</span>
+              <button type="button" class="btn-ghost" data-howto-guide="free_space">How-To</button>
               <button type="button" class="btn-secondary" id="btn-storage-refresh">Refresh Storage</button>
             </div>
           </div>
@@ -1095,6 +1103,7 @@
               <span class="panel-subtitle card-summary" id="net-health-summary">Probing network interfaces, Tailscale, and host ports&hellip;</span>
             </div>
             <div class="panel-actions">
+              <button type="button" class="btn-ghost" data-howto-guide="tailscale_https">HTTPS Guide</button>
               <button type="button" id="btn-open-netplan-modal" class="btn-secondary">Static IP &amp; Netplan</button>
             </div>
           </div>
@@ -1248,6 +1257,13 @@
                 <span><strong>AI Copilot Snapshot</strong><small>Copy token-compact host diagnostics</small></span>
               </div>
               <button type="button" class="btn-secondary" data-proxy-click="btn-open-ai-copilot">Diagnostics</button>
+            </div>
+            <div class="panel tool-shortcut-row owner-only-control" id="tool-row-troubleshoot">
+              <div class="tool-shortcut-meta">
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-activity"></use></svg>
+                <span><strong>Troubleshoot &amp; Guides</strong><small>Run plain-English health checks &amp; how-to walkthroughs</small></span>
+              </div>
+              <button type="button" class="btn-secondary" data-proxy-click="btn-open-troubleshoot">Troubleshoot</button>
             </div>
             <div class="panel tool-shortcut-row">
               <div class="tool-shortcut-meta">
@@ -2106,7 +2122,64 @@
     </div>
   </div>
 
+  <!-- 12. Troubleshoot Health Runner Modal (Phase 4F) -->
+  <div class="modal-overlay" id="troubleshoot-modal" role="dialog" aria-modal="true" aria-labelledby="troubleshoot-modal-title" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div>
+          <h2 id="troubleshoot-modal-title">Troubleshoot &amp; Health Checks</h2>
+          <p class="modal-sub">Live checks across storage, hardlinks, Docker apps, indexers, backups, network, and Sleep Guard.</p>
+        </div>
+        <button type="button" class="modal-close" id="troubleshoot-modal-close" aria-label="Close troubleshoot diagnostics">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="troubleshoot-toolbar">
+          <div class="meta-pills-row" id="troubleshoot-summary-pills">
+            <span class="badge badge-neutral">Running checks&hellip;</span>
+          </div>
+          <div class="troubleshoot-toolbar-btns">
+            <button type="button" class="btn-secondary" id="btn-troubleshoot-open-guides">How-To Guides</button>
+            <button type="button" class="btn-primary" id="btn-troubleshoot-rerun">Re-run Checks</button>
+          </div>
+        </div>
+        <div id="troubleshoot-checks-list" class="troubleshoot-list">
+          <div class="empty-state">Running checks&hellip;</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" id="troubleshoot-modal-dismiss">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. Contextual How-To Guides Modal (Phase 4F) -->
+  <div class="modal-overlay" id="howto-guide-modal" role="dialog" aria-modal="true" aria-labelledby="howto-modal-title" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div>
+          <h2 id="howto-modal-title">How-To Guide</h2>
+          <p class="modal-sub" id="howto-modal-subtitle">Step-by-step walkthrough for common tasks.</p>
+        </div>
+        <button type="button" class="modal-close" id="howto-modal-close" aria-label="Close how-to guide">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="howto-tabs-row" role="group" aria-label="Select how-to topic">
+          <button type="button" class="btn-secondary tv-brand-tab" data-howto-select="restore_backup" aria-pressed="true">Restore Backup</button>
+          <button type="button" class="btn-secondary tv-brand-tab" data-howto-select="add_tv" aria-pressed="false">Add a TV</button>
+          <button type="button" class="btn-secondary tv-brand-tab" data-howto-select="add_indexer" aria-pressed="false">Add Indexer</button>
+          <button type="button" class="btn-secondary tv-brand-tab" data-howto-select="free_space" aria-pressed="false">Free Space</button>
+          <button type="button" class="btn-secondary tv-brand-tab" data-howto-select="tailscale_https" aria-pressed="false">Tailscale HTTPS</button>
+        </div>
+        <div id="howto-modal-body" class="howto-modal-body"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="btn-howto-jump">Open View</button>
+        <button type="button" class="btn-ghost" id="howto-modal-dismiss">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/auth.js?v=5"></script>
-  <script type="module" src="/js/app.js?v=37"></script>
+  <script type="module" src="/js/app.js?v=38"></script>
 </body>
 </html>

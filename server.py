@@ -30,6 +30,7 @@ from widgets.alerts import alerts_bp, start_alerts
 from widgets.updates import updates_bp
 from widgets.photos_hub import photos_hub_bp
 from widgets.storage_hub import storage_hub_bp
+from widgets.troubleshoot import troubleshoot_bp
 
 APP_START_TIME = time.time()
 
@@ -156,6 +157,7 @@ def create_app():
     app.register_blueprint(updates_bp)
     app.register_blueprint(photos_hub_bp)
     app.register_blueprint(storage_hub_bp)
+    app.register_blueprint(troubleshoot_bp)
 
     # 5. Catch-all static proxy
     @app.route("/<path:path>")

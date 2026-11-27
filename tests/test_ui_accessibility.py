@@ -530,6 +530,17 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                     "peer_count": 3,
                     "error": None,
                 },
+                "tailscale_https": {
+                    "installed": True,
+                    "connected": True,
+                    "dns_name": "homelab.tailnet.ts.net",
+                    "https_url": "https://homelab.tailnet.ts.net",
+                    "serve_active": True,
+                    "serve_targets": ["homelab.tailnet.ts.net:443"],
+                    "serve_cmd": "sudo tailscale serve --bg 7575",
+                    "cert_cmd": "sudo tailscale cert homelab.tailnet.ts.net",
+                    "probe_error": None,
+                },
                 "ports": [
                     {"key": "control_hub", "name": "Control Hub Dashboard", "port": 7575, "category": "system", "in_use": True, "state_label": "Listening", "conflict": False},
                     {"key": "jellyfin_http", "name": "Jellyfin Web", "port": 8096, "category": "media", "in_use": True, "state_label": "Listening (jellyfin)", "conflict": False},
@@ -1219,6 +1230,33 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 "family_enabled": False,
                 "family_lan_open": False,
             })
+
+    def test_troubleshoot_howto_and_tailscale_https_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height, "#/system")
+            try:
+                page.wait_for_selector("#net-tailscale-https-box", state="visible", timeout=5000)
+                https_txt = page.inner_text("#net-tailscale-https-box")
+                self.assertIn("https://homelab.tailnet.ts.net", https_txt)
+                self.assertIn("sudo tailscale serve --bg 7575", https_txt)
+
+                # Open Contextual How-To Guide from Network card
+                page.click("#btn-ts-https-guide")
+                page.wait_for_selector("#howto-guide-modal", state="visible", timeout=5000)
+                self.assertIn("Remote HTTPS Access via Tailscale", page.inner_text("#howto-modal-title"))
+                self._assert_axe_wcag_aa(page, f"howto-modal@{width}x{height}")
+                page.click("#howto-modal-dismiss")
+                page.wait_for_selector("#howto-guide-modal", state="hidden", timeout=5000)
+
+                # Open Unified Troubleshoot Runner from header menu
+                page.click("#btn-header-menu")
+                page.click("#btn-open-troubleshoot")
+                page.wait_for_selector("#troubleshoot-modal", state="visible", timeout=5000)
+                page.wait_for_selector("#troubleshoot-checks-list .troubleshoot-item", state="visible", timeout=8000)
+                self._assert_axe_wcag_aa(page, f"troubleshoot-modal@{width}x{height}")
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
 
 
 if __name__ == "__main__":

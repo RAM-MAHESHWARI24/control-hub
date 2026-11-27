@@ -1129,6 +1129,17 @@ paths:
         '200':
           description: "{success, message}"
 
+  /api/troubleshoot:
+    get:
+      summary: Run unified read-only troubleshoot checks across Control Hub subsystems
+      description: Checks telemetry sampler, storage headroom, /data hardlink invariant, Docker services, Prowlarr indexers, backups, network/Tailscale HTTPS, and Sleep Guard schedules with plain-English explanations and fix steps.
+      tags: [Diagnostics]
+      responses:
+        '200':
+          description: "{overall_status, ok_count, warn_count, fail_count, checks, generated_at}"
+        '403':
+          description: Restricted to owner role
+
 components:
   securitySchemes:
     bearerToken:

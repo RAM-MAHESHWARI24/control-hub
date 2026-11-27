@@ -4,10 +4,12 @@
  * unified service port map with conflict flags, and jumps cleanly to Netplan static IP.
  */
 
-import { $ } from "../shared/dom.js";
+import { $, copyTextToClipboard } from "../shared/dom.js";
 import { ENDPOINTS } from "../config.js";
 import { escapeHtml } from "../shared/formatters.js";
+import { showToast } from "../shared/toast.js";
 import { openConfigCenterTab } from "./configCenter.js";
+import { openHowToGuide } from "./helpDrawer.js";
 
 function renderInterfaces(interfaces, currentIp, gateway, dnsServers) {
   const tbody = $("net-interfaces-tbody");
@@ -52,13 +54,14 @@ function renderInterfaces(interfaces, currentIp, gateway, dnsServers) {
   }).join("");
 }
 
-function renderTailscale(ts) {
+function renderTailscale(ts, tsHttps) {
   const box = $("net-tailscale-body");
   if (!box) return;
   if (!ts || !ts.installed) {
     box.innerHTML = '<div class="empty-state">Tailscale CLI not installed on this host.</div>';
     return;
   }
+  const httpsInfo = tsHttps && typeof tsHttps === "object" ? tsHttps : {};
   const badgeCls = ts.connected ? "badge-ok" : "badge-warn";
   const stateTxt = ts.connected ? "Connected" : (ts.backend_state || "Disconnected");
   const routesTxt = ts.subnet_router
@@ -66,6 +69,13 @@ function renderTailscale(ts) {
     : "Off";
   const fwdTxt = ts.ip_forwarding === true ? "Enabled" : (ts.ip_forwarding === false ? "Disabled" : "Unknown");
   const errNote = ts.error ? `<div class="inline-callout is-warning">${escapeHtml(ts.error)}</div>` : "";
+  const httpsBadgeCls = httpsInfo.serve_active ? "badge-ok" : "badge-neutral";
+  const httpsStateTxt = httpsInfo.serve_active ? "HTTPS Active" : "Serve Off";
+  const serveCmd = httpsInfo.serve_cmd || "sudo tailscale serve --bg 7575";
+  const httpsLinkHtml = httpsInfo.https_url
+    ? `<a href="${escapeHtml(httpsInfo.https_url)}" target="_blank" rel="noopener" class="btn-secondary net-https-link font-mono">${escapeHtml(httpsInfo.https_url)}</a>`
+    : '<span class="text-muted">Requires MagicDNS</span>';
+
   box.innerHTML = `
     <div class="kv-row"><span>Status:</span><span class="badge ${badgeCls}">${escapeHtml(stateTxt)}</span></div>
     <div class="kv-row"><span>Tailnet IP:</span><strong class="font-mono">${escapeHtml(ts.tailnet_ip || "--")}</strong></div>
@@ -73,8 +83,39 @@ function renderTailscale(ts) {
     <div class="kv-row"><span>Subnet Router:</span><strong class="font-mono">${escapeHtml(routesTxt)}</strong></div>
     <div class="kv-row"><span>IPv4 Forwarding:</span><strong class="font-mono">${escapeHtml(fwdTxt)}</strong></div>
     <div class="kv-row"><span>Online Peers:</span><strong class="font-mono">${escapeHtml(String(ts.peer_count ?? 0))}</strong></div>
+    <div class="net-https-box" id="net-tailscale-https-box">
+      <div class="kv-row">
+        <span>Away from Home (HTTPS):</span>
+        <span class="badge ${httpsBadgeCls}">${escapeHtml(httpsStateTxt)}</span>
+      </div>
+      <div class="net-https-url-row">
+        <span class="text-muted">Remote URL:</span>
+        ${httpsLinkHtml}
+      </div>
+      <div class="net-https-cmd-row">
+        <code class="font-mono">${escapeHtml(serveCmd)}</code>
+        <button type="button" class="btn-secondary btn-copy-ts-serve" data-cmd="${escapeHtml(serveCmd)}">Copy</button>
+        <button type="button" class="btn-ghost" id="btn-ts-https-guide">Setup Guide</button>
+      </div>
+    </div>
     ${errNote}
   `;
+
+  const copyBtn = box.querySelector(".btn-copy-ts-serve");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      const ok = await copyTextToClipboard(copyBtn.getAttribute("data-cmd") || serveCmd);
+      showToast(
+        ok ? "Command Copied" : "Copy Blocked",
+        ok ? "Run this over SSH to enable Tailscale HTTPS." : "Clipboard blocked on this origin.",
+        ok ? "success" : "warning"
+      );
+    });
+  }
+  const guideBtn = box.querySelector("#btn-ts-https-guide");
+  if (guideBtn) {
+    guideBtn.addEventListener("click", () => openHowToGuide("tailscale_https", guideBtn));
+  }
 }
 
 function renderPortMap(ports, conflicts) {
@@ -122,7 +163,7 @@ export async function fetchNetworkOverview() {
     const data = await res.json();
     const interfaces = data.interfaces || [];
     renderInterfaces(interfaces, data.current_ip, data.default_gateway, data.dns_servers);
-    renderTailscale(data.tailscale || {});
+    renderTailscale(data.tailscale || {}, data.tailscale_https || {});
     renderPortMap(data.ports || [], data.port_conflicts || []);
 
     const degraded = interfaces.filter((n) => n.degraded).length;

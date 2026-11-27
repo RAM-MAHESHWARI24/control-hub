@@ -108,6 +108,15 @@ def _record_failure(ip: str) -> None:
         _failures[ip].append(time.monotonic())
 
 
+def _is_https_request() -> bool:
+    """Returns True when served directly over TLS or behind an HTTPS reverse proxy (e.g. Tailscale Serve)."""
+    if request.is_secure:
+        return True
+    fwd_proto = request.headers.get("X-Forwarded-Proto", "")
+    first = fwd_proto.split(",")[0].strip().lower()
+    return first == "https"
+
+
 def _set_session_cookie(response, cookie_val: str):
     response.set_cookie(
         SESSION_COOKIE,
@@ -115,7 +124,7 @@ def _set_session_cookie(response, cookie_val: str):
         max_age=SESSION_MAX_AGE,
         httponly=True,
         samesite="Strict",
-        secure=request.is_secure,
+        secure=_is_https_request(),
         path="/",
     )
     return response

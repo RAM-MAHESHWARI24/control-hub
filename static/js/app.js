@@ -31,6 +31,7 @@ import { fetchIndexerStatus, setupIndexers } from "./widgets/indexers.js";
 import { fetchMediaHub, setupMediaHub } from "./widgets/mediaHub.js";
 import { fetchAlerts, setupAlerts } from "./widgets/alerts.js";
 import { fetchUpdates, setupUpdates } from "./widgets/updates.js";
+import { setupHelpDrawer } from "./widgets/helpDrawer.js";
 
 const FAST_POLL_MS = 2500;
 const MEDIUM_POLL_MS = 15000;
@@ -319,6 +320,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupMediaHub();
   setupAlerts();
   setupUpdates();
+  setupHelpDrawer();
 
   try {
     const authInfo = await window.HomelabAuth?.ready?.();

@@ -4297,6 +4297,7 @@ html[data-auth-role="family"] #btn-open-alerts,
 html[data-auth-role="family"] #btn-open-config-center,
 html[data-auth-role="family"] #btn-open-indexers,
 html[data-auth-role="family"] #btn-open-ai-copilot,
+html[data-auth-role="family"] #btn-open-troubleshoot,
 html[data-auth-role="family"] #updates-panel,
 html[data-auth-role="family"] #btn-media-test-indexers,
 html[data-auth-role="family"] #btn-media-scan-jellyfin,
@@ -4687,4 +4688,174 @@ html[data-auth-role="family"] [data-proxy-click="btn-open-ai-copilot"] {
   .system-two-col {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
   }
+}
+
+/* ==========================================================================
+   Phase 4A & 4F: Tailscale Remote HTTPS, Troubleshoot & Contextual How-To Guides
+   ========================================================================== */
+
+.net-https-box {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: var(--rule-hair) solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.net-https-cmd-row,
+.howto-cmd-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-2xs);
+}
+
+.net-https-url-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2xs);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.net-https-link {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: left;
+  padding: var(--space-2xs) var(--space-sm);
+}
+
+.net-https-cmd-row code,
+.howto-cmd-row code {
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: var(--rule-hair) solid var(--border-subtle);
+  background: var(--bg-elevated);
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.troubleshoot-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.troubleshoot-toolbar-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.troubleshoot-list,
+.howto-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.troubleshoot-item,
+.howto-step-card {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  border: var(--rule-hair) solid var(--border-subtle);
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.troubleshoot-item.troubleshoot-fail {
+  border-color: var(--danger-border);
+}
+
+.troubleshoot-item.troubleshoot-warn {
+  border-color: var(--warning-border);
+}
+
+.troubleshoot-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.troubleshoot-item-head > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.troubleshoot-summary-line {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.troubleshoot-explain,
+.howto-step-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.troubleshoot-fix-list {
+  margin: 0;
+  padding-left: var(--space-lg);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+}
+
+.troubleshoot-item-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-3xs);
+}
+
+.howto-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+
+.howto-step-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.howto-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
 }
