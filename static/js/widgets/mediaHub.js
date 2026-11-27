@@ -6,6 +6,7 @@
  */
 
 import { $ } from "../shared/dom.js";
+import { state } from "../state.js";
 import { ENDPOINTS } from "../config.js";
 import { escapeHtml } from "../shared/formatters.js";
 import { showToast } from "../shared/toast.js";
@@ -15,19 +16,56 @@ const mediaHubSummary = $("media-hub-summary");
 const mediaHubBody = $("media-hub-body");
 const btnTestIndexers = $("btn-media-test-indexers");
 const btnScanJellyfin = $("btn-media-scan-jellyfin");
+const familyRecentMedia = $("family-recent-media");
+const familyRequestsBody = $("family-requests-body");
+const familyMediaSummary = $("family-media-summary");
 
 let activeTab = "indexers";
 let lastData = { indexers: null, media: null };
 
+function renderFamilyOverview() {
+  if (!familyRecentMedia || !familyRequestsBody) return;
+  const media = lastData.media || {};
+  const recent = Array.isArray(media?.library?.jellyfin?.recent) ? media.library.jellyfin.recent : [];
+  const reqs = Array.isArray(media?.requests?.items) ? media.requests.items : [];
+  if (familyMediaSummary) {
+    familyMediaSummary.textContent = `${recent.length} recent addition${recent.length === 1 ? "" : "s"} · ${reqs.length} pending request${reqs.length === 1 ? "" : "s"}`;
+  }
+  familyRecentMedia.innerHTML = recent.length
+    ? recent.map((it) => `<span class="well toolbar-stat font-mono">${escapeHtml(it.name)}${it.year ? ` (${escapeHtml(it.year)})` : ""}</span>`).join("")
+    : `<span class="text-muted">No recent Jellyfin additions yet.</span>`;
+  familyRequestsBody.innerHTML = reqs.length
+    ? `<ol class="trail audit-trail-list">${reqs.map((r) => `
+        <li class="audit-trail-item">
+          <span class="audit-trail-label">${escapeHtml(r.title)} (${escapeHtml(r.type || "media")})</span>
+          <span class="audit-trail-meta">${escapeHtml(r.requested_by || "Family")} · ${escapeHtml(r.waiting_reason || "Pending")}</span>
+        </li>
+      `).join("")}</ol>`
+    : `<span class="text-muted">No pending Seerr requests right now.</span>`;
+}
+
 function renderTabContent() {
+  renderFamilyOverview();
   if (!mediaHubBody) return;
+  const isFamily = state.authRole === "family";
+  if (isFamily && activeTab === "indexers") {
+    activeTab = "library";
+    mediaHubPanel?.querySelectorAll(".media-hub-tab").forEach((b) => {
+      b.setAttribute("aria-selected", String(b.dataset.tab === activeTab));
+    });
+  }
   const ix = lastData.indexers;
   const media = lastData.media;
 
   if (mediaHubSummary) {
-    const failing = Number(ix?.failing || 0);
     const reqs = Array.isArray(media?.requests?.items) ? media.requests.items.length : 0;
-    mediaHubSummary.textContent = `${ix?.total || 0} indexers (${failing} failing) · ${reqs} pending request${reqs === 1 ? "" : "s"}`;
+    if (isFamily) {
+      const recentCount = Array.isArray(media?.library?.jellyfin?.recent) ? media.library.jellyfin.recent.length : 0;
+      mediaHubSummary.textContent = `${recentCount} recent title${recentCount === 1 ? "" : "s"} · ${reqs} pending request${reqs === 1 ? "" : "s"}`;
+    } else {
+      const failing = Number(ix?.failing || 0);
+      mediaHubSummary.textContent = `${ix?.total || 0} indexers (${failing} failing) · ${reqs} pending request${reqs === 1 ? "" : "s"}`;
+    }
   }
 
   if (activeTab === "indexers") {
@@ -97,8 +135,10 @@ function renderTabContent() {
               <td>${escapeHtml(r.requested_by)}</td>
               <td>${escapeHtml(r.waiting_reason)}</td>
               <td class="actions-col">
+                ${isFamily ? `<span class="badge">Read-only</span>` : `
                 <button type="button" class="btn-primary btn-req-decide" data-req-id="${escapeHtml(r.id)}" data-decision="approve">Approve</button>
                 <button type="button" class="btn-ghost btn-req-decide" data-req-id="${escapeHtml(r.id)}" data-decision="decline">Decline</button>
+                `}
               </td>
             </tr>
           `).join("")}
@@ -187,16 +227,17 @@ async function decideRequest(reqId, decision, btn) {
 }
 
 export async function fetchMediaHub() {
-  if (!mediaHubPanel) return false;
+  if (!mediaHubPanel && !familyRecentMedia) return false;
   try {
+    const isFamily = state.authRole === "family";
     const [ixRes, mediaRes] = await Promise.allSettled([
-      fetch(ENDPOINTS.indexersHealth),
+      isFamily ? Promise.resolve(null) : fetch(ENDPOINTS.indexersHealth),
       fetch(ENDPOINTS.mediaOverview),
     ]);
-    if (ixRes.status === "fulfilled" && ixRes.value.ok) {
+    if (ixRes.status === "fulfilled" && ixRes.value && ixRes.value.ok) {
       lastData.indexers = await ixRes.value.json();
     }
-    if (mediaRes.status === "fulfilled" && mediaRes.value.ok) {
+    if (mediaRes.status === "fulfilled" && mediaRes.value && mediaRes.value.ok) {
       lastData.media = await mediaRes.value.json();
     }
     renderTabContent();

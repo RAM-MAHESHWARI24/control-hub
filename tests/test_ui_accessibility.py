@@ -735,10 +735,13 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         violations = raw.get("violations", []) if isinstance(raw, dict) else []
         bad = [v for v in violations if v.get("impact") in ("critical", "serious")]
         if bad:
-            summary = [
-                f"{v['id']} ({v['impact']}): {v['help']} -> {[n.get('target') for n in v.get('nodes', [])]}"
-                for v in bad
-            ]
+            summary = []
+            for v in bad:
+                node_details = [
+                    f"{n.get('target')} ({(n.get('failureSummary') or '').strip()})"
+                    for n in v.get("nodes", [])
+                ]
+                summary.append(f"{v['id']} ({v['impact']}): {v['help']} -> {node_details}")
             self.fail(f"WCAG 2.2 AA violations ({label}):\n" + "\n".join(summary))
 
     def test_responsive_all_five_views_both_themes_and_zero_external_requests(self) -> None:
@@ -1148,6 +1151,74 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 self.assertEqual(page_errors, [])
             finally:
                 context.close()
+
+    def test_account_security_tabs_and_family_view_accessible(self) -> None:
+        # 1. Owner Account & Access modal (Password & 2FA, Signed-in Devices, Family View tabs)
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height, "#/overview")
+            try:
+                page.click("#btn-header-menu")
+                page.click("#btn-open-account")
+                page.wait_for_selector("#hub-account-overlay", state="visible", timeout=5000)
+
+                page.click("#acct-tab-btn-devices")
+                page.wait_for_selector("#hub-sessions-list .auth-device-row", state="visible", timeout=5000)
+                self._assert_axe_wcag_aa(page, f"account-devices@{width}x{height}")
+
+                page.click("#acct-tab-btn-family")
+                page.wait_for_selector("#hub-family-form", state="visible", timeout=5000)
+                self._assert_axe_wcag_aa(page, f"account-family@{width}x{height}")
+
+                page.click("#acct-tab-btn-security")
+                page.click("#btn-totp-setup")
+                page.wait_for_selector("#totp-secret-display", state="visible", timeout=5000)
+                self._assert_axe_wcag_aa(page, f"account-totp@{width}x{height}")
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+
+        # 2. Read-only Family View (hides admin controls, shows What's New & Requests banner/panel)
+        client = self.app.test_client()
+        hdrs = {"Authorization": f"Bearer {self.app.config['CONTROL_HUB_TOKEN']}"}
+        self.assertEqual(
+            client.post("/api/auth/access", headers=hdrs, json={
+                "family_enabled": True,
+                "family_lan_open": False,
+                "family_password": "FamilyViewPass1!",
+            }).status_code,
+            200,
+        )
+        try:
+            for width, height in ((1366, 900), (360, 800)):
+                context = self.browser.new_context(viewport={"width": width, "height": height})
+                page = context.new_page()
+                page_errors = []
+                page.on("pageerror", lambda err, errs=page_errors: errs.append(str(err)))
+                login_res = context.request.post(
+                    f"{self.base_url}/api/auth/login",
+                    data={"password": "FamilyViewPass1!"},
+                )
+                self.assertEqual(login_res.status, 200)
+                page.goto(f"{self.base_url}/#/overview", wait_until="domcontentloaded")
+                page.wait_for_selector("#family-mode-banner", state="visible", timeout=5000)
+                page.wait_for_selector("#family-whats-new-panel", state="visible", timeout=5000)
+                page.wait_for_function(
+                    "() => !document.getElementById('footer-refresh-btn')?.disabled",
+                    timeout=5000,
+                )
+                page.evaluate("() => document.fonts.ready")
+                page.evaluate("() => window.scrollTo(0, 0)")
+                self.assertTrue(page.locator("#nav-item-system").is_hidden())
+                self.assertTrue(page.locator("#btn-open-config-center").is_hidden())
+                self._assert_layout_and_touch_targets(page, width, f"family-overview@{width}")
+                self._assert_axe_wcag_aa(page, f"family-overview@{width}x{height}")
+                self.assertEqual(page_errors, [])
+                context.close()
+        finally:
+            client.post("/api/auth/access", headers=hdrs, json={
+                "family_enabled": False,
+                "family_lan_open": False,
+            })
 
 
 if __name__ == "__main__":

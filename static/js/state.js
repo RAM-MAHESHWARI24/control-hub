@@ -19,7 +19,8 @@ export const state = {
     medium: null,
   },
 
-  // Host metadata
+  // Host metadata & active role ("owner" | "family")
+  authRole: "owner",
   hostname: "",
   hubPort: window.location.port || "7575",
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",

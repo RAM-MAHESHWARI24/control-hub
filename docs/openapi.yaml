@@ -647,7 +647,7 @@ paths:
   /api/auth/check:
     get:
       summary: Validate the session cookie or bearer token
-      description: Returns 200 when the request is signed in (cookie or token), 401 otherwise.
+      description: Returns 200 when the request is signed in (cookie, token, or LAN family access), 401 otherwise.
       tags: [Auth]
       responses:
         '200':
@@ -659,8 +659,61 @@ paths:
                 properties:
                   status: { type: string, example: ok }
                   authenticated: { type: boolean, example: true }
+                  role: { type: string, enum: [owner, family] }
+                  session_id: { type: string, nullable: true }
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/auth/sessions:
+    get:
+      summary: List signed-in browser sessions (owner only)
+      tags: [Auth]
+      responses:
+        '200': { description: Active sessions with device label, IP, role, and timestamps }
+        '403': { description: Owner sign-in required }
+  /api/auth/sessions/{session_id}:
+    delete:
+      summary: Sign out a specific signed-in device session (owner only)
+      tags: [Auth]
+      parameters:
+        - { in: path, name: session_id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Session revoked }
+        '404': { description: Session not found }
+  /api/auth/sessions/revoke-others:
+    post:
+      summary: Sign out every browser session except the caller (owner only)
+      tags: [Auth]
+      responses:
+        '200': { description: Revoked count }
+  /api/auth/access:
+    get:
+      summary: Read Family View and owner 2FA settings (owner only)
+      tags: [Auth]
+      responses:
+        '200': { description: Family & TOTP configuration flags }
+    post:
+      summary: Update read-only Family View settings (password or local LAN open)
+      tags: [Auth]
+      responses:
+        '200': { description: Updated family configuration }
+  /api/auth/totp/setup:
+    post:
+      summary: Generate a pending TOTP secret and otpauth URI for the owner
+      tags: [Auth]
+      responses:
+        '200': { description: Base32 secret, grouped display secret, and otpauth:// URI }
+  /api/auth/totp/enable:
+    post:
+      summary: Verify a 6-digit TOTP code and enable owner 2FA with one-time recovery codes
+      tags: [Auth]
+      responses:
+        '200': { description: Enabled with 6 recovery codes }
+  /api/auth/totp/disable:
+    post:
+      summary: Disable owner TOTP 2FA after confirming the owner password
+      tags: [Auth]
+      responses:
+        '200': { description: 2FA disabled }
 
   /api/config/netplan-preview:
     post:

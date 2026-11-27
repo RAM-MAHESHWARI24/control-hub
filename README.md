@@ -196,6 +196,9 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `POST` | `/api/sleep/schedule-permanent` | Updates or disables the recurring nightly sleep schedule |
 | `GET` | `/api/cron/status` | All installed timed jobs (`next_run`, `last_run`, `editable`) plus sleep/backup clash warnings |
 | `POST` | `/api/cron/schedule/<job_id>` | Previews (`preview_only: true`) or updates a job's cron/Sleep Guard schedule and recalculates clashes |
+| `GET` | `/api/auth/sessions` | Lists tracked browser sessions (device label, IP, role, last seen) for per-device sign-out (`DELETE /api/auth/sessions/<id>`) |
+| `GET`/`POST` | `/api/auth/access` | Reads or updates read-only Family View (`family_enabled`, `family_lan_open`, `family_password`) |
+| `POST` | `/api/auth/totp/{setup,enable,disable}` | Configures optional RFC 6238 TOTP two-factor authentication + recovery codes for owner logins |
 
 ### Configuration Center Endpoints (`widgets/config_center.py`)
 

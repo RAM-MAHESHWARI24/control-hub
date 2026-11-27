@@ -4179,6 +4179,138 @@ td.ledger-cell-group {
   gap: var(--space-xs);
 }
 
+.auth-card-wide {
+  width: min(94vw, 560px);
+  max-height: min(90vh, 760px);
+  overflow-y: auto;
+}
+
+.auth-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-xs);
+}
+
+.auth-tab-btn {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-tab-btn[aria-selected="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.auth-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.auth-subcard {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.auth-subcard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.totp-secret-box {
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  word-break: break-word;
+}
+
+.totp-recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-xs);
+}
+
+.auth-devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.auth-device-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.auth-device-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.auth-check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.auth-check-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+/* Read-only Family View restrictions */
+html[data-auth-role="family"] .owner-only-control,
+html[data-auth-role="family"] #btn-open-alerts,
+html[data-auth-role="family"] #btn-open-config-center,
+html[data-auth-role="family"] #btn-open-indexers,
+html[data-auth-role="family"] #btn-open-ai-copilot,
+html[data-auth-role="family"] #updates-panel,
+html[data-auth-role="family"] #btn-media-test-indexers,
+html[data-auth-role="family"] #btn-media-scan-jellyfin,
+html[data-auth-role="family"] .media-hub-tab[data-tab="indexers"],
+html[data-auth-role="family"] #btn-toggle-torrents,
+html[data-auth-role="family"] #sleep-action-cluster,
+html[data-auth-role="family"] .btn-tile-logs,
+html[data-auth-role="family"] .btn-tile-restart,
+html[data-auth-role="family"] .btn-tile-stop,
+html[data-auth-role="family"] [data-proxy-click="btn-open-config-center"],
+html[data-auth-role="family"] [data-proxy-click="btn-open-ai-copilot"] {
+  display: none !important;
+}
+
 /* ==========================================================================
    Toasts & Pull-to-Refresh
    ========================================================================== */

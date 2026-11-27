@@ -49,7 +49,8 @@ function parseHashView() {
 
 export function activateView(viewName, updateHash = false) {
   let target = VALID_VIEWS.includes(viewName) ? viewName : "overview";
-  // Guard against navigating into an uninstalled module view
+  // Guard against navigating into an uninstalled module view or restricted family view
+  if (state.authRole === "family" && target !== "overview" && target !== "apps") target = "overview";
   if (target === "backups" && state.modules.backups === false) target = "overview";
   if (target === "tvs" && state.modules.tvs === false) target = "overview";
 
@@ -122,6 +123,14 @@ async function pollFastTelemetry() {
 }
 
 async function pollMediumTelemetry() {
+  if (state.authRole === "family") {
+    await Promise.allSettled([
+      fetchSleepStatus(),
+      fetchServices(),
+      fetchMediaHub(),
+    ]);
+    return;
+  }
   await Promise.allSettled([
     fetchSleepStatus(),
     fetchBackupStatus(),
@@ -257,12 +266,39 @@ function setupPullToRefresh() {
   }, { passive: true });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function applyRoleState(role) {
+  const isFamily = role === "family";
+  state.authRole = isFamily ? "family" : "owner";
+  document.documentElement.dataset.authRole = state.authRole;
+
+  const famBanner = $("family-mode-banner");
+  const famPanel = $("family-whats-new-panel");
+  if (famBanner) famBanner.hidden = !isFamily;
+  if (famPanel) famPanel.hidden = !isFamily;
+
+  ["nav-item-backups", "nav-item-tvs", "nav-item-system"].forEach((id) => {
+    const navEl = $(id);
+    if (navEl) navEl.hidden = isFamily;
+  });
+
+  if (isFamily && state.activeView !== "overview" && state.activeView !== "apps") {
+    activateView("overview", true);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
   setupHeader();
   setThemeChangeHandler(() => drawLanSparkline());
   setRetryConnectionHandler(() => refreshAll(true));
   setBackupVisibilityCallback(handleModuleVisibility);
   setTvVisibilityCallback(handleModuleVisibility);
+
+  const btnFamOwner = $("btn-family-owner-signin");
+  if (btnFamOwner) {
+    btnFamOwner.addEventListener("click", () => {
+      window.HomelabAuth?.prompt?.("", { mode: "owner" });
+    });
+  }
 
   setupRouter();
   setupRefreshControls();
@@ -283,6 +319,11 @@ document.addEventListener("DOMContentLoaded", () => {
   setupMediaHub();
   setupAlerts();
   setupUpdates();
+
+  try {
+    const authInfo = await window.HomelabAuth?.ready?.();
+    if (authInfo && authInfo.role) applyRoleState(authInfo.role);
+  } catch (_) { /* default owner until 401 */ }
 
   setupVisibilityPolling();
   refreshAll(false);

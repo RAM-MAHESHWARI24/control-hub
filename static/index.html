@@ -24,7 +24,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=37" />
+  <link rel="stylesheet" href="css/style.css?v=38" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -170,6 +170,20 @@
     <main id="main-content" class="dashboard-main" tabindex="-1">
       <!-- Global Conditional Attention Strip (hidden when everything is healthy) -->
       <section id="attention-strip" class="attention-strip" aria-label="Server attention notices">
+        <!-- Read-Only Family View Banner -->
+        <div id="family-mode-banner" class="notice-banner notice-info" role="status" hidden>
+          <div class="notice-icon" aria-hidden="true">
+            <svg class="ui-icon"><use href="/img/icons/ui-sprite.svg#icon-user"></use></svg>
+          </div>
+          <div class="notice-body">
+            <strong>Family View (Read-Only)</strong>
+            <span>Showing live status, What&rsquo;s New in Jellyfin, and Seerr media requests. Controls and settings are hidden.</span>
+          </div>
+          <div class="notice-actions">
+            <button type="button" id="btn-family-owner-signin" class="btn-primary">Owner Sign In</button>
+          </div>
+        </div>
+
         <!-- Netplan Pending 120s Confirmation Banner -->
         <div id="netplan-pending-banner" class="notice-banner notice-warning" role="alert" hidden>
           <div class="notice-icon" aria-hidden="true">
@@ -290,6 +304,28 @@
             <div class="kpi-primary" id="kpi-bp-val">Checking&hellip;</div>
             <div class="kpi-secondary" id="kpi-bp-sub">Sleep Guard: Checking&hellip;</div>
           </a>
+        </section>
+
+        <section class="panels console-sheet" id="family-whats-new-panel" aria-labelledby="family-whats-new-heading" hidden>
+          <div class="panel panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <h2 id="family-whats-new-heading">What&rsquo;s New &amp; Requests</h2>
+              <span class="panel-subtitle card-summary" id="family-media-summary">Loading recently added media and Seerr requests&hellip;</span>
+            </div>
+            <div class="panel-actions">
+              <a href="#/apps" class="btn-ghost">View Requests &amp; Calendar</a>
+            </div>
+          </div>
+          <div class="overview-split-bench panels">
+            <div class="panel">
+              <h3>Recently Added</h3>
+              <div id="family-recent-media" class="tv-crud-actions"><span class="text-muted">Checking library&hellip;</span></div>
+            </div>
+            <div class="panel">
+              <h3>Pending Media Requests</h3>
+              <div id="family-requests-body"><span class="text-muted">Checking requests&hellip;</span></div>
+            </div>
+          </div>
         </section>
 
         <!-- Bottom Split Sheet: Live Activity Ledger + Recent Audit Trail -->
@@ -2070,7 +2106,7 @@
     </div>
   </div>
 
-  <script src="/js/auth.js?v=4"></script>
-  <script type="module" src="/js/app.js?v=36"></script>
+  <script src="/js/auth.js?v=5"></script>
+  <script type="module" src="/js/app.js?v=37"></script>
 </body>
 </html>
