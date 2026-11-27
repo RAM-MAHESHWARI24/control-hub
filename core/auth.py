@@ -31,19 +31,23 @@ from core.config_core.auth_token import (
 )
 from core.sessions import (
     SESSION_MAX_AGE,
+    create_api_token,
     create_session,
     disable_totp,
     enable_totp,
     get_family_status,
     get_totp_status,
     is_local_lan_ip,
+    list_api_tokens,
     list_sessions,
     read_access_config,
+    revoke_api_token,
     revoke_other_sessions,
     revoke_session,
     set_family_config,
     start_totp_setup,
     touch_session,
+    verify_api_token,
     verify_family_login,
     verify_owner_second_factor,
     verify_session_cookie,
@@ -130,12 +134,20 @@ def _set_session_cookie(response, cookie_val: str):
     return response
 
 
-def _require_owner():
-    if getattr(g, "auth_role", "") != "owner":
+def _require_owner(require_full_scope: bool = True):
+    role = getattr(g, "auth_role", "")
+    if role != "owner":
         return jsonify({
             "status": "error",
             "error": "forbidden",
             "hint": "Owner sign-in is required to view or change account and server settings.",
+        }), 403
+    if require_full_scope and getattr(g, "token_scope", "full") != "full":
+        return jsonify({
+            "status": "error",
+            "error": "insufficient_scope",
+            "required": "full",
+            "hint": "A full-access credential is required for token and security management.",
         }), 403
     return None
 
@@ -149,9 +161,14 @@ def install_auth(app: Flask) -> Tuple[str, bool]:
         generated = True
     app.config["CONTROL_HUB_TOKEN"] = token
 
-    def resolve_auth() -> Tuple[bool, str, Optional[str], str]:
-        if token_matches(extract_token(request.headers), app.config["CONTROL_HUB_TOKEN"]):
-            return True, "owner", None, "token"
+    def resolve_auth() -> Tuple[bool, str, Optional[str], str, str]:
+        bearer = extract_token(request.headers)
+        if token_matches(bearer, app.config["CONTROL_HUB_TOKEN"]):
+            return True, "owner", None, "token", "full"
+        if bearer:
+            scoped = verify_api_token(bearer)
+            if scoped:
+                return True, "owner", scoped["id"], "scoped_token", scoped["scope"]
 
         stored = read_password_hash()
         cookie = request.cookies.get(SESSION_COOKIE, "")
@@ -160,31 +177,32 @@ def install_auth(app: Flask) -> Tuple[str, bool]:
             if rec:
                 role = "family" if rec.get("role") == "family" else "owner"
                 if role == "family" and not get_family_status().get("enabled"):
-                    return False, "", None, "none"
+                    return False, "", None, "none", "none"
                 touch_session(
                     rec["id"],
                     ip=request.remote_addr or "",
                     user_agent=request.headers.get("User-Agent", ""),
                 )
-                return True, role, rec["id"], "session"
+                return True, role, rec["id"], "session", ("read" if role == "family" else "full")
 
         if stored:
             fam = read_access_config().get("family") or {}
             if fam.get("enabled") and fam.get("lan_open") and is_local_lan_ip(request.remote_addr or ""):
-                return True, "family", None, "lan_family"
+                return True, "family", None, "lan_family", "read"
 
-        return False, "", None, "none"
+        return False, "", None, "none", "none"
 
     @app.before_request
     def _require_auth():
         path = request.path
         if not path.startswith("/api/"):
             return None
-        authed, role, sid, via = resolve_auth()
+        authed, role, sid, via, scope = resolve_auth()
         g.authenticated = authed
         g.auth_role = role
         g.session_id = sid
         g.auth_via = via
+        g.token_scope = scope
 
         if path in PUBLIC_API_PATHS:
             return None
@@ -204,6 +222,14 @@ def install_auth(app: Flask) -> Tuple[str, bool]:
                 "error": "forbidden",
                 "hint": "Read-only family access cannot view settings or change server controls.",
             }), 403
+        if via == "scoped_token" and scope == "read":
+            if request.method not in ("GET", "HEAD") or path.startswith("/api/auth/tokens"):
+                return jsonify({
+                    "status": "error",
+                    "error": "insufficient_scope",
+                    "required": "full",
+                    "hint": "This read-only API token cannot modify server state or inspect tokens.",
+                }), 403
         return None
 
     @app.route("/api/auth/check")
@@ -213,6 +239,7 @@ def install_auth(app: Flask) -> Tuple[str, bool]:
             "authenticated": True,
             "role": getattr(g, "auth_role", "owner"),
             "session_id": getattr(g, "session_id", None),
+            "token_scope": getattr(g, "token_scope", "full"),
         })
 
     @app.route("/api/auth/status")
@@ -225,6 +252,7 @@ def install_auth(app: Flask) -> Tuple[str, bool]:
             "password_set": bool(read_password_hash()),
             "role": getattr(g, "auth_role", "") if authed else None,
             "auth_via": getattr(g, "auth_via", "none") if authed else "none",
+            "token_scope": getattr(g, "token_scope", "none") if authed else None,
             "session_id": getattr(g, "session_id", None) if authed else None,
             "family_enabled": fam["enabled"],
             "family_lan_open": fam["lan_open"],
@@ -431,5 +459,40 @@ def install_auth(app: Flask) -> Tuple[str, bool]:
             return jsonify({"status": "error", "error": "The owner password is wrong."}), 403
         disable_totp()
         return jsonify({"status": "ok", "enabled": False, "message": "Two-factor authentication turned off."})
+
+    @app.route("/api/auth/tokens", methods=["GET"])
+    def _auth_tokens_list():
+        denied = _require_owner()
+        if denied:
+            return denied
+        return jsonify({"status": "ok", "tokens": list_api_tokens()})
+
+    @app.route("/api/auth/tokens", methods=["POST"])
+    def _auth_tokens_create():
+        denied = _require_owner()
+        if denied:
+            return denied
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name") or "")
+        scope = str(data.get("scope") or "read")
+        try:
+            record, raw_token = create_api_token(name, scope)
+        except ValueError as exc:
+            return jsonify({"status": "error", "error": str(exc)}), 400
+        return jsonify({
+            "status": "ok",
+            "token": raw_token,
+            "record": record,
+            "message": "Save this API token now — it will not be shown again.",
+        }), 201
+
+    @app.route("/api/auth/tokens/<token_id>", methods=["DELETE"])
+    def _auth_tokens_revoke(token_id: str):
+        denied = _require_owner()
+        if denied:
+            return denied
+        if not revoke_api_token(token_id):
+            return jsonify({"status": "error", "error": "Token not found."}), 404
+        return jsonify({"status": "ok", "revoked": token_id})
 
     return token, generated

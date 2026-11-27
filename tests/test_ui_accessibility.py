@@ -641,6 +641,27 @@ class TestControlHubUiAccessibility(unittest.TestCase):
         cls.app.view_functions["history.api_get_history"] = mock_history
         cls.app.view_functions["history.api_get_monthly_insights"] = mock_insights
 
+        def mock_integrations_ha():
+            from flask import jsonify
+            return jsonify({
+                "status": "ok",
+                "sensors": {"disk_pool_pct": 88.5, "backup_state": "ok", "sleep_skip_tonight": False},
+                "ups": {
+                    "installed": True,
+                    "status": "online",
+                    "ups_name": "mainups",
+                    "ups_model": "Back-UPS 1500",
+                    "battery_charge": 100.0,
+                    "battery_runtime_s": 1800,
+                    "ups_load_pct": 12.0,
+                    "on_battery": False,
+                    "low_battery": False,
+                },
+                "yaml_snippet": "rest:\n  - resource: \"http://127.0.0.1:7575/api/integrations/homeassistant\"",
+            })
+
+        cls.app.view_functions["integrations.api_homeassistant"] = mock_integrations_ha
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -1315,10 +1336,61 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                     "() => document.getElementById('history-panel-subtitle')?.textContent?.includes('7d')",
                     timeout=5000,
                 )
+                page.evaluate("() => window.scrollTo(0, 0)")
                 self.assertEqual(page.get_attribute('link[rel="manifest"]', "href"), "/manifest.webmanifest")
                 self._assert_layout_and_touch_targets(page, width, f"system-history@{width}")
                 self._assert_axe_wcag_aa(page, f"system-history@{width}x{height}")
                 self.assertEqual(ext_reqs, [])
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+
+    def test_custom_themes_i18n_kiosk_layout_and_tokens_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height, "#/system")
+            try:
+                page.wait_for_selector("#integrations-ha-yaml", state="visible", timeout=5000)
+                self.assertIn("Back-UPS 1500", page.inner_text("#integrations-ups-body"))
+
+                # Switch theme to High-Contrast and language to Hindi, verify layout + WCAG
+                page.click("#btn-header-menu")
+                page.click('[data-theme-choice="high-contrast"]')
+                self.assertEqual(page.evaluate("() => document.documentElement.dataset.theme"), "high-contrast")
+                page.click('[data-lang-choice="hi"]')
+                self.assertEqual(page.evaluate("() => document.documentElement.lang"), "hi")
+                self._assert_layout_and_touch_targets(page, width, f"hc-hi-system@{width}")
+                self._assert_axe_wcag_aa(page, f"hc-hi-system@{width}x{height}")
+
+                # Open Customize Layout modal
+                page.click("#btn-open-customize")
+                page.wait_for_selector("#customize-layout-modal", state="visible", timeout=5000)
+                self._assert_axe_wcag_aa(page, f"customize-modal@{width}x{height}")
+                page.click("#customize-modal-dismiss")
+                page.wait_for_selector("#customize-layout-modal", state="hidden", timeout=5000)
+
+                # Switch back to English before checking Account -> API Tokens
+                page.click("#btn-header-menu")
+                page.click('[data-lang-choice="en"]')
+                page.click("#btn-open-account")
+                page.wait_for_selector("#hub-account-overlay", state="visible", timeout=5000)
+                page.click("#acct-tab-btn-tokens")
+                page.wait_for_selector("#hub-token-form", state="visible", timeout=5000)
+                page.fill("#hub-token-name", "HA Probe")
+                page.click("#btn-token-create")
+                page.wait_for_selector("#hub-token-reveal", state="visible", timeout=5000)
+                self.assertIn("hub_ro_", page.inner_text("#hub-token-reveal"))
+                self._assert_axe_wcag_aa(page, f"account-tokens@{width}x{height}")
+                page.click("#hub-account-close")
+                page.wait_for_selector("#hub-account-overlay", state="detached", timeout=5000)
+
+                # Wall Kiosk Mode enter & exit cleanly
+                page.click("#btn-header-menu")
+                page.click("#btn-kiosk-toggle")
+                self.assertEqual(page.evaluate("() => document.documentElement.dataset.kiosk"), "true")
+                page.wait_for_selector("#btn-kiosk-exit", state="visible", timeout=5000)
+                self._assert_axe_wcag_aa(page, f"kiosk-system@{width}x{height}")
+                page.click("#btn-kiosk-exit")
+                self.assertEqual(page.evaluate("() => document.documentElement.dataset.kiosk"), "false")
                 self.assertEqual(page_errors, [])
             finally:
                 context.close()

@@ -1160,6 +1160,46 @@ paths:
         '200':
           description: "{monthly_report, power_savings, generated_at}"
 
+  /api/integrations/homeassistant:
+    get:
+      summary: Flat sensor export and REST YAML snippet for Home Assistant
+      tags: [Integrations]
+      responses:
+        '200':
+          description: "{sensors, ups, endpoints, yaml_snippet}"
+
+  /api/integrations/ups:
+    get:
+      summary: Local NUT (`upsc`) battery charge, runtime, and low-battery warning
+      tags: [Integrations]
+      responses:
+        '200':
+          description: "{installed, status, on_battery, battery_charge, battery_runtime_s, low_battery}"
+
+  /api/auth/tokens:
+    get:
+      summary: List scoped API tokens (full-scope owner access required)
+      tags: [Auth]
+      responses:
+        '200':
+          description: "{tokens}"
+        '403':
+          description: Read-only token or family role denied
+    post:
+      summary: Create a scoped bearer token (`read` or `full`)
+      tags: [Auth]
+      responses:
+        '201':
+          description: "{token, record} (plaintext token returned once at creation)"
+
+  /api/auth/tokens/{token_id}:
+    delete:
+      summary: Revoke a scoped API token
+      tags: [Auth]
+      responses:
+        '200':
+          description: "{revoked}"
+
 components:
   securitySchemes:
     bearerToken:

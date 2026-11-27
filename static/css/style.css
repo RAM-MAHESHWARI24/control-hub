@@ -216,6 +216,47 @@
   --shadow-lg: 0 12px 24px oklch(22% 0.010 60 / 0.16);
 }
 
+[data-theme="high-contrast"] {
+  color-scheme: dark;
+
+  --color-paper: #000000;
+  --color-paper-2: #0a0a0a;
+  --color-paper-3: #141414;
+  --color-ink: #ffffff;
+  --color-ink-2: #f0f0f0;
+  --color-muted: #d4d4d4;
+  --color-rule: #9e9e9e;
+  --color-rule-2: #ffffff;
+  --color-accent: #ffd500;
+  --color-accent-hover: #ffe44d;
+  --color-accent-ink: #000000;
+  --color-accent-soft: #292200;
+  --color-focus: #ffd500;
+  --color-cool: #66e3ff;
+  --color-cool-soft: #00232e;
+  --color-ok: #7aff9e;
+  --color-ok-soft: #002b0f;
+  --color-bad: #ff7a7a;
+  --color-bad-soft: #330000;
+
+  --bg-subtle: #1e1e1e;
+  --bg-overlay: rgba(0, 0, 0, 0.88);
+  --accent-border: #ffd500;
+  --success-border: #7aff9e;
+  --success-solid: #00802b;
+  --warning-border: #ffd500;
+  --danger-border: #ff7a7a;
+  --danger-solid: #b71c1c;
+  --danger-solid-hover: #d32f2f;
+  --danger-ink: #ffffff;
+  --info-border: #66e3ff;
+
+  --spark-stroke: #66e3ff;
+  --spark-fill-top: rgba(102, 227, 255, 0.30);
+  --spark-fill-bottom: rgba(102, 227, 255, 0.0);
+  --spark-grid: #525252;
+}
+
 /* ==========================================================================
    Reset & Base Typography
    ========================================================================== */
@@ -4912,4 +4953,77 @@ html[data-auth-role="family"] [data-proxy-click="btn-open-ai-copilot"] {
   display: flex;
   flex-direction: column;
   gap: var(--space-3xs);
+}
+
+/* ==========================================================================
+   Phase 4D & 4E: Customize Layout, Wall Kiosk Mode & Integrations
+   ========================================================================== */
+
+[data-user-hidden="true"] {
+  display: none !important;
+}
+
+.theme-segmented {
+  flex-wrap: wrap;
+}
+
+.customize-card-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.customize-card-meta,
+.customize-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.ha-yaml-pre {
+  max-height: 180px;
+  font-size: 0.78rem;
+  margin-top: var(--space-xs);
+}
+
+.kiosk-exit-btn {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 950;
+  box-shadow: var(--shadow-lg);
+}
+
+html[data-kiosk="true"] .hub-header,
+html[data-kiosk="true"] .hub-nav,
+html[data-kiosk="true"] .hub-footer,
+html[data-kiosk="true"] .panel-actions,
+html[data-kiosk="true"] .owner-only-control {
+  display: none !important;
+}
+
+html[data-kiosk="true"] body {
+  font-size: 1.125rem;
+}
+
+html[data-kiosk="true"] .dashboard-main {
+  max-width: 1560px;
+  padding: var(--space-lg);
+}
+
+html[data-kiosk="true"] .reading {
+  font-size: clamp(1.65rem, 3vw, 2.5rem);
+}
+
+button,
+a[href],
+input,
+select,
+section {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+  scroll-margin-bottom: calc(var(--mobile-nav-h) + 20px);
 }

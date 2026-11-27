@@ -221,6 +221,9 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/troubleshoot` | None | Runs unified read-only checks across telemetry, hardlinks, disk headroom, Docker containers, indexers, backups, network/Tailscale HTTPS, and Sleep Guard schedules with plain-word fix steps |
 | `GET` | `/api/history` | `?range=24h\|7d\|30d` | Returns bounded downsampled 5-minute rollup history for CPU, temp, RAM, LAN, disk I/O, and storage pool |
 | `GET` | `/api/insights/monthly` | None | Returns 30-day uptime/backup/update/storage report plus Sleep Guard kWh and CO₂ power-savings estimate |
+| `GET` | `/api/integrations/homeassistant` | None | Exposes flat Home Assistant sensors + copyable `configuration.yaml` REST sensor and prevent-sleep command |
+| `GET` | `/api/integrations/ups` | None | Probes local NUT (`upsc`) UPS battery state and low-battery guidance (honest `installed: False` fallback) |
+| `GET`/`POST`/`DELETE` | `/api/auth/tokens` | `{"name", "scope": "read\|full"}` | Creates, lists, and revokes scoped bearer API tokens alongside the master host token |
 
 ---
 

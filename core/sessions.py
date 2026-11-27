@@ -38,6 +38,8 @@ _LAST_SEEN_TOUCH_INTERVAL = 60
 
 _sessions_lock = threading.Lock()
 _access_lock = threading.Lock()
+_tokens_lock = threading.Lock()
+_MAX_API_TOKENS = 25
 
 
 def _auth_dir() -> Path:
@@ -457,3 +459,111 @@ def disable_totp() -> None:
         cfg["totp"] = {"enabled": False, "secret": None, "recovery_hashes": []}
         cfg["pending_totp"] = None
         _save_access_config(cfg)
+
+
+# ---------------------------------------------------------------------------
+# Scoped API Tokens (Phase 4E: read-only vs full)
+# ---------------------------------------------------------------------------
+
+
+def tokens_file() -> Path:
+    return _auth_dir() / "tokens.json"
+
+
+def _hash_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def create_api_token(name: str, scope: str = "read") -> Tuple[Dict[str, Any], str]:
+    """Creates a scoped API token (`read` or `full`). Plaintext is returned once and never stored."""
+    clean_scope = scope.strip().lower()
+    if clean_scope not in ("read", "full"):
+        raise ValueError("Token scope must be 'read' or 'full'.")
+    clean_name = (name or "").strip()[:64] or ("Read-Only Integration" if clean_scope == "read" else "Full Access Integration")
+    prefix_tag = "hub_ro_" if clean_scope == "read" else "hub_rw_"
+    raw_secret = prefix_tag + secrets.token_urlsafe(28)
+    now = int(time.time())
+    tid = secrets.token_hex(8)
+    rec = {
+        "id": tid,
+        "name": clean_name,
+        "scope": clean_scope,
+        "prefix": raw_secret[:12],
+        "hash": _hash_token(raw_secret),
+        "created_at": now,
+        "last_used": None,
+    }
+    with _tokens_lock:
+        data = _read_json(tokens_file(), {"tokens": []})
+        rows = data.get("tokens")
+        if not isinstance(rows, list):
+            rows = []
+        rows.append(rec)
+        if len(rows) > _MAX_API_TOKENS:
+            rows = rows[-_MAX_API_TOKENS:]
+        _atomic_write_json(tokens_file(), {"tokens": rows})
+    return {k: v for k, v in rec.items() if k != "hash"}, raw_secret
+
+
+def list_api_tokens() -> List[Dict[str, Any]]:
+    """Lists stored scoped API tokens (metadata only; hashes stay private)."""
+    with _tokens_lock:
+        data = _read_json(tokens_file(), {"tokens": []})
+        rows = data.get("tokens") or []
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        out.append({
+            "id": r.get("id"),
+            "name": r.get("name"),
+            "scope": r.get("scope", "read"),
+            "prefix": r.get("prefix", ""),
+            "created_at": int(r.get("created_at") or 0),
+            "last_used": r.get("last_used"),
+        })
+    out.sort(key=lambda x: x["created_at"], reverse=True)
+    return out
+
+
+def verify_api_token(raw_token: str) -> Optional[Dict[str, Any]]:
+    """Verifies a scoped bearer token and updates throttled `last_used` metadata."""
+    if not raw_token or not raw_token.startswith(("hub_ro_", "hub_rw_")):
+        return None
+    digest = _hash_token(raw_token)
+    now = int(time.time())
+    with _tokens_lock:
+        data = _read_json(tokens_file(), {"tokens": []})
+        rows = data.get("tokens") or []
+        matched = None
+        changed = False
+        for r in rows:
+            stored_hash = str(r.get("hash") or "")
+            if stored_hash and hmac.compare_digest(stored_hash, digest):
+                matched = {
+                    "id": r.get("id"),
+                    "name": r.get("name"),
+                    "scope": "full" if r.get("scope") == "full" else "read",
+                }
+                last_used = int(r.get("last_used") or 0)
+                if now - last_used >= _LAST_SEEN_TOUCH_INTERVAL:
+                    r["last_used"] = now
+                    changed = True
+                break
+        if changed:
+            _atomic_write_json(tokens_file(), {"tokens": rows})
+        return matched
+
+
+def revoke_api_token(token_id: str) -> bool:
+    """Removes a scoped API token permanently by id."""
+    if not token_id:
+        return False
+    with _tokens_lock:
+        data = _read_json(tokens_file(), {"tokens": []})
+        rows = data.get("tokens") or []
+        kept = [r for r in rows if r.get("id") != token_id]
+        if len(kept) == len(rows):
+            return False
+        _atomic_write_json(tokens_file(), {"tokens": kept})
+        return True

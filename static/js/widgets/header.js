@@ -39,11 +39,12 @@ function resolveTheme(pref) {
   if (pref === "system") {
     return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   }
+  if (pref === "high-contrast") return "high-contrast";
   return pref === "light" ? "light" : "dark";
 }
 
 export function applyTheme(pref = "dark") {
-  const validPref = ["dark", "light", "system"].includes(pref) ? pref : "dark";
+  const validPref = ["dark", "light", "high-contrast", "system"].includes(pref) ? pref : "dark";
   const resolved = resolveTheme(validPref);
   state.themePreference = validPref;
   document.documentElement.dataset.theme = resolved;
@@ -258,17 +259,6 @@ export function setupHeader() {
 
   updateClock();
   setInterval(updateClock, 1000);
-
-  if (btnKioskToggle) {
-    btnKioskToggle.addEventListener("click", () => {
-      setMenuOpen(false);
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    });
-  }
 
   if (btnHeaderMenu && headerActionsMenu) {
     btnHeaderMenu.addEventListener("click", (e) => {

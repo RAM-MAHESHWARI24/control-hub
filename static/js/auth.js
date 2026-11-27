@@ -309,6 +309,7 @@
       '<button type="button" role="tab" class="auth-tab-btn" id="acct-tab-btn-security" data-acct-tab="security" aria-selected="true">Password &amp; 2FA</button>' +
       '<button type="button" role="tab" class="auth-tab-btn" id="acct-tab-btn-devices" data-acct-tab="devices" aria-selected="false">Signed-in Devices</button>' +
       '<button type="button" role="tab" class="auth-tab-btn" id="acct-tab-btn-family" data-acct-tab="family" aria-selected="false">Family View</button>' +
+      '<button type="button" role="tab" class="auth-tab-btn" id="acct-tab-btn-tokens" data-acct-tab="tokens" aria-selected="false">API Tokens</button>' +
       "</div>" +
 
       '<div id="acct-panel-security" class="auth-tab-panel">' +
@@ -385,6 +386,25 @@
       "</form>" +
       "</div>" +
 
+      '<div id="acct-panel-tokens" class="auth-tab-panel" hidden>' +
+      '<form id="hub-token-form" class="auth-section-stack">' +
+      '<p class="auth-desc">Create scoped bearer tokens for Home Assistant, Prometheus, or backup scripts. Read-only tokens cannot trigger restarts, cleanup, or config changes.</p>' +
+      '<div class="auth-secondary-row">' +
+      '<input id="hub-token-name" type="text" class="form-input" aria-label="Token label" placeholder="Token label (e.g. Home Assistant)" maxlength="64">' +
+      '<select id="hub-token-scope" class="form-input" aria-label="Token scope">' +
+      '<option value="read">Read-Only (sensors &amp; status)</option>' +
+      '<option value="full">Full Access (sleep &amp; controls)</option>' +
+      "</select>" +
+      "</div>" +
+      '<button type="submit" id="btn-token-create" class="btn-primary auth-full-btn">Create API Token</button>' +
+      '<div id="hub-token-reveal" class="totp-secret-box font-mono" hidden></div>' +
+      "</form>" +
+      '<div id="hub-tokens-msg" class="auth-feedback" role="status" aria-live="polite"></div>' +
+      '<div id="hub-tokens-list" class="auth-devices-list">' +
+      '<div class="empty-state">Loading scoped tokens...</div>' +
+      "</div>" +
+      "</div>" +
+
       '<div class="auth-actions">' +
       '<div class="auth-secondary-row">' +
       '<button type="button" id="hub-signout" class="btn-secondary">Sign out this browser</button>' +
@@ -418,6 +438,7 @@
       security: document.getElementById("acct-panel-security"),
       devices: document.getElementById("acct-panel-devices"),
       family: document.getElementById("acct-panel-family"),
+      tokens: document.getElementById("acct-panel-tokens"),
     };
     function activateAcctTab(key) {
       tabs.forEach(function (btn) {
@@ -428,6 +449,7 @@
         panels[k].hidden = k !== key;
       });
       if (key === "devices") loadDevices();
+      if (key === "tokens") loadTokens();
     }
     tabs.forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -621,6 +643,73 @@
         ? ("Signed out " + Number(res.data.revoked_count || 0) + " other device(s).")
         : (res.data.error || "Could not sign out other devices.");
       loadDevices();
+    });
+
+    // Scoped API Tokens list & creation
+    const tokensList = document.getElementById("hub-tokens-list");
+    const tokensMsg = document.getElementById("hub-tokens-msg");
+    const tokenReveal = document.getElementById("hub-token-reveal");
+
+    async function loadTokens() {
+      const res = await apiJson("GET", "/api/auth/tokens");
+      if (!res.ok) {
+        tokensList.innerHTML = '<div class="empty-state">Could not load API tokens.</div>';
+        return;
+      }
+      const rows = Array.isArray(res.data.tokens) ? res.data.tokens : [];
+      if (!rows.length) {
+        tokensList.innerHTML = '<div class="empty-state">No scoped tokens created yet.</div>';
+        return;
+      }
+      tokensList.innerHTML = rows.map(function (t) {
+        const badge = t.scope === "full"
+          ? '<span class="badge-status-synced">Full</span>'
+          : '<span class="badge">Read-Only</span>';
+        return (
+          '<div class="auth-device-row">' +
+          '<div class="auth-device-meta">' +
+          '<div class="auth-device-title">' + esc(t.name) + " " + badge + "</div>" +
+          '<div class="auth-subtitle font-mono">' + esc(t.prefix) + "&hellip; &middot; Last used " + esc(relTime(t.last_used)) + "</div>" +
+          "</div>" +
+          '<button type="button" class="btn-ghost btn-revoke-token" data-tid="' + esc(t.id) + '">Revoke</button>' +
+          "</div>"
+        );
+      }).join("");
+
+      tokensList.querySelectorAll(".btn-revoke-token").forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          const tid = btn.getAttribute("data-tid");
+          const r = await apiJson("DELETE", "/api/auth/tokens/" + encodeURIComponent(tid));
+          if (r.ok) {
+            tokensMsg.className = "auth-feedback is-success";
+            tokensMsg.textContent = "API token revoked.";
+            loadTokens();
+          } else {
+            tokensMsg.className = "auth-feedback is-error";
+            tokensMsg.textContent = r.data.error || "Could not revoke API token.";
+          }
+        });
+      });
+    }
+
+    document.getElementById("hub-token-form").addEventListener("submit", async function (ev) {
+      ev.preventDefault();
+      const name = document.getElementById("hub-token-name").value.trim();
+      const scope = document.getElementById("hub-token-scope").value;
+      const res = await postJson("/api/auth/tokens", { name: name, scope: scope });
+      if (!res.ok) {
+        tokensMsg.className = "auth-feedback is-error";
+        tokensMsg.textContent = res.data.error || "Could not create API token.";
+        return;
+      }
+      document.getElementById("hub-token-name").value = "";
+      if (tokenReveal && res.data.token) {
+        tokenReveal.textContent = "Copy now (shown once): " + res.data.token;
+        tokenReveal.hidden = false;
+      }
+      tokensMsg.className = "auth-feedback is-success";
+      tokensMsg.textContent = res.data.message || "Scoped token created.";
+      loadTokens();
     });
 
     // Family save

@@ -17,9 +17,14 @@
         var pref = localStorage.getItem("hub_theme") || "dark";
         var resolved = pref === "system"
           ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
-          : (pref === "light" ? "light" : "dark");
+          : (pref === "high-contrast" ? "high-contrast" : (pref === "light" ? "light" : "dark"));
         document.documentElement.dataset.theme = resolved;
         document.documentElement.dataset.themePref = pref;
+        var savedLang = localStorage.getItem("hub_lang");
+        if (savedLang === "hi") {
+          document.documentElement.lang = "hi";
+          document.documentElement.dataset.lang = "hi";
+        }
         var sbPref = localStorage.getItem("hub_sidebar_collapsed");
         var sbCollapsed = sbPref === "true" || (sbPref === null && window.innerWidth >= 600 && window.innerWidth < 1024);
         document.documentElement.dataset.sidebarCollapsed = sbCollapsed ? "true" : "false";
@@ -30,10 +35,11 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=40" />
+  <link rel="stylesheet" href="css/style.css?v=41" />
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
+  <button type="button" id="btn-kiosk-exit" class="btn-primary kiosk-exit-btn" data-i18n="btn_exit_kiosk" hidden>Exit Kiosk</button>
 
   <div id="sr-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
@@ -112,7 +118,14 @@
           <div class="theme-segmented" role="group" aria-label="Theme preference">
             <button type="button" class="theme-opt-btn" data-theme-choice="dark" aria-pressed="true">Dark</button>
             <button type="button" class="theme-opt-btn" data-theme-choice="light" aria-pressed="false">Light</button>
+            <button type="button" class="theme-opt-btn" data-theme-choice="high-contrast" aria-pressed="false">Contrast</button>
             <button type="button" class="theme-opt-btn" data-theme-choice="system" aria-pressed="false">Auto</button>
+          </div>
+
+          <div class="dropdown-section-label">Language</div>
+          <div class="theme-segmented lang-segmented" role="group" aria-label="Dashboard language">
+            <button type="button" class="theme-opt-btn lang-opt-btn active" data-lang-choice="en" aria-pressed="true">English</button>
+            <button type="button" class="theme-opt-btn lang-opt-btn" data-lang-choice="hi" aria-pressed="false">&#2361;&#2367;&#2344;&#2381;&#2342;&#2368;</button>
           </div>
 
           <div class="dropdown-section-label">Tools</div>
@@ -136,9 +149,13 @@
             <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-user"></use></svg>
             <span>Account &amp; Password</span>
           </button>
-          <button type="button" id="btn-kiosk-toggle" class="dropdown-item">
+          <button type="button" id="btn-open-customize" class="dropdown-item">
+            <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-sliders"></use></svg>
+            <span data-i18n="btn_customize_layout">Customize Layout</span>
+          </button>
+          <button type="button" id="btn-kiosk-toggle" class="dropdown-item" aria-pressed="false">
             <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-maximize"></use></svg>
-            <span>Toggle Fullscreen</span>
+            <span data-i18n="btn_kiosk_mode">Wall Kiosk Mode</span>
           </button>
           <button type="button" id="btn-browser-notifications" class="dropdown-item" aria-pressed="false">
             <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-bell"></use></svg>
@@ -158,23 +175,23 @@
     <nav id="hub-nav" class="hub-nav" aria-label="Workspace navigation">
       <a href="#/overview" class="hub-nav-item is-active" id="nav-item-overview" data-view-link="overview" title="Overview" aria-label="Overview" aria-current="page">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-overview"></use></svg>
-        <span class="nav-label">Overview</span>
+        <span class="nav-label" data-i18n="nav_overview">Overview</span>
       </a>
       <a href="#/apps" class="hub-nav-item" id="nav-item-apps" data-view-link="apps" title="Apps" aria-label="Apps">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-apps"></use></svg>
-        <span class="nav-label">Apps</span>
+        <span class="nav-label" data-i18n="nav_apps">Apps</span>
       </a>
       <a href="#/backups" class="hub-nav-item" id="nav-item-backups" data-view-link="backups" title="Backups" aria-label="Backups">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cloud"></use></svg>
-        <span class="nav-label">Backups</span>
+        <span class="nav-label" data-i18n="nav_backups">Backups</span>
       </a>
       <a href="#/tvs" class="hub-nav-item" id="nav-item-tvs" data-view-link="tvs" title="TVs" aria-label="TVs">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-tv"></use></svg>
-        <span class="nav-label">TVs</span>
+        <span class="nav-label" data-i18n="nav_tvs">TVs</span>
       </a>
       <a href="#/system" class="hub-nav-item" id="nav-item-system" data-view-link="system" title="System" aria-label="System">
         <svg class="ui-icon nav-svg" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-cpu"></use></svg>
-        <span class="nav-label">System</span>
+        <span class="nav-label" data-i18n="nav_system">System</span>
       </a>
 
       <div class="hub-nav-footer">
@@ -1314,6 +1331,33 @@
           </div>
         </section>
 
+        <!-- 5.4c Phase 4E: Home Assistant & UPS Integrations -->
+        <section class="panels console-sheet" id="integrations-panel" aria-labelledby="integrations-panel-heading">
+          <div class="panel panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <h2 id="integrations-panel-heading" data-i18n="heading_integrations">Integrations (Home Assistant &amp; UPS)</h2>
+              <span class="panel-subtitle card-summary">REST sensor exports for Home Assistant and local NUT UPS telemetry</span>
+            </div>
+            <div class="panel-actions">
+              <button type="button" id="btn-integrations-refresh" class="btn-secondary">Refresh Integrations</button>
+            </div>
+          </div>
+          <div class="panel-grid-two">
+            <div>
+              <h3 class="sub-panel-title">Home Assistant REST Sensors</h3>
+              <div id="integrations-ha-body" class="panel detail-panel">
+                <div class="empty-state">Loading Home Assistant sensor export&hellip;</div>
+              </div>
+            </div>
+            <div>
+              <h3 class="sub-panel-title">UPS Battery (NUT)</h3>
+              <div id="integrations-ups-body" class="panel detail-panel">
+                <div class="empty-state">Probing NUT UPS status&hellip;</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- 5.5 Node Administration -->
         <section class="panels console-sheet" aria-labelledby="node-tools-heading">
           <div class="panel panel-head-strip">
@@ -2265,7 +2309,27 @@
     </div>
   </div>
 
-  <script src="/js/auth.js?v=5"></script>
-  <script type="module" src="/js/app.js?v=39"></script>
+  <!-- 14. Customize Card Layout Modal (Phase 4D) -->
+  <div class="modal-overlay" id="customize-layout-modal" role="dialog" aria-modal="true" aria-labelledby="customize-modal-title" style="display: none;">
+    <div class="modal-glass modal-wide">
+      <div class="modal-header">
+        <div>
+          <h2 id="customize-modal-title">Customize Dashboard Layout</h2>
+          <p class="modal-sub">Show, hide, or reorder cards for this browser or wall tablet.</p>
+        </div>
+        <button type="button" class="modal-close" id="customize-modal-close" aria-label="Close layout customizer">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="customize-cards-list" class="troubleshoot-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="btn-customize-reset">Reset Default</button>
+        <button type="button" class="btn-ghost" id="customize-modal-dismiss">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/auth.js?v=6"></script>
+  <script type="module" src="/js/app.js?v=40"></script>
 </body>
 </html>

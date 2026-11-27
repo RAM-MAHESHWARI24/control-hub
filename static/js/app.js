@@ -34,6 +34,9 @@ import { fetchUpdates, setupUpdates } from "./widgets/updates.js";
 import { setupHelpDrawer } from "./widgets/helpDrawer.js";
 import { fetchHistoryAndInsights, redrawHistoryCharts, setupHistoryInsights } from "./widgets/historyInsights.js";
 import { setupPwa } from "./widgets/pwa.js";
+import { setupI18n } from "./shared/i18n.js";
+import { applyCardLayout, setupCustomizeAndKiosk } from "./widgets/customize.js";
+import { fetchIntegrations, setupIntegrations } from "./widgets/integrations.js";
 
 const FAST_POLL_MS = 2500;
 const MEDIUM_POLL_MS = 15000;
@@ -152,6 +155,7 @@ async function pollMediumTelemetry() {
     fetchNetworkOverview(),
     fetchUpdates(),
     fetchHistoryAndInsights(),
+    fetchIntegrations(),
   ]);
 }
 
@@ -331,7 +335,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupUpdates();
   setupHelpDrawer();
   setupHistoryInsights();
+  setupIntegrations();
+  setupCustomizeAndKiosk();
+  setupI18n();
   setupPwa();
+  applyCardLayout();
 
   try {
     const authInfo = await window.HomelabAuth?.ready?.();

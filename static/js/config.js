@@ -91,4 +91,6 @@ export const ENDPOINTS = {
   troubleshoot: "/api/troubleshoot",
   history: (range = "24h") => `/api/history?range=${encodeURIComponent(range)}`,
   insightsMonthly: "/api/insights/monthly",
+  integrationsHa: "/api/integrations/homeassistant",
+  integrationsUps: "/api/integrations/ups",
 };
