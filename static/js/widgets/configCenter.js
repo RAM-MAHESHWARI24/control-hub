@@ -14,6 +14,7 @@ import { showToast } from "../shared/toast.js";
 
 let currentSystemData = null;
 let netplanCountdownTimer = null;
+let netplanProbeTimer = null;
 let netplanRemainingSec = 0;
 let pendingImportConfig = null;
 
@@ -101,6 +102,13 @@ function populateFormFields(cfg, sys, readOnly, applyHint, blueprintMode = false
     if (cfgNetIp) cfgNetIp.value = sys.network.current_ip || "";
     if (cfgNetGw) cfgNetGw.value = sys.network.default_gateway || "";
     if (cfgNetDns) cfgNetDns.value = (sys.network.dns_servers || ["1.1.1.1", "8.8.8.8"]).join(", ");
+
+    const dhcpMacEl = $("cfg-dhcp-mac");
+    if (dhcpMacEl) {
+      const ifaces = sys.network.interfaces || [];
+      const activeObj = ifaces.find((n) => n.name === sys.network.active_nic) || ifaces[0];
+      dhcpMacEl.textContent = (activeObj && activeObj.mac) ? activeObj.mac : "your server MAC";
+    }
   }
 }
 
@@ -127,6 +135,7 @@ function renderNetplanPending(pendingInfo) {
   const modalBox = $("netplan-modal-pending");
   const modalIp = $("netplan-modal-ip");
   const modalText = $("netplan-modal-countdown-text");
+  const continueLink = $("netplan-continue-link");
 
   state.netplanPending = pendingInfo && pendingInfo.pending ? pendingInfo : null;
 
@@ -134,17 +143,23 @@ function renderNetplanPending(pendingInfo) {
     clearInterval(netplanCountdownTimer);
     netplanCountdownTimer = null;
   }
+  if (netplanProbeTimer) {
+    clearInterval(netplanProbeTimer);
+    netplanProbeTimer = null;
+  }
 
   if (!state.netplanPending) {
     if (banner) banner.hidden = true;
     if (modalBox) modalBox.hidden = true;
+    if (continueLink) continueLink.hidden = true;
     return;
   }
 
   netplanRemainingSec = Number(state.netplanPending.remaining_sec || 0);
-  const ipStr = state.netplanPending.ip || HOSTNAME;
-  if (bannerIp) bannerIp.textContent = ipStr;
-  if (modalIp) modalIp.textContent = ipStr;
+  const ipRaw = String(state.netplanPending.ip || HOSTNAME);
+  const ipHost = ipRaw.split("/")[0];
+  if (bannerIp) bannerIp.textContent = ipRaw;
+  if (modalIp) modalIp.textContent = ipRaw;
   if (banner) banner.hidden = false;
   if (modalBox) modalBox.hidden = false;
 
@@ -152,19 +167,53 @@ function renderNetplanPending(pendingInfo) {
     const sec = Math.max(0, netplanRemainingSec);
     if (bannerCountdown) bannerCountdown.textContent = `${sec}s`;
     if (modalText) {
+      const prefix = netplanProbeTimer && ipHost !== HOSTNAME
+        ? `Checking that the server is reachable on ${ipHost}... `
+        : "";
       modalText.textContent = sec > 0
-        ? `Reverts automatically in ${sec}s unless confirmed from this address.`
-        : "Revert window elapsed; previous network configuration is being restored.";
+        ? `${prefix}Reverts in ${sec}s if not confirmed from this address.`
+        : "The revert window has passed. The previous network configuration is being restored.";
     }
     if (netplanRemainingSec <= 0 && netplanCountdownTimer) {
       clearInterval(netplanCountdownTimer);
       netplanCountdownTimer = null;
+      if (netplanProbeTimer) {
+        clearInterval(netplanProbeTimer);
+        netplanProbeTimer = null;
+      }
       setTimeout(fetchNetplanStatus, 3000);
     }
     netplanRemainingSec -= 1;
   };
   updateTick();
   netplanCountdownTimer = setInterval(updateTick, 1000);
+
+  if (continueLink) {
+    if (ipHost && ipHost !== HOSTNAME) {
+      const proto = window.location.protocol;
+      const portPart = window.location.port ? `:${window.location.port}` : "";
+      const newBase = `${proto}//${ipHost}${portPart}`;
+      continueLink.href = `${newBase}/?netplan_confirm=1`;
+      continueLink.textContent = `Continue on ${ipHost}`;
+      continueLink.hidden = false;
+      const probeNewHost = async () => {
+        try {
+          await fetch(`${newBase}/api/health`, { mode: "no-cors", cache: "no-store" });
+          if (modalText) {
+            modalText.textContent = `Server reachable on ${ipHost}. Click Continue on ${ipHost} to keep this IP (reverts in ${Math.max(0, netplanRemainingSec)}s if not confirmed).`;
+          }
+          if (netplanProbeTimer) {
+            clearInterval(netplanProbeTimer);
+            netplanProbeTimer = null;
+          }
+        } catch (_) { /* not reachable yet */ }
+      };
+      netplanProbeTimer = setInterval(probeNewHost, 3000);
+      probeNewHost();
+    } else {
+      continueLink.hidden = true;
+    }
+  }
 }
 
 export async function confirmNetplanIp() {
@@ -730,25 +779,34 @@ export async function copyAiPromptToClipboard() {
 // 9. Tab Navigation & Master Initialization
 // ============================================================================
 
-function setupConfigTabs() {
+function activateConfigTab(targetTab) {
   const tabBtns = document.querySelectorAll(".cfg-tab-btn");
   const tabPanes = document.querySelectorAll(".cfg-tab-pane");
+  tabBtns.forEach((b) => {
+    const active = b.getAttribute("data-config-tab") === targetTab;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  tabPanes.forEach((p) => {
+    p.classList.toggle("active", p.id === `cfg-pane-${targetTab}`);
+  });
+  if (targetTab === "ports") fetchPortsMatrix();
+  if (targetTab === "manifest") fetchInstallManifest();
+}
 
+export function openConfigCenterTab(targetTab = "paths") {
+  const configModal = $("config-center-modal");
+  if (configModal) openModal(configModal, $("btn-open-config-center"));
+  activateConfigTab(targetTab);
+  fetchCurrentConfig();
+}
+
+function setupConfigTabs() {
+  const tabBtns = document.querySelectorAll(".cfg-tab-btn");
   tabBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
       const targetTab = btn.getAttribute("data-config-tab");
-      tabBtns.forEach((b) => {
-        b.classList.remove("active");
-        b.setAttribute("aria-selected", "false");
-      });
-      tabPanes.forEach((p) => p.classList.remove("active"));
-
-      btn.classList.add("active");
-      btn.setAttribute("aria-selected", "true");
-      const targetPane = $(`cfg-pane-${targetTab}`);
-      if (targetPane) targetPane.classList.add("active");
-      if (targetTab === "ports") fetchPortsMatrix();
-      if (targetTab === "manifest") fetchInstallManifest();
+      if (targetTab) activateConfigTab(targetTab);
     });
   });
 }
@@ -767,10 +825,16 @@ export function setupConfigCenter() {
   if (btnOpenConfig) {
     btnOpenConfig.addEventListener("click", (e) => {
       e.preventDefault();
-      if (configModal) openModal(configModal, btnOpenConfig);
-      fetchCurrentConfig();
+      openConfigCenterTab("paths");
     });
   }
+
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    if (params.get("netplan_confirm") === "1") {
+      openConfigCenterTab("network");
+    }
+  } catch (_) { /* ignore malformed URL */ }
 
   if (btnOpenAi) {
     btnOpenAi.addEventListener("click", (e) => {

@@ -499,6 +499,46 @@ class TestControlHubUiAccessibility(unittest.TestCase):
 
         cls.app.view_functions["config_center.get_current_config"] = mock_get_current_config
 
+        def mock_network_overview():
+            from flask import jsonify
+            return jsonify({
+                "status": "success",
+                "active_nic": "enp3s0",
+                "current_ip": "192.168.1.31",
+                "default_gateway": "192.168.1.1",
+                "dns_servers": ["1.1.1.1", "8.8.8.8"],
+                "interfaces": [
+                    {
+                        "name": "enp3s0",
+                        "is_up": True,
+                        "speed_mbps": 100,
+                        "duplex": "half",
+                        "mac": "aa:bb:cc:dd:ee:ff",
+                        "degraded": True,
+                        "warning": "Running at 100 Mbps half duplex: check Ethernet cable, keystone jack, or switch port.",
+                    }
+                ],
+                "tailscale": {
+                    "installed": True,
+                    "connected": True,
+                    "backend_state": "Running",
+                    "tailnet_ip": "100.64.0.10",
+                    "dns_name": "homelab.tailnet.ts.net",
+                    "subnet_router": True,
+                    "advertised_routes": ["192.168.1.0/24"],
+                    "ip_forwarding": True,
+                    "peer_count": 3,
+                    "error": None,
+                },
+                "ports": [
+                    {"key": "control_hub", "name": "Control Hub Dashboard", "port": 7575, "category": "system", "in_use": True, "state_label": "Listening", "conflict": False},
+                    {"key": "jellyfin_http", "name": "Jellyfin Web", "port": 8096, "category": "media", "in_use": True, "state_label": "Listening (jellyfin)", "conflict": False},
+                ],
+                "port_conflicts": [],
+            })
+
+        cls.app.view_functions["network_speed.get_network_overview"] = mock_network_overview
+
         cls.httpd = make_server("127.0.0.1", 0, cls.app, threaded=True)
         cls.port = cls.httpd.server_port
         cls.base_url = f"http://127.0.0.1:{cls.port}"
@@ -1020,6 +1060,25 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 page.wait_for_selector("#btn-download-support-bundle", state="visible", timeout=5000)
                 self._assert_layout_and_touch_targets(page, width, f"config-center@{width}")
                 self._assert_axe_wcag_aa(page, f"config-center@{width}x{height}")
+                self.assertEqual(page_errors, [])
+            finally:
+                context.close()
+
+    def test_network_health_panel_and_netplan_tip_accessible(self) -> None:
+        for width, height in ((1366, 900), (360, 800)):
+            context, page, _, page_errors, _ = self._new_authenticated_page(width, height, "#/system")
+            try:
+                page.wait_for_selector("#net-link-warning-callout", state="visible", timeout=5000)
+                self.assertIn("half duplex", page.inner_text("#net-link-warning-callout"))
+                self.assertIn("100.64.0.10", page.inner_text("#net-tailscale-body"))
+                self.assertIn("192.168.1.0/24", page.inner_text("#net-tailscale-body"))
+                self.assertIn("Control Hub Dashboard", page.inner_text("#net-ports-tbody"))
+                self._assert_layout_and_touch_targets(page, width, f"system-network@{width}")
+                self._assert_axe_wcag_aa(page, f"system-network@{width}x{height}")
+
+                page.click("#btn-open-netplan-modal")
+                page.wait_for_selector("#cfg-dhcp-tip", state="visible", timeout=5000)
+                self.assertIn("DHCP Reservation Tip", page.inner_text("#cfg-dhcp-tip"))
                 self.assertEqual(page_errors, [])
             finally:
                 context.close()

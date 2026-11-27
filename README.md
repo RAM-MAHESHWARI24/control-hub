@@ -170,6 +170,7 @@ Accessible via the header button **🤖 AI Copilot** (`btn-open-ai-copilot`), th
 | `GET` | `/api/media/overview` | Aggregates pending Seerr requests, 7-day Radarr/Sonarr calendar, missing items, and Jellyfin recent additions |
 | `POST` | `/api/media/requests/<id>/<decision>` | Approves or declines a pending Seerr media request |
 | `POST` | `/api/media/jellyfin/scan` | Triggers a Jellyfin library refresh scan |
+| `GET` | `/api/network/overview` | Per-NIC link speed & duplex health warnings, Tailscale status/subnet-router state, and service port map with conflict flags |
 | `GET` | `/api/updates` | Compares pinned container tags & Blueprint version against cached GitHub releases |
 | `POST` | `/api/updates/check` | Checks upstream GitHub releases on demand (10-minute cooldown) |
 | `POST` | `/api/updates/apply` | Applies one or all safe app updates via `homelab-update` with pre-update config backup & automatic health rollback |

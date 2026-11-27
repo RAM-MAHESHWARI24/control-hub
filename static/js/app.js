@@ -17,6 +17,7 @@ import {
 } from "./widgets/header.js";
 import { fetchSleepStatus, setupSleepGuard } from "./widgets/sleepGuard.js";
 import { drawLanSparkline, fetchSpeedometers, setupNetworkSpeed } from "./widgets/networkSpeed.js";
+import { fetchNetworkOverview, setupNetworkOverview } from "./widgets/networkOverview.js";
 import { setupCurrentDownloads } from "./widgets/currentDownloads.js";
 import { fetchBackupStatus, setBackupVisibilityCallback, setupBackupSync } from "./widgets/backupSync.js";
 import { fetchPhotosOverview, setupPhotosHub } from "./widgets/photosHub.js";
@@ -133,6 +134,7 @@ async function pollMediumTelemetry() {
     fetchMediaHub(),
     fetchAlerts(),
     fetchNetplanStatus(),
+    fetchNetworkOverview(),
     fetchUpdates(),
   ]);
 }
@@ -268,6 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setupSleepGuard();
   setupNetworkSpeed();
+  setupNetworkOverview();
   setupCurrentDownloads();
   setupBackupSync();
   setupPhotosHub();

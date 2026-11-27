@@ -16,7 +16,8 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify
 
-from config import SPEEDTEST_BIN, SPEEDTEST_CACHE_FILE, get_tz_abbr
+from config import PORT, SPEEDTEST_BIN, SPEEDTEST_CACHE_FILE, get_tz_abbr
+from core.config_core import get_default_ports, probe_network_interfaces
 from core.telemetry_sampler import telemetry_lock, telemetry_state
 
 network_speed_bp = Blueprint("network_speed", __name__)
@@ -231,3 +232,235 @@ def trigger_speedtest():
     t = threading.Thread(target=run_speedtest_thread, daemon=True)
     t.start()
     return jsonify({"success": True, "message": "Speedtest started in background..."})
+
+
+def _read_ip_forward(proc_path: str = "/proc/sys/net/ipv4/ip_forward") -> bool | None:
+    try:
+        raw = Path(proc_path).read_text(encoding="utf-8").strip()
+        if raw in ("0", "1"):
+            return raw == "1"
+    except OSError:
+        pass
+    return None
+
+
+def probe_tailscale_status() -> dict:
+    """Probes local Tailscale daemon status (`tailscale status --json`) without sudo."""
+    ts_bin = shutil.which("tailscale")
+    ip_fwd = _read_ip_forward()
+    if not ts_bin:
+        return {
+            "installed": False,
+            "connected": False,
+            "backend_state": None,
+            "tailnet_ip": None,
+            "tailnet_ips": [],
+            "dns_name": None,
+            "subnet_router": False,
+            "advertised_routes": [],
+            "ip_forwarding": ip_fwd,
+            "peer_count": 0,
+            "error": None,
+        }
+
+    try:
+        proc = subprocess.run(
+            [ts_bin, "status", "--json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "installed": True,
+            "connected": False,
+            "backend_state": "Timeout",
+            "tailnet_ip": None,
+            "tailnet_ips": [],
+            "dns_name": None,
+            "subnet_router": False,
+            "advertised_routes": [],
+            "ip_forwarding": ip_fwd,
+            "peer_count": 0,
+            "error": "tailscale status timed out",
+        }
+    except OSError as exc:
+        return {
+            "installed": True,
+            "connected": False,
+            "backend_state": None,
+            "tailnet_ip": None,
+            "tailnet_ips": [],
+            "dns_name": None,
+            "subnet_router": False,
+            "advertised_routes": [],
+            "ip_forwarding": ip_fwd,
+            "peer_count": 0,
+            "error": str(exc)[:160],
+        }
+
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        err = (proc.stderr or f"exit {proc.returncode}").strip().splitlines()[-1][:160]
+        return {
+            "installed": True,
+            "connected": False,
+            "backend_state": None,
+            "tailnet_ip": None,
+            "tailnet_ips": [],
+            "dns_name": None,
+            "subnet_router": False,
+            "advertised_routes": [],
+            "ip_forwarding": ip_fwd,
+            "peer_count": 0,
+            "error": err,
+        }
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {
+            "installed": True,
+            "connected": False,
+            "backend_state": None,
+            "tailnet_ip": None,
+            "tailnet_ips": [],
+            "dns_name": None,
+            "subnet_router": False,
+            "advertised_routes": [],
+            "ip_forwarding": ip_fwd,
+            "peer_count": 0,
+            "error": "Unreadable JSON from tailscale status",
+        }
+
+    backend_state = data.get("BackendState")
+    self_node = data.get("Self") or {}
+    ips = [str(ip) for ip in (self_node.get("TailscaleIPs") or []) if ip]
+    ipv4 = next((ip for ip in ips if "." in ip), ips[0] if ips else None)
+    dns_name = str(self_node.get("DNSName") or "").rstrip(".") or None
+
+    raw_routes = list(self_node.get("PrimaryRoutes") or self_node.get("AllowedIPs") or [])
+    advertised_routes = sorted({
+        str(cidr)
+        for cidr in raw_routes
+        if "/" in str(cidr) and not str(cidr).endswith(("/32", "/128"))
+    })
+
+    peers = data.get("Peer") or {}
+    online_peers = sum(1 for p in peers.values() if isinstance(p, dict) and p.get("Online"))
+
+    return {
+        "installed": True,
+        "connected": backend_state == "Running",
+        "backend_state": backend_state,
+        "tailnet_ip": ipv4,
+        "tailnet_ips": ips,
+        "dns_name": dns_name,
+        "subnet_router": bool(advertised_routes),
+        "advertised_routes": advertised_routes,
+        "ip_forwarding": ip_fwd,
+        "peer_count": online_peers,
+        "error": (proc.stderr or "").strip().splitlines()[-1][:160] if proc.returncode != 0 and backend_state != "Running" else None,
+    }
+
+
+def _running_docker_ports() -> dict[int, list[str]]:
+    """Returns {host_port: [container_names]} for currently running Docker containers."""
+    try:
+        proc = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Ports}}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=4,
+        )
+        if proc.returncode != 0:
+            return {}
+    except Exception:
+        return {}
+
+    import re
+    port_re = re.compile(r"(?:[\d.]+|\[::\]|::):(\d+)->\d+/tcp")
+    by_port: dict[int, list[str]] = {}
+    for line in proc.stdout.splitlines():
+        name, _, ports_col = line.partition("\t")
+        cname = name.strip()
+        if not cname or not ports_col:
+            continue
+        for match in port_re.findall(ports_col):
+            pnum = int(match)
+            if pnum not in by_port:
+                by_port[pnum] = []
+            if cname not in by_port[pnum]:
+                by_port[pnum].append(cname)
+    return by_port
+
+
+def build_port_map() -> tuple[list[dict], list[dict]]:
+    """Returns ordered port catalog entries and detected port conflicts."""
+    catalog = get_default_ports(overrides={"control_hub": PORT})
+    docker_ports = _running_docker_ports()
+    seen_ports: dict[int, list[str]] = {}
+    rows: list[dict] = []
+    conflicts: list[dict] = []
+
+    for key, info in catalog.items():
+        port_num = int(info["port"])
+        seen_ports.setdefault(port_num, []).append(info["name"])
+        owners = docker_ports.get(port_num, [])
+        if key == "control_hub":
+            state_label = "Listening" if info["in_use"] else "Free"
+        elif owners:
+            state_label = f"Listening ({', '.join(owners)})"
+        elif info["in_use"]:
+            state_label = "In Use (non-Docker process)"
+        else:
+            state_label = "Free"
+
+        rows.append({
+            "key": key,
+            "name": info["name"],
+            "port": port_num,
+            "category": info["category"],
+            "essential": bool(info.get("essential")),
+            "in_use": bool(info["in_use"]),
+            "available": bool(info["available"]),
+            "owners": owners,
+            "state_label": state_label,
+            "conflict": False,
+            "conflict_reason": None,
+        })
+
+    for port_num, names in seen_ports.items():
+        if len(names) > 1:
+            reason = f"Port {port_num} assigned to multiple apps: {', '.join(names)}"
+            conflicts.append({"port": port_num, "apps": names, "reason": reason})
+            for row in rows:
+                if row["port"] == port_num:
+                    row["conflict"] = True
+                    row["conflict_reason"] = reason
+
+    return rows, conflicts
+
+
+@network_speed_bp.route("/api/network/overview", methods=["GET"])
+def get_network_overview():
+    """Returns per-NIC link/duplex health, Tailscale status, and app port map."""
+    try:
+        net = probe_network_interfaces()
+        tailscale = probe_tailscale_status()
+        ports, conflicts = build_port_map()
+        return jsonify({
+            "status": "success",
+            "active_nic": net.get("active_nic"),
+            "current_ip": net.get("current_ip"),
+            "default_gateway": net.get("default_gateway"),
+            "dns_servers": net.get("dns_servers", []),
+            "interfaces": net.get("interfaces", []),
+            "tailscale": tailscale,
+            "ports": ports,
+            "port_conflicts": conflicts,
+        })
+    except Exception as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 500

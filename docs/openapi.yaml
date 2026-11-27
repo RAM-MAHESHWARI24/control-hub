@@ -123,6 +123,34 @@ paths:
                   link_speed_mbps: { type: integer, example: 1000 }
                   active_nic: { type: string, example: "eth0" }
 
+  /api/network/overview:
+    get:
+      summary: Network Link Health, Tailscale & Port Map
+      description: Returns per-NIC link speed/duplex warnings, Tailscale mesh/subnet-router state, and the blueprint service port map with conflict flags.
+      tags: [Network]
+      responses:
+        '200':
+          description: Network overview payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: success }
+                  active_nic: { type: string, example: eth0 }
+                  current_ip: { type: string, example: 192.168.1.31 }
+                  default_gateway: { type: string, example: 192.168.1.1 }
+                  interfaces:
+                    type: array
+                    items: { type: object }
+                  tailscale: { type: object }
+                  ports:
+                    type: array
+                    items: { type: object }
+                  port_conflicts:
+                    type: array
+                    items: { type: object }
+
   /api/speedtest/latest:
     get:
       summary: Latest WAN Speedtest Results

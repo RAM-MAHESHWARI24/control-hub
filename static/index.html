@@ -1048,6 +1048,72 @@
           </section>
         </div>
 
+        <!-- 5.2c Phase 3E: Network Interfaces, Tailscale & Port Map -->
+        <section class="panel" id="network-health-panel" aria-labelledby="network-health-heading">
+          <div class="panel-head-strip panel-header-wrap">
+            <div class="panel-title-group">
+              <div class="title-with-icon">
+                <svg class="ui-icon" aria-hidden="true"><use href="/img/icons/ui-sprite.svg#icon-wifi"></use></svg>
+                <h2 id="network-health-heading">Network Ports, Tailscale &amp; Port Map</h2>
+              </div>
+              <span class="panel-subtitle card-summary" id="net-health-summary">Probing network interfaces, Tailscale, and host ports&hellip;</span>
+            </div>
+            <div class="panel-actions">
+              <button type="button" id="btn-open-netplan-modal" class="btn-secondary">Static IP &amp; Netplan</button>
+            </div>
+          </div>
+
+          <div id="net-link-warning-callout" class="inline-callout is-warning" role="alert" hidden></div>
+
+          <div class="panel-grid-two">
+            <div>
+              <h3 class="sub-panel-title">Physical Interfaces</h3>
+              <div class="table-wrap">
+                <table class="service-ledger" aria-label="Network interface link speed and duplex status">
+                  <thead>
+                    <tr>
+                      <th scope="col">Interface</th>
+                      <th scope="col">Link Speed &amp; Duplex</th>
+                      <th scope="col">IPv4 &amp; DNS</th>
+                      <th scope="col">Health</th>
+                    </tr>
+                  </thead>
+                  <tbody id="net-interfaces-tbody">
+                    <tr><td colspan="4" class="empty-state">Scanning network interfaces&hellip;</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="sub-panel-title">Tailscale Mesh</h3>
+              <div id="net-tailscale-body" class="panel detail-panel">
+                <div class="empty-state">Checking Tailscale status&hellip;</div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="sub-panel-title">Service Port Map</h3>
+            <div id="net-port-conflict-callout" class="inline-callout is-warning" role="alert" hidden></div>
+            <div class="table-wrap">
+              <table class="service-ledger" aria-label="Blueprint service port allocation map">
+                <thead>
+                  <tr>
+                    <th scope="col">Application</th>
+                    <th scope="col">Port</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="net-ports-tbody">
+                  <tr><td colspan="4" class="empty-state">Probing host ports&hellip;</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <!-- 5.3 Sleep Guard 24-Hour Horizontal Pin Axis -->
         <section class="panels console-sheet" id="sleep-guard-card">
           <div class="panel panel-head-strip panel-header-wrap">
@@ -1788,14 +1854,24 @@
 
         <!-- Tab 4: Netplan -->
         <div class="cfg-tab-pane" id="cfg-pane-network" role="tabpanel">
-          <p class="modal-sub">Apply a static LAN IP with an armed <strong>120s revert timer</strong>. Confirm from the new address or the previous config restores automatically.</p>
+          <p class="modal-sub">Generates <code>/etc/netplan/99-homelab-blueprint.yaml</code>, validates with <code>netplan generate</code>, backs up your current config, and applies with an armed <strong>120-second revert timer</strong>. Confirm from the new address or the previous config restores automatically.</p>
+
+          <div id="cfg-dhcp-tip" class="inline-callout is-info">
+            <div>
+              <strong>DHCP Reservation Tip:</strong>
+              <span>For zero-risk addressing, set a static DHCP lease for MAC <code id="cfg-dhcp-mac" class="font-mono">--</code> in your router instead of editing Netplan. Only apply Netplan static IP if router DHCP reservation is unavailable.</span>
+            </div>
+          </div>
 
           <div id="netplan-modal-pending" class="inline-callout is-warning" hidden>
             <div>
-              <strong>Pending IP confirmation (<span id="netplan-modal-ip" class="font-mono">--</span>)</strong>
-              <span id="netplan-modal-countdown-text">Confirm within 120s to keep this static IP.</span>
+              <strong>Confirm the new static IP (<span id="netplan-modal-ip" class="font-mono">--</span>)</strong>
+              <span id="netplan-modal-countdown-text">Checking that the server is reachable on the new address... (reverts in 120s if not confirmed)</span>
             </div>
-            <button type="button" id="btn-netplan-modal-confirm" class="btn-primary">Confirm &amp; Keep IP</button>
+            <div class="hardlink-test-row">
+              <a id="netplan-continue-link" class="btn-secondary" href="#/system" hidden>Continue on New IP</a>
+              <button type="button" id="btn-netplan-modal-confirm" class="btn-primary">Keep this IP</button>
+            </div>
           </div>
 
           <div class="form-row-two">
@@ -1958,6 +2034,6 @@
   </div>
 
   <script src="/js/auth.js?v=4"></script>
-  <script type="module" src="/js/app.js?v=34"></script>
+  <script type="module" src="/js/app.js?v=35"></script>
 </body>
 </html>

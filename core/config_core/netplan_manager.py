@@ -39,12 +39,23 @@ PENDING_STATE_FILE = Path(os.getenv("HOMELAB_STATE_DIR", "/var/lib/homelab")) / 
 REVERT_SCRIPT = Path("/usr/local/sbin/homelab-netplan-revert.sh")
 
 
-def probe_network_interfaces() -> Dict[str, Any]:
+def _evaluate_nic_health(is_up: bool, speed_mbps: Optional[int], duplex: Optional[str], is_wireless: bool) -> Optional[str]:
+    """Returns an actionable warning when a wired link is negotiated below Gigabit or half duplex."""
+    if not is_up or is_wireless:
+        return None
+    if duplex == "half":
+        spd = f"{speed_mbps} Mbps " if speed_mbps is not None else ""
+        return f"Running at {spd}half duplex: check Ethernet cable, keystone jack, or switch port."
+    if speed_mbps is not None and 0 < speed_mbps <= 100:
+        return f"Link negotiated at {speed_mbps} Mbps instead of Gigabit: check cable or switch port."
+    return None
+
+
+def probe_network_interfaces(sys_net_root: str = "/sys/class/net") -> Dict[str, Any]:
     """
-    Detects network interfaces, active LAN IP, default gateway, and nameservers.
+    Detects network interfaces, link speed/duplex, active LAN IP, gateway, and DNS.
     Inspects Linux /sys/class/net, /proc/net/route, and resolv.conf.
-    Never assumes an interface name such as eth0; falls back to the first
-    interface that is up, then to "eth0" only on non-Linux hosts.
+    Never assumes an interface name such as eth0 or fabricates missing link speeds.
     """
     interfaces = []
     default_ip = "127.0.0.1"
@@ -61,7 +72,7 @@ def probe_network_interfaces() -> Dict[str, Any]:
         pass
 
     # 2. Interfaces from /sys/class/net
-    sys_net = Path("/sys/class/net")
+    sys_net = Path(sys_net_root)
     if sys_net.exists():
         for iface_path in sorted(sys_net.iterdir()):
             iface_name = iface_path.name
@@ -78,6 +89,36 @@ def probe_network_interfaces() -> Dict[str, Any]:
                 except Exception:
                     pass
 
+            duplex = None
+            duplex_file = iface_path / "duplex"
+            if duplex_file.exists():
+                try:
+                    raw_duplex = duplex_file.read_text(encoding="utf-8").strip().lower()
+                    if raw_duplex in ("full", "half"):
+                        duplex = raw_duplex
+                except Exception:
+                    pass
+
+            carrier = None
+            carrier_file = iface_path / "carrier"
+            if carrier_file.exists():
+                try:
+                    cval = carrier_file.read_text(encoding="utf-8").strip()
+                    if cval in ("0", "1"):
+                        carrier = cval == "1"
+                except Exception:
+                    pass
+
+            mac = None
+            addr_file = iface_path / "address"
+            if addr_file.exists():
+                try:
+                    raw_mac = addr_file.read_text(encoding="utf-8").strip()
+                    if raw_mac and raw_mac != "00:00:00:00:00:00":
+                        mac = raw_mac
+                except Exception:
+                    pass
+
             is_up = False
             operstate_file = iface_path / "operstate"
             if operstate_file.exists():
@@ -86,7 +127,20 @@ def probe_network_interfaces() -> Dict[str, Any]:
                 except Exception:
                     pass
 
-            interfaces.append({"name": iface_name, "is_up": is_up, "speed_mbps": speed_mbps})
+            is_wireless = (iface_path / "wireless").exists()
+            warning = _evaluate_nic_health(is_up, speed_mbps, duplex, is_wireless)
+
+            interfaces.append({
+                "name": iface_name,
+                "is_up": is_up,
+                "speed_mbps": speed_mbps,
+                "duplex": duplex,
+                "carrier": carrier,
+                "mac": mac,
+                "is_wireless": is_wireless,
+                "degraded": bool(warning),
+                "warning": warning,
+            })
 
     # 3. Default route → active NIC and gateway
     route_file = Path("/proc/net/route")
@@ -122,7 +176,17 @@ def probe_network_interfaces() -> Dict[str, Any]:
         up = [i["name"] for i in interfaces if i["is_up"]]
         active_nic = up[0] if up else (interfaces[0]["name"] if interfaces else "eth0")
     if not interfaces:
-        interfaces.append({"name": active_nic, "is_up": True, "speed_mbps": None})
+        interfaces.append({
+            "name": active_nic,
+            "is_up": True,
+            "speed_mbps": None,
+            "duplex": None,
+            "carrier": None,
+            "mac": None,
+            "is_wireless": False,
+            "degraded": False,
+            "warning": None,
+        })
     if not gateway:
         # Best-effort guess: x.y.z.1 on the detected subnet
         parts = default_ip.split(".")

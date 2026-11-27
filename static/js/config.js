@@ -13,6 +13,7 @@ export const ENDPOINTS = {
   sleepShiftTonight: "/api/sleep/shift-tonight",
   sleepSchedulePermanent: "/api/sleep/schedule-permanent",
   networkSpeed: "/api/network/speed",
+  networkOverview: "/api/network/overview",
   speedtestLatest: "/api/speedtest/latest",
   speedtestRun: "/api/speedtest/run",
   activeDownloads: "/api/downloads/active",
