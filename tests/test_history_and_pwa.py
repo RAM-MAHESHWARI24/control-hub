@@ -1,6 +1,7 @@
 """Tests for Phase 4B (PWA manifest & Service Worker) and Phase 4C (History rollups & Monthly insights)."""
 
 import os
+import re
 import sys
 import tempfile
 import time
@@ -67,10 +68,21 @@ class TestHistoryAndPwa(unittest.TestCase):
         r_sw = self.client.get("/sw.js")
         self.assertEqual(r_sw.status_code, 200)
         self.assertEqual(r_sw.headers.get("Service-Worker-Allowed"), "/")
-        self.assertIn("hub-shell-v1", r_sw.get_data(as_text=True))
+        sw_text = r_sw.get_data(as_text=True)
+        self.assertIn("hub-shell-v2", sw_text)
 
-        r_ico = self.client.get("/img/icons/hub-app.svg")
-        self.assertEqual(r_ico.status_code, 200)
+        # Every URL listed in SHELL_ASSETS and manifest icons must serve HTTP 200 cleanly
+        m_assets = re.search(r"const SHELL_ASSETS = \[(.*?)\];", sw_text, re.DOTALL)
+        self.assertIsNotNone(m_assets)
+        shell_urls = re.findall(r'"([^"]+)"', m_assets.group(1))
+        self.assertGreaterEqual(len(shell_urls), 6)
+        for asset_url in shell_urls:
+            with self.client.get(asset_url) as resp:
+                self.assertEqual(resp.status_code, 200, f"Service Worker shell asset returned {resp.status_code}: {asset_url}")
+
+        for ico in mf.get("icons", []):
+            with self.client.get(ico["src"]) as resp:
+                self.assertEqual(resp.status_code, 200, f"Manifest icon returned {resp.status_code}: {ico['src']}")
 
     def test_metrics_history_throttle_ranges_and_downsampling(self) -> None:
         now = 1_750_000_000.0

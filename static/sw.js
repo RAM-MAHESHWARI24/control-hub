@@ -4,14 +4,21 @@
  * when the server sleeps or the phone temporarily loses connectivity.
  */
 
-const SHELL_CACHE = "hub-shell-v1";
+const SHELL_CACHE = "hub-shell-v2";
 const API_CACHE = "hub-api-snapshot-v1";
 
 const SHELL_ASSETS = [
   "/",
   "/manifest.webmanifest",
+  "/css/style.css?v=41",
+  "/js/auth.js?v=6",
+  "/js/app.js?v=41",
   "/img/icons/hub-app.svg",
-  "/img/icons/ui-sprite.svg"
+  "/img/icons/ui-sprite.svg",
+  "/fonts/HostGrotesk-400.woff2",
+  "/fonts/HostGrotesk-500.woff2",
+  "/fonts/AtkinsonHyperlegibleMono-400.woff2",
+  "/fonts/AtkinsonHyperlegibleMono-500.woff2"
 ];
 
 const CACHEABLE_API_PREFIXES = [

@@ -1352,21 +1352,51 @@ class TestControlHubUiAccessibility(unittest.TestCase):
                 page.wait_for_selector("#integrations-ha-yaml", state="visible", timeout=5000)
                 self.assertIn("Back-UPS 1500", page.inner_text("#integrations-ups-body"))
 
-                # Switch theme to High-Contrast and language to Hindi, verify layout + WCAG
+                # Switch theme to High-Contrast and sweep all 5 views for WCAG AA compliance
                 page.click("#btn-header-menu")
                 page.click('[data-theme-choice="high-contrast"]')
                 self.assertEqual(page.evaluate("() => document.documentElement.dataset.theme"), "high-contrast")
+                for view_id in ALL_VIEWS:
+                    self._navigate_view(page, view_id)
+                    self._assert_layout_and_touch_targets(page, width, f"hc:{view_id}@{width}")
+                    self._assert_axe_wcag_aa(page, f"hc:{view_id}@{width}x{height}")
+
+                # Return to System view, switch to Hindi (preserving active theme), verify layout + WCAG
+                self._navigate_view(page, "system")
+                page.click("#btn-header-menu")
                 page.click('[data-lang-choice="hi"]')
                 self.assertEqual(page.evaluate("() => document.documentElement.lang"), "hi")
+                self.assertEqual(page.evaluate("() => document.documentElement.dataset.theme"), "high-contrast")
+                page.wait_for_timeout(180)
                 self._assert_layout_and_touch_targets(page, width, f"hc-hi-system@{width}")
                 self._assert_axe_wcag_aa(page, f"hc-hi-system@{width}x{height}")
 
-                # Open Customize Layout modal
+                # Open Customize Layout modal, toggle hide on a card, verify persistence across reload, then reset
                 page.click("#btn-open-customize")
                 page.wait_for_selector("#customize-layout-modal", state="visible", timeout=5000)
                 self._assert_axe_wcag_aa(page, f"customize-modal@{width}x{height}")
+                page.click('.btn-cust-toggle[data-card-id="integrations-panel"]')
                 page.click("#customize-modal-dismiss")
                 page.wait_for_selector("#customize-layout-modal", state="hidden", timeout=5000)
+                self.assertEqual(
+                    page.evaluate("() => document.getElementById('integrations-panel')?.dataset.userHidden"),
+                    "true",
+                )
+                page.reload(wait_until="domcontentloaded")
+                page.wait_for_function(
+                    "() => document.getElementById('integrations-panel')?.dataset.userHidden === 'true'",
+                    timeout=5000,
+                )
+                page.click("#btn-header-menu")
+                page.click("#btn-open-customize")
+                page.wait_for_selector("#customize-layout-modal", state="visible", timeout=5000)
+                page.click("#btn-customize-reset")
+                page.click("#customize-modal-dismiss")
+                page.wait_for_selector("#customize-layout-modal", state="hidden", timeout=5000)
+                self.assertEqual(
+                    page.evaluate("() => document.getElementById('integrations-panel')?.dataset.userHidden"),
+                    "false",
+                )
 
                 # Switch back to English before checking Account -> API Tokens
                 page.click("#btn-header-menu")

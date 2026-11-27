@@ -67,7 +67,7 @@ export function applyTheme(pref = "dark") {
   }
 
   // Sync segmented buttons inside dropdown
-  document.querySelectorAll(".theme-opt-btn").forEach((btn) => {
+  document.querySelectorAll(".theme-opt-btn[data-theme-choice]").forEach((btn) => {
     const active = btn.getAttribute("data-theme-choice") === validPref;
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-pressed", active ? "true" : "false");
@@ -245,7 +245,7 @@ export function setupHeader() {
     });
   }
 
-  document.querySelectorAll(".theme-opt-btn").forEach((btn) => {
+  document.querySelectorAll(".theme-opt-btn[data-theme-choice]").forEach((btn) => {
     btn.addEventListener("click", () => {
       applyTheme(btn.getAttribute("data-theme-choice") || "dark");
     });

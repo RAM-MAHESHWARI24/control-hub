@@ -244,4 +244,22 @@ export function setupHistoryInsights() {
   if (refreshBtn) {
     refreshBtn.addEventListener("click", () => fetchHistoryAndInsights());
   }
+
+  let resizeRaf = 0;
+  const scheduleRedraw = () => {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = window.requestAnimationFrame(() => {
+      resizeRaf = 0;
+      redrawHistoryCharts();
+    });
+  };
+  if (typeof ResizeObserver === "function") {
+    const ro = new ResizeObserver(scheduleRedraw);
+    ["hist-cpu-canvas", "hist-io-canvas"].forEach((id) => {
+      const el = $(id);
+      if (el) ro.observe(el);
+    });
+  } else {
+    window.addEventListener("resize", scheduleRedraw);
+  }
 }
