@@ -50,7 +50,7 @@ def create_app():
         return jsonify({
             "status": "ok",
             "service": "control-hub",
-            "version": "2.1.1",
+            "version": "2.2.0",
             "uptime_seconds": round(time.time() - APP_START_TIME, 1)
         })
 

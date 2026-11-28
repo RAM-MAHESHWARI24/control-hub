@@ -32,7 +32,7 @@ from core import updates
 
 updates_bp = Blueprint("updates", __name__)
 
-APP_VERSION = "2.1.1"
+APP_VERSION = "2.2.0"
 _SEMVER_TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+$")
 
 _bg_lock = threading.Lock()

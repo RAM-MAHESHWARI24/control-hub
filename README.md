@@ -4,7 +4,7 @@
 > Runs on **< 25 MB RAM** and **< 0.2% CPU** with zero Node.js/npm dependencies.
 
 [![CI](https://github.com/RAM-MAHESHWARI24/control-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/RAM-MAHESHWARI24/control-hub/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/Release-v2.1.1-brightgreen.svg)](https://github.com/RAM-MAHESHWARI24/control-hub/releases)
+[![Version](https://img.shields.io/badge/Release-v2.2.0-brightgreen.svg)](https://github.com/RAM-MAHESHWARI24/control-hub/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![RAM Footprint](https://img.shields.io/badge/RAM-%3C25MB-success.svg)](#performance)
